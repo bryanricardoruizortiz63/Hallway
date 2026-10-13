@@ -359,12 +359,17 @@ export const setCovers = (id, covers) =>
 
 /**
  * What I cover (Vas a cubrir): from a day on, one row per row of the list (cover_days: my days, null = every day),
- * with my hours and who else covers. No type or reason of the absence.
+ * with my hours, who else covers and my answers (received_at, on_the_way_at). No type or reason of the absence.
  */
 export const myCoverages = (from) => rpc('my_coverages', { p_from: from });
 
 /** My rows of one coverage, also a cancelled one; [] if it's no longer mine. */
 export const getCoverage = async (id) => (await rpc('my_coverages', { p_id: id })) || [];
+/**
+ * Whoever covers answers whoever assigned it: 'received' («Recibido») or 'on_the_way' («Voy en camino», on day: a
+ * day they cover). Saying it again doesn't tell them again.
+ */
+export const replyCoverage = (id, step, day) => rpc('reply_coverage', { p_id: id, p_step: step, p_day: day || null });
 export const addComment = (id, body) => rpc('add_comment', { p_id: id, p_body: body });
 /** reason: 'no_absence' | 'error' | 'other' (note required for 'other'). */
 export const cancelAbsence = (id, reason, note) =>
