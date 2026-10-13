@@ -12,7 +12,7 @@ import { absencesListView, dashboardView } from './views/staff.js';
 import { dataView, employeeFormView, employeesView, settingsView } from './views/admin.js';
 import { accessCardsView } from './views/access.js';
 import { rolesView } from './views/roles.js';
-import { calendarView } from './views/calendar.js';
+import { calendarView, groupsView } from './views/calendar.js';
 import {
   alertsView,
   missingDetailView,
@@ -25,7 +25,7 @@ import { newTurnView, serviceFormView, servicesView, turnDetailView, turnsView }
 import { newVisitView, visitDetailView } from './views/visits.js';
 import { maintenanceDetailView, maintenanceView, newMaintenanceView } from './views/maintenance.js';
 import { bookingDetailView, bookingHistoryView, newBookingView, roomsView } from './views/rooms.js';
-import { liveView, maintenancePanelView, roomsPanelView, servicePanelView } from './views/panels.js';
+import { liveServiceView, liveView, maintenancePanelView, roomsPanelView, servicePanelView } from './views/panels.js';
 import { moreView, notificationsView, profileView } from './views/account.js';
 import { guideView } from './views/guide.js';
 import { platformView } from './views/platform.js';
@@ -55,6 +55,7 @@ const ROUTES = [
   { re: /^\/settings$/, view: settingsView, title: 'Escuela y Teams', allow: may('settings'), back: true },
   { re: /^\/roles$/, view: rolesView, title: 'Roles y permisos', allow: ADMIN, back: true },
   { re: /^\/calendar$/, view: calendarView, title: 'Calendario escolar', back: true },
+  { re: /^\/groups$/, view: groupsView, title: 'Grados y grupos', allow: may('calendar'), back: true },
   { re: /^\/alerts$/, view: alertsView, title: 'Alertas' },
   { re: /^\/alerts\/new\/missing$/, view: newMissingView, title: 'No ha llegado', back: true },
   { re: /^\/alerts\/new\/pickup$/, view: newPickupView, title: 'Salida', back: true },
@@ -80,6 +81,7 @@ const ROUTES = [
   { re: /^\/rooms\/(\d+)$/, view: bookingDetailView, title: 'Reserva del salón', back: true },
   { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso del salón', allow: may('rooms'), back: true },
   { re: /^\/live$/, view: liveView, title: 'En vivo', allow: may('live') },
+  { re: /^\/live\/service\/(\d+)$/, view: liveServiceView, title: 'En vivo', allow: may('live'), back: true },
   // Enfermería, Trabajo Social…: only their own service's panel.
   { re: /^\/data$/, view: dataView, title: 'Datos y reportes', allow: (u) => can(u, 'reports') || !!u.serves?.length, back: true },
   { re: /^\/messages$/, view: messagesView, title: 'Mensajes', allow: may('messages'), back: true },

@@ -241,8 +241,8 @@ export async function employeeFormView({ el, params, setTitle }) {
               )}</div>`
             : html`<p class="hint">La escuela aún no tiene grados y grupos.
                 ${can(me, 'calendar')
-                  ? html`Créalos en <a href="#/calendar">Calendario escolar</a>.`
-                  : 'Pídele a la dirección o a la secretaría que los cree en Calendario escolar.'}</p>`}
+                  ? html`Créalos en <a href="#/groups">Grados y grupos</a>.`
+                  : 'Pídele a la dirección o a la secretaría que los cree en Grados y grupos.'}</p>`}
         </div>
         <p class="hint">Cada maestro verá solo a los estudiantes de sus grupos. La persona también puede cambiar su salón desde su perfil.</p>
       </section>

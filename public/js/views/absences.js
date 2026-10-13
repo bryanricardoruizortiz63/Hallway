@@ -723,6 +723,12 @@ export async function coverView({ el, params }) {
     const received = parts.every((p) => p.received_at);
     const todayParts = parts.filter((p) => coversDay(p, today));
     const way = todayParts.map((p) => p.on_the_way_at).filter(fromToday).sort().pop();
+    // Until they answer, the notice comes again every 2 minutes (school hours; on their day, within their hours).
+    const reminder = !received
+      ? 'Te lo recordaremos cada 2 minutos, en horario escolar, hasta que toques «Recibido».'
+      : !todayParts.length
+        ? 'El día que cubres, toca «Voy en camino» al salir hacia el salón: te lo recordaremos cada 2 minutos.'
+        : way ? '' : 'Te lo recordaremos cada 2 minutos hasta que toques «Voy en camino».';
     el.innerHTML = String(html`
       <div class="stack">
         <section class="card absence-head">
@@ -754,7 +760,7 @@ export async function coverView({ el, params }) {
               ${todayParts.length && !way
                 ? html`<button type="button" class="btn ${received ? 'btn-primary btn-lg' : 'btn-secondary'} btn-block" data-reply="on_the_way">${icon('send')} Voy en camino</button>`
                 : ''}
-              ${todayParts.length ? '' : html`<p class="hint">El día que cubres, toca «Voy en camino» al salir hacia el salón.</p>`}
+              ${reminder ? html`<p class="hint" data-reminder-hint>${reminder}</p>` : ''}
             </section>`
           : ''}
         <section class="card">

@@ -849,6 +849,8 @@ export const bookingsBetween = (from, to) =>
 
 /** What is happening now in the school (the dirección's live board). */
 export const liveBoard = () => rpc('live_board', { p_since: startOfToday(), p_today: todayStr() });
+/** One service's turns of today (and any still open), with every step and how it ended; never the note. */
+export const liveTurns = async (serviceId) => (await rpc('live_turns', { p_service_id: serviceId, p_since: startOfToday() })) || [];
 
 /** A service closes a finished period: its finished turns are deleted. */
 export function closeServiceYear(serviceId, from, to) {
