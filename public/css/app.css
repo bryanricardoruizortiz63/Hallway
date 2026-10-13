@@ -830,6 +830,11 @@ select {
   white-space: normal;
 }
 
+/* An icon and its words (Sonido, Pantalla grande). */
+.chip-btn {
+  gap: 6px;
+}
+
 .chip-btn.active {
   background: var(--primary);
   border-color: var(--primary);
@@ -3037,8 +3042,160 @@ input[type='color'] {
 
 .live-service .item-sub,
 .day-turn .item-main strong,
-.day-turn .item-sub {
+.day-turn .item-sub,
+.out-group .item-sub {
   white-space: normal;
+}
+
+/* En vivo › Fuera del salón ahora: one list per group. */
+.out-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.out-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px 6px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.out-group-title span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* En vivo › pantalla grande: for a TV, without the app's bars; the letters grow with the screen. */
+body.tv-mode {
+  background: var(--bg);
+}
+
+.tv {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 16px;
+  font-size: clamp(15px, 1.25vw, 28px);
+}
+
+.tv-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tv-head img {
+  width: 2.6em;
+  height: 2.6em;
+  border-radius: 22%;
+}
+
+.tv-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tv-title strong {
+  font-size: 1.5em;
+  line-height: 1.15;
+}
+
+.tv-title small {
+  overflow: hidden;
+  font-size: 0.85em;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-clock {
+  font-size: 1.9em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tv .stat strong {
+  font-size: 2.2em;
+}
+
+.tv .stat span,
+.tv .chip-btn,
+.tv .hint,
+.tv .tag,
+.tv .count {
+  font-size: 0.8em;
+}
+
+.tv .card-title {
+  font-size: 1.3em;
+}
+
+.tv .section-title {
+  font-size: 0.75em;
+}
+
+.tv .item-main strong,
+.tv .out-group-title {
+  font-size: 1.1em;
+}
+
+.tv .item-sub {
+  font-size: 0.85em;
+  white-space: normal;
+}
+
+.tv .item-icon {
+  width: 2.4em;
+  height: 2.4em;
+}
+
+.tv-page {
+  flex: 1;
+}
+
+.tv-page .section:first-child {
+  margin-top: 0;
+}
+
+.tv-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 900px) {
+  .tv {
+    padding: 24px 32px;
+  }
+
+  .tv .out-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(22em, 1fr));
+    align-items: start;
+  }
+
+  /* A service's turns in two columns, so more fit on the screen. */
+  .tv .live-service .list.flat {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(26em, 1fr));
+    column-gap: 24px;
+  }
+
+  .tv-foot {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 /* Accesos para repartir: one card per person, two per row when printed. */

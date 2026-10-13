@@ -45,7 +45,7 @@ function tabText(path, user) {
     case '/maintenance':
       return 'Los pedidos de limpieza que te tocan.';
     case '/live':
-      return 'Lo que pasa ahora en la escuela: Enfermería, Trabajo Social, alertas, mantenimiento y el salón.';
+      return 'Lo que pasa ahora en la escuela: Enfermería, Trabajo Social, alertas, mantenimiento y el salón. Elige un grado o grupo, activa el sonido o ábrelo en pantalla grande.';
     case '/rooms':
       return can(user, 'rooms')
         ? 'El salón de conferencias: resérvalo y aprueba las reservas del personal.'
