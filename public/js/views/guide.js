@@ -47,7 +47,7 @@ function tabText(path, user) {
     case '/live':
       return 'Lo que pasa ahora en la escuela: Enfermería, Trabajo Social, alertas, mantenimiento y el salón.';
     case '/rooms':
-      return can(user, 'calendar')
+      return can(user, 'rooms')
         ? 'El salón de conferencias: resérvalo y aprueba las reservas del personal.'
         : 'Pide el salón de conferencias para un día y hora, o mira quién lo tiene.';
     case '/more':
@@ -112,7 +112,10 @@ function tasks(user) {
   return [
     admin
       ? ['#/report', 'plus', 'Registrar la ausencia de un empleado', `${absences} › Registrar ausencia de un empleado`]
-      : ['#/report', 'plus', 'Avisar que voy a faltar', `${absences} › ${isStaff(user) ? 'Reportar mi ausencia' : 'Reportar ausencia'}`],
+      : ['#/report', 'plus', 'Avisar que voy a faltar', `${absences} › ${can(user, 'register') ? 'Registrar una ausencia' : isStaff(user) ? 'Reportar mi ausencia' : 'Reportar ausencia'}`],
+    can(user, 'register') && !admin
+      ? ['#/report', 'plus', 'Registrar la ausencia de otro empleado', `${absences} › Registrar una ausencia › ¿Quién va a faltar?`]
+      : null,
     isStaff(user) && !admin ? ['#/home', 'calendar', 'Ver mis ausencias', 'Más › Mis ausencias'] : null,
     isStaff(user) ? ['#/absences', 'list', 'Buscar o exportar las ausencias del personal', `${absences} › Ver todas`] : null,
     ['#/rooms', 'room', 'Pedir el salón de conferencias', `${where('/rooms', 'Salón de conferencias')} › Reservar el salón`],

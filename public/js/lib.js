@@ -63,8 +63,10 @@ export const ROLE_LABELS = {
 /** What a role can do besides reporting its own absences. */
 export const PERMISSIONS = [
   { key: 'absences', label: 'Ver y confirmar las ausencias de todos', hint: 'Ausencias de hoy, lista de todas, marcar como recibidas, cobertura y avisos de ausencias nuevas.' },
+  { key: 'register', label: 'Registrar ausencias del personal', hint: 'Reportar la ausencia de otro empleado (por ejemplo, cuando llama para avisar) y modificar o cancelar la de cualquiera, aunque ya haya pasado. Incluye ver las ausencias de todos.' },
   { key: 'staff', label: 'Administrar el personal', hint: 'Crear y editar empleados, contraseñas y enviar accesos por correo.' },
   { key: 'calendar', label: 'Calendario escolar', hint: 'Horario de clases, días sin clases y los grados y grupos de la escuela.' },
+  { key: 'rooms', label: 'Aprobar reservas del salón', hint: 'Aprueba, rechaza y cancela las reservas del salón de conferencias; las suyas se aprueban al momento. Ve el uso del salón y su Excel.' },
   { key: 'security', label: 'Seguridad', hint: 'Recibe las alertas de «No ha llegado» enviadas a Seguridad y se encarga de las salidas de estudiantes.' },
   { key: 'visitors', label: 'Visitas', hint: 'En Turnos, avisa cuando llega un padre: a quién busca, si está citado y dónde espera. Ve las visitas del día y cada respuesta.' },
   { key: 'maintenance', label: 'Mantenimiento', hint: 'Recibe las solicitudes de limpieza (derrames, baños, basura) y las atiende.' },
@@ -72,6 +74,7 @@ export const PERMISSIONS = [
   { key: 'live', label: 'En vivo', hint: 'Lo que pasa ahora en la escuela: los turnos de Enfermería y Trabajo Social con su motivo, alertas, mantenimiento y salón.' },
   { key: 'reports', label: 'Datos y reportes', hint: 'Estadísticas, paneles de los servicios con sus motivos, exportar a Excel, respaldo y archivo anual.' },
   { key: 'settings', label: 'Configurar la escuela', hint: 'Nombre, Teams, correo y mensaje de bienvenida.' },
+  { key: 'services', label: 'Configurar Turnos', hint: 'Los servicios de Turnos (Enfermería, Trabajo Social, Soporte IT…): quién los atiende, sus motivos y el tiempo para llegar.' },
 ];
 
 /** Duties rather than powers over other people's data: whoever manages the staff can give a role with them. */
@@ -93,7 +96,7 @@ export const can = (u, perm) => u?.role === 'admin' || !!u?.permissions?.include
 /** Sees and confirms everyone's absences. */
 export const isStaff = (u) => can(u, 'absences');
 /** Has some management permission. */
-export const isManager = (u) => ['staff', 'settings', 'messages', 'reports', 'calendar'].some((p) => can(u, p));
+export const isManager = (u) => ['staff', 'settings', 'services', 'messages', 'reports', 'calendar', 'rooms'].some((p) => can(u, p));
 
 // ---- Dates ------------------------------------------------------------------
 

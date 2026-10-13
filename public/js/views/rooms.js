@@ -42,7 +42,7 @@ import { empty } from './common.js';
 import { fact, keepFresh } from './students.js';
 
 /** Secretaría and the dirección: they approve, and their reservations come first. */
-export const approvesBookings = (u) => can(u, 'calendar');
+export const approvesBookings = (u) => can(u, 'rooms');
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;

@@ -282,7 +282,7 @@ export async function employeeFormView({ el, params, setTitle }) {
               : ''}
             <a class="btn btn-secondary btn-block" href="#/absences?user_id=${employee.id}&status=all&from=">${icon('calendar', 18)} Ver sus ausencias</a>
             ${self ? '' : html`<a class="btn btn-secondary btn-block" href="#/messages/new?to=${employee.id}">${icon('mail', 18)} Enviar mensaje</a>`}
-            ${me.role === 'admin'
+            ${can(me, 'register') && !self && employee.role !== 'admin'
               ? html`<a class="btn btn-secondary btn-block" href="#/report?user_id=${employee.id}">${icon('plus', 18)} Registrar una ausencia</a>`
               : ''}
             <button type="button" class="btn btn-secondary btn-block" data-reset>${icon('key', 18)} Restablecer contraseña</button>
@@ -795,7 +795,7 @@ export async function dataView({ el, isCurrent }) {
             ? html`<a class="item" href="#/maintenance/panel"><span class="item-icon">${icon('wrench')}</span>
                 <span class="item-main"><strong>Mantenimiento</strong><span class="item-sub">Solicitudes por tipo y lugar, tiempos de respuesta y Excel</span></span>${icon('chevron', 18)}</a>`
             : ''}
-          ${can(user, 'calendar')
+          ${can(user, 'rooms')
             ? html`<a class="item" href="#/rooms/panel"><span class="item-icon">${icon('room')}</span>
                 <span class="item-main"><strong>Salón de conferencias</strong><span class="item-sub">Horas reservadas, por persona y Excel</span></span>${icon('chevron', 18)}</a>`
             : ''}

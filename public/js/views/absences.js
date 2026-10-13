@@ -90,9 +90,9 @@ export async function homeView({ el }) {
 
 // ---- Reportar / modificar ---------------------------------------------------
 
-/** Only the employee (while the absence hasn't passed) or the Administración account can edit or cancel it. */
+/** The employee (while the absence hasn't passed) or whoever registers the staff's absences can edit or cancel it. */
 function canChange(a, me) {
-  return a.status !== 'cancelled' && (me.role === 'admin' || (a.user_id === me.id && a.end_date >= todayStr()));
+  return a.status !== 'cancelled' && (can(me, 'register') || (a.user_id === me.id && a.end_date >= todayStr()));
 }
 
 export const reportView = (ctx) => absenceForm(ctx, null);
@@ -103,7 +103,7 @@ export async function editAbsenceView(ctx) {
     throw new Error(
       absence.status === 'cancelled'
         ? 'La ausencia está cancelada.'
-        : 'Solo el empleado o la cuenta de Administración pueden modificar esta ausencia.',
+        : 'Solo el empleado o quien registra las ausencias del personal pueden modificar esta ausencia.',
     );
   }
   return absenceForm(ctx, absence);
@@ -112,11 +112,13 @@ export async function editAbsenceView(ctx) {
 async function absenceForm({ el, query }, absence) {
   const me = state.me.user;
   const editing = !!absence;
-  // Only the school's Administración account registers absences for other people.
-  const forOthers = !editing && me.role === 'admin';
+  // Whoever registers the staff's absences (and the Administración account) can report one for someone else;
+  // the Administración account always does, the rest also their own.
+  const forOthers = !editing && can(me, 'register');
+  const onlyOthers = me.role === 'admin';
   const today = todayStr();
   const [employees, closures] = await Promise.all([
-    forOthers ? listEmployees().then((list) => list.filter((e) => e.active)) : [],
+    forOthers ? listEmployees().then((list) => list.filter((e) => e.active && e.role !== 'admin' && e.id !== me.id)) : [],
     // To warn when the chosen days have no classes; the form works without it.
     listClosures({ from: addDays(today, -60) }).catch(() => []),
   ]);
@@ -125,8 +127,8 @@ async function absenceForm({ el, query }, absence) {
   const v0 = absence || { start_date: today, end_date: today, partial: false, category: '', reason: '', coverage_notes: '' };
   // Teachers' absences need someone to cover them; nursing, maintenance or security don't.
   const needsCoverage = (roleKey) => !!roleKey && roleNeedsCoverage(roleKey);
-  const roleOf = (userId) => employees.find((e) => e.id === userId)?.role;
-  const initialRole = editing ? absence.employee_role : forOthers ? roleOf(preselect) : me.role;
+  const roleOf = (userId) => (userId ? employees.find((e) => e.id === userId)?.role : onlyOthers ? null : me.role);
+  const initialRole = editing ? absence.employee_role : roleOf(preselect);
   const startTime = absence?.start_time?.slice(0, 5) || '08:00';
   const endTime = absence?.end_time?.slice(0, 5) || '';
   const category = v0.category || '';
@@ -136,8 +138,10 @@ async function absenceForm({ el, query }, absence) {
       ${forOthers
         ? html`<section class="card">
             <label class="field"><span>¿Quién va a faltar?</span>
-              <select name="user_id" required>
-                <option value="" ${preselect ? '' : 'selected'} disabled>Selecciona un empleado…</option>
+              <select name="user_id" ${onlyOthers ? 'required' : ''}>
+                ${onlyOthers
+                  ? html`<option value="" ${preselect ? '' : 'selected'} disabled>Selecciona un empleado…</option>`
+                  : html`<option value="" ${preselect && preselect !== me.id ? '' : 'selected'}>Yo (${me.full_name})</option>`}
                 ${employees.map(
                   (e) => html`<option value="${e.id}" ${String(e.id) === preselect ? 'selected' : ''}>
                     ${e.full_name}${e.position ? ` — ${e.position}` : ''}</option>`,
@@ -315,7 +319,7 @@ async function absenceForm({ el, query }, absence) {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
       const v = formValues(form);
-      if (forOthers && !v.user_id) throw new Error('Selecciona el empleado que va a faltar.');
+      if (onlyOthers && !v.user_id) throw new Error('Selecciona el empleado que va a faltar.');
       if (!v.start_date) throw new Error('Selecciona la fecha.');
       if (v.partial === '1' && !v.start_time) throw new Error('Indica desde qué hora vas a faltar.');
       if (!multi) v.end_date = null;
