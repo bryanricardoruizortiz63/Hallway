@@ -25,7 +25,7 @@ import { newTurnView, serviceFormView, servicesView, turnDetailView, turnsView }
 import { newVisitView, visitDetailView } from './views/visits.js';
 import { maintenanceDetailView, maintenanceView, newMaintenanceView } from './views/maintenance.js';
 import { bookingDetailView, bookingHistoryView, newBookingView, roomsView } from './views/rooms.js';
-import { liveView, maintenancePanelView, roomsPanelView, servicePanelView } from './views/panels.js';
+import { liveServiceView, liveView, maintenancePanelView, roomsPanelView, servicePanelView } from './views/panels.js';
 import { moreView, notificationsView, profileView } from './views/account.js';
 import { guideView } from './views/guide.js';
 import { platformView } from './views/platform.js';
@@ -81,6 +81,7 @@ const ROUTES = [
   { re: /^\/rooms\/(\d+)$/, view: bookingDetailView, title: 'Reserva del salón', back: true },
   { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso del salón', allow: may('rooms'), back: true },
   { re: /^\/live$/, view: liveView, title: 'En vivo', allow: may('live') },
+  { re: /^\/live\/service\/(\d+)$/, view: liveServiceView, title: 'En vivo', allow: may('live'), back: true },
   // Enfermería, Trabajo Social…: only their own service's panel.
   { re: /^\/data$/, view: dataView, title: 'Datos y reportes', allow: (u) => can(u, 'reports') || !!u.serves?.length, back: true },
   { re: /^\/messages$/, view: messagesView, title: 'Mensajes', allow: may('messages'), back: true },

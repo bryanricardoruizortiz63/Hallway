@@ -76,6 +76,7 @@ Funciona con servicios gratuitos:
 
 **Paneles** (cada uno con su Excel; período: este mes, mes pasado, año escolar, año escolar pasado o las fechas que elijas)
 - **En vivo** (su propia pestaña; permiso *En vivo*: la dirección, la secretaría y Administración): lo que pasa ahora en la escuela. De Enfermería y Trabajo Social, quién atiende y su estado, y quién está en fila, en camino o en atención, desde cuándo y **su motivo** (nunca la nota del maestro); también las alertas «No ha llegado», las salidas de hoy, los relevos pedidos, el mantenimiento abierto y el salón de conferencias de hoy. Se actualiza solo.
+  - **Los turnos de hoy de un servicio**: arriba, un botón por servicio (Enfermería, Trabajo Social, Soporte IT…), y en cada servicio *Ver todos los turnos de hoy*. Muestra el día completo de ese servicio: pedidos, en fila, en atención, atendidos, espera y atención promedio, y quién atiende. En **Ahora**, quien no ha llegado, quien está en atención o en camino y la fila; en **Atendidos hoy**, los terminados y cancelados, el más reciente primero. Cada turno dice el estudiante y su grupo (o qué y dónde, en Soporte IT), el motivo y la gravedad, quién lo pidió, quién lo tiene y quién lo atendió, **la hora de cada paso** (pedido, llamado, salió del salón, llegó, regresa, cómo terminó), cuánto esperó y cuánto duró la atención, si tardó en llegar o en regresar y, en Soporte IT, qué se hizo. Nunca la nota del maestro.
 - **Panel de cada servicio** (*Turnos → Panel y Excel* o *Datos y reportes*; quien atiende el servicio ve solo el suyo, y la dirección —permiso *Datos y reportes*— los de todos): turnos, estudiantes, espera y atención promedio, resultados, quién no llegó a tiempo y quién llegó sin turno; por motivo, día, hora, grupo y gravedad, y los estudiantes con más turnos. El Excel trae cada turno, las visitas por estudiante y por motivo, pero nunca las notas.
 - **Cerrar el año** del servicio: al terminar el año escolar, se elige el período, se descarga el Excel y se borran de la app los turnos terminados de ese período, para que el historial con nombres no pase al año siguiente.
 - **Panel de mantenimiento** (*Mantenimiento → Panel y Excel*; Mantenimiento, la dirección y la secretaría): solicitudes, resueltas, tiempo hasta «en camino» y hasta «listo»; por tipo, lugar, urgencia, día y quién las resolvió.
@@ -108,6 +109,8 @@ Funciona con servicios gratuitos:
 - **Microsoft Teams**: cada ausencia nueva, modificada (con qué cambió) o cancelada (quién y por qué) se publica en el canal que elija la escuela. Las solicitudes de contraseña van al mismo canal o a otro distinto.
 - **En la app**: campana con avisos y contador.
 - **Push al teléfono**: se activan en *Más → Mi perfil*. Funcionan en Android, computadoras e iPhone (iOS 16.4+ con la app añadida a la pantalla de inicio).
+
+**En vivo por servicio:** `live_turns(servicio, desde)` (permiso `live`, o quien atiende el servicio) da los turnos del día (desde el inicio del día en el teléfono) y los que siguen abiertos de antes, con cada paso, quién pidió, quién tiene al estudiante, quién atendió, cómo terminó y qué se hizo; nunca la nota.
 
 **Varias escuelas:** cada una tiene su código, su personal, sus ausencias y sus archivos, separados por reglas de seguridad en la base de datos. Desde el **Panel de plataforma** (`#/platform`) se crean escuelas nuevas.
 

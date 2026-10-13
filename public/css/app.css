@@ -3035,7 +3035,9 @@ input[type='color'] {
 
 /* ---- Paneles -------------------------------------------------------------- */
 
-.live-service .item-sub {
+.live-service .item-sub,
+.day-turn .item-main strong,
+.day-turn .item-sub {
   white-space: normal;
 }
 
