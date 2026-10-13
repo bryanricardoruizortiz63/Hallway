@@ -133,6 +133,7 @@ function tasks(user) {
     can(user, 'staff') ? ['#/employees', 'users', 'Añadir personal o enviarle su acceso', 'Más › Personal'] : null,
     can(user, 'messages') ? ['#/messages/new', 'mail', 'Escribirle al personal', 'Más › Mensajes'] : null,
     can(user, 'live') ? ['#/live', 'live', 'Ver lo que pasa ahora en la escuela', where('/live', 'En vivo')] : null,
+    can(user, 'summary') ? ['#/summary', 'chart', 'Ver el resumen del día', 'Más › Resumen del día'] : null,
   ].filter(Boolean);
 }
 

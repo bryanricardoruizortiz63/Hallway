@@ -1,6 +1,7 @@
 import {
   $,
   CATEGORIES,
+  NO_COVER,
   addDays,
   busy,
   dialog,
@@ -41,6 +42,7 @@ import {
   receiveAbsence,
   replyCoverage,
   setCovers,
+  setNoCover,
   updateAbsence,
 } from '../backend.js';
 import { MAX_FILES, MAX_UPLOAD_MB as maxMb } from '../config.js';
@@ -484,10 +486,21 @@ function coverRow(c, ctx, preset = {}) {
   </div>`;
 }
 
+/** «Nadie cubrirá: no hace falta cubrir · Ana López, 13 oct 3:05 p. m.»; who handles coverage can undo it. */
+function noCoverNote(a, { undo = false } = {}) {
+  const why = NO_COVER[a.no_cover];
+  if (!why) return '';
+  return html`<div class="status-note muted no-cover" data-no-cover-note>${icon('users', 16)}
+    <span>Nadie cubrirá: ${why.label.toLowerCase()}${a.no_cover_by_name ? ` · ${a.no_cover_by_name}, ${fmtDateTime(a.no_cover_at)}` : ''}</span>
+    ${undo ? html`<button type="button" class="link-btn" data-no-cover-undo>Quitar</button>` : ''}
+  </div>`;
+}
+
 /**
  * Who covers: one or more people, each on every day of the absence or only some, with their hours. Secretaría
  * and the dirección choose each one from the staff (they get a notice with their days, groups, hours, room and
  * the instructions) or write the name of someone from outside; the rest, the absent person included, only see it.
+ * When nobody will cover it, they say so and why («Nadie cubrirá»).
  */
 function coverageCard(a, { form, employees }) {
   const covers = coversOf(a);
@@ -501,26 +514,36 @@ function coverageCard(a, { form, employees }) {
             ${avatar(c.name)}
             <span class="item-main"><strong>${c.name}</strong>${coverLine(c) ? html`<span class="item-sub">${coverLine(c)}</span>` : ''}</span>
           </div>`)}</div>`
-        : html`<p class="muted">Aún no se han registrado arreglos.</p>`}
+        : NO_COVER[a.no_cover] ? noCoverNote(a) : html`<p class="muted">Aún no se han registrado arreglos.</p>`}
       ${missing.length ? missingNote(missing) : ''}
       ${coverReplies(a)}
     </section>`;
   }
   const ctx = coverContext(a, employees);
   const told = [...new Set(covers.filter((c) => c.substitute_id).map((c) => c.name))];
-  return html`<section class="card stack">
+  return html`<section class="card stack" data-coverage-card>
     <h3 class="card-title">${icon('users')} Cobertura / arreglos</h3>
     ${told.length
       ? html`<p class="status-note ok">${icon('check', 16)} Se le avisó a ${told.join(', ')}${a.cover_set_by_name ? ` · ${a.cover_set_by_name}, ${fmtDateTime(a.cover_set_at)}` : ''}</p>`
       : ''}
+    ${noCoverNote(a, { undo: true })}
     ${coverReplies(a)}
     <form class="stack" data-coverage novalidate>
       <div class="stack" data-covers>${covers.length ? covers.map((c) => coverRow(c, ctx)) : coverRow(null, ctx, ctx.first)}</div>
       ${missingNote(missing)}
       <button type="button" class="btn btn-secondary btn-block" data-add-cover>${icon('plus', 18)} Añadir otra persona</button>
-      <p class="hint">${ctx.days.length ? 'Para otro día u otro horario, añade otra persona (o la misma con otros días). ' : ''}Si dejas el horario vacío, cubre todo el horario de la ausencia.</p>
+      ${ctx.team.length
+        ? html`<div class="stack-sm" data-team>
+            <button type="button" class="btn btn-secondary btn-block" data-team-cover>${icon('users', 18)} Que cubra su equipo</button>
+            <p class="hint" data-team-hint>Su equipo, quienes también tienen ${ctx.theirs.join(' o ')}: ${ctx.team.map((e) => `${e.full_name} (${e.shared.join(', ')})`).join(', ')}.</p>
+          </div>`
+        : ctx.theirs.length
+          ? html`<p class="hint" data-team-hint>Nadie más tiene ${ctx.theirs.join(' o ')}: no hay equipo que cubra.</p>`
+          : ''}
+      <p class="hint">${ctx.days.length ? 'Para otro día u otro horario, añade otra persona (o la misma con otros días). ' : ''}Si dejas el horario vacío, cubre todo el horario de la ausencia.${NO_COVER[a.no_cover] ? ' Si eliges a alguien, deja de decir «Nadie cubrirá».' : ''}</p>
       <p class="hint" data-cover-hint></p>
       <button class="btn btn-primary btn-block" type="submit">Guardar</button>
+      ${NO_COVER[a.no_cover] ? '' : html`<button type="button" class="btn btn-ghost btn-block" data-no-cover>${icon('x', 18)} Nadie cubrirá</button>`}
     </form>
   </section>`;
 }
@@ -529,12 +552,17 @@ function coverContext(a, employees) {
   const { groups: schoolGroups } = schoolCalendar(state.me.school);
   // The absent person's groups first; the first person gets them all, with their room.
   const theirs = (a.employee_groups || []).filter((g) => schoolGroups.includes(g));
+  const people = employees.filter((e) => e.active && e.id !== a.user_id && e.role !== 'admin');
   return {
     schoolGroups,
     theirs,
     days: absenceDays(a),
-    people: employees.filter((e) => e.active && e.id !== a.user_id && e.role !== 'admin'),
+    people,
     first: { groups: theirs, room: a.employee_room || '' },
+    // Their team: whoever else has one of their grades and groups, with the ones they share.
+    team: people
+      .map((e) => ({ ...e, shared: theirs.filter((g) => (e.groups || []).includes(g)) }))
+      .filter((e) => e.shared.length),
   };
 }
 
@@ -592,6 +620,60 @@ function bindCoverage(form, a, employees, reload) {
     }
   });
   update();
+
+  // «Que cubra su equipo»: each one of the team not chosen yet gets a row with the groups they share and the room;
+  // empty rows go. Nothing is saved until «Guardar y avisar».
+  $('[data-team-cover]', form)?.addEventListener('click', () => {
+    for (const row of rows().filter((r) => !who(r))) row.remove();
+    const chosen = new Set(rows().map(who));
+    const added = ctx.team.filter((e) => !chosen.has(e.id));
+    for (const e of added) {
+      const c = { substitute_id: e.id, name: e.full_name, groups: e.shared, room: ctx.first.room, days: [] };
+      list.insertAdjacentHTML('beforeend', String(coverRow(c, ctx)));
+    }
+    update();
+    toast(
+      added.length
+        ? `${added.map((e) => e.full_name).join(', ')} ${added.length === 1 ? 'quedó' : 'quedaron'} en la lista. Toca «Guardar y avisar».`
+        : 'Su equipo ya está en la lista.',
+      'ok',
+    );
+    form.querySelector('[type=submit]').scrollIntoView({ block: 'center' });
+  });
+
+  // «Nadie cubrirá»: why, and whoever covered is taken off (and told).
+  $('[data-no-cover]', form)?.addEventListener('click', async () => {
+    const names = [...new Set(before.map((c) => c.name))];
+    const told = before.some((c) => c.substitute_id);
+    const reason = await dialog({
+      title: 'Nadie cubrirá',
+      body: html`<div class="stack">
+        <p class="muted">La ausencia de ${a.employee_name} deja de salir como «Sin cubrir».</p>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="reason" value="not_needed" checked>
+            <span><strong>${NO_COVER.not_needed.label}</strong><small>Por ejemplo, sus estudiantes no tienen clase o están en otra actividad.</small></span></label>
+          <label class="choice"><input type="radio" name="reason" value="no_one">
+            <span><strong>${NO_COVER.no_one.label}</strong><small>No hay nadie disponible para cubrirla.</small></span></label>
+        </div>
+        ${names.length ? html`<p class="hint">Se quita la cobertura de ${names.join(', ')}${told ? ' y les avisamos' : ''}.</p>` : ''}
+      </div>`,
+      confirmText: 'Guardar',
+      onSubmit: async (v) => {
+        await setNoCover(a.id, v.reason);
+        return v.reason;
+      },
+    });
+    if (!reason) return;
+    toast(`Guardado: nadie cubrirá (${NO_COVER[reason].label.toLowerCase()}).`, 'ok');
+    await reload();
+  });
+  form.closest('[data-coverage-card]')?.querySelector('[data-no-cover-undo]')?.addEventListener('click', (e) =>
+    busy(e.currentTarget, async () => {
+      await setNoCover(a.id, null);
+      toast('Vuelve a salir como «Sin cubrir».', 'ok');
+      await reload();
+    }),
+  );
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();

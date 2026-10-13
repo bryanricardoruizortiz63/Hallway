@@ -35,6 +35,7 @@ import {
 } from './views/panels.js';
 import { moreView, notificationsView, profileView } from './views/account.js';
 import { guideView } from './views/guide.js';
+import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
 import { composeView, messageView, messagesView } from './views/messages.js';
 
@@ -91,6 +92,7 @@ const ROUTES = [
   { re: /^\/live\/service\/(\d+)$/, view: liveServiceView, title: 'En vivo', allow: may('live'), back: true },
   // For a TV in the office: without the app's bars.
   { re: /^\/live\/tv$/, view: liveTvView, title: 'En vivo', allow: may('live'), bare: true },
+  { re: /^\/summary(?:\/(\d{4}-\d{2}-\d{2}))?$/, view: summaryView, title: 'Resumen del día', allow: may('summary'), back: true },
   // Enfermería, Trabajo Social…: only their own service's panel.
   { re: /^\/data$/, view: dataView, title: 'Datos y reportes', allow: (u) => can(u, 'reports') || !!u.serves?.length, back: true },
   { re: /^\/messages$/, view: messagesView, title: 'Mensajes', allow: may('messages'), back: true },

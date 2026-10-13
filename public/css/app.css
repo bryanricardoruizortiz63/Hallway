@@ -830,6 +830,28 @@ select {
   white-space: normal;
 }
 
+/* «Nadie cubrirá»: why and who said it; «Quitar» at the end. */
+.no-cover .link-btn {
+  margin-left: auto;
+}
+
+/* Resumen del día: the day between «anterior» and «siguiente». */
+.summary-nav {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.summary-nav h2 {
+  font-size: 20px;
+}
+
+.summary .item-sub {
+  white-space: normal;
+}
+
 /* An icon and its words (Sonido, Pantalla grande). */
 .chip-btn {
   gap: 6px;

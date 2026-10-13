@@ -32,7 +32,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** What a role can do besides reporting its own absences (see the roles migration). */
 const PERMISSIONS = [
   'absences', 'register', 'staff', 'settings', 'services', 'messages', 'reports',
-  'live', 'calendar', 'rooms', 'security', 'visitors', 'maintenance',
+  'live', 'calendar', 'rooms', 'security', 'visitors', 'maintenance', 'summary',
 ];
 /** Duties rather than powers over other people's data: whoever manages the staff can give them. */
 const DUTIES = ['maintenance'];
@@ -128,8 +128,8 @@ function parseRole(me: Me, value: unknown): string {
 function parsePermissions(value: unknown): string[] {
   const list = Array.isArray(value) ? value.map(String) : [];
   if (list.some((p) => !PERMISSIONS.includes(p))) throw new HttpError(400, 'Permiso no válido.');
-  // Managing staff, reports and registering absences need to see everyone's absences.
-  if (['staff', 'reports', 'register'].some((p) => list.includes(p))) list.push('absences');
+  // Managing staff, reports, registering absences and the day's summary need to see everyone's absences.
+  if (['staff', 'reports', 'register', 'summary'].some((p) => list.includes(p))) list.push('absences');
   return PERMISSIONS.filter((p) => list.includes(p));
 }
 
