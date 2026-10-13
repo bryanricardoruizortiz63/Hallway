@@ -5,12 +5,15 @@
 //   * Mantenimiento: Mantenimiento, the dirección and the secretaría.
 //   * Conference room: Secretaría and the dirección (permission "calendar").
 //   * En vivo: the dirección and Secretaría (permission "live"), with each turn's reason; it refreshes by itself.
+//     A grade or group can be chosen, it can ring when a student doesn't arrive, it shows who is out of their room,
+//     each service's peak hours, and a big screen for a TV.
 import {
   bookingsBetween,
   closeServiceYear,
   downloadXlsx,
   listClosures,
   liveBoard,
+  liveHours,
   liveTurns,
   maintenanceBetween,
   servicesOverview,
@@ -33,6 +36,8 @@ import {
   todayStr,
 } from '../lib.js';
 import { icon } from '../icons.js';
+import { ringOnce, soundReady } from '../alarm.js';
+import { appIcon } from '../branding.js';
 import { state } from '../store.js';
 import { xDate, xDateTime } from '../xlsx.js';
 import { empty } from './common.js';
@@ -146,18 +151,45 @@ function rangePicker(slot, initial, onChange) {
 
 const tile = (value, label, cls = '') => html`<div class="stat ${cls}"><strong>${value}</strong><span>${label}</span></div>`;
 
-/** A ranked list of bars, one hue; the value is written next to each bar. */
+/** The rows of a bar chart, one hue; the value is written next to each bar. */
+function barRows(rows, format = (v) => v) {
+  const max = Math.max(...rows.map((r) => r.value));
+  return html`<div class="bars">${rows.map(
+    (r) => html`<div class="bar-row"><span>${r.label}${r.sub ? html`<small>${r.sub}</small>` : ''}</span>
+      <span class="bar"><i data-w="${(r.value / max) * 100}"></i></span><b>${format(r.value)}</b></div>`,
+  )}</div>`;
+}
+
+/** A ranked list of bars. */
 function bars(title, iconName, rows, { format = (v) => v, note = '' } = {}) {
   if (!rows.length || rows.every((r) => !r.value)) return '';
-  const max = Math.max(...rows.map((r) => r.value));
   return html`<section class="card stack">
     <h2 class="card-title">${icon(iconName)} ${title}</h2>
-    <div class="bars">${rows.map(
-      (r) => html`<div class="bar-row"><span>${r.label}${r.sub ? html`<small>${r.sub}</small>` : ''}</span>
-        <span class="bar"><i data-w="${(r.value / max) * 100}"></i></span><b>${format(r.value)}</b></div>`,
-    )}</div>
+    ${barRows(rows, format)}
     ${note ? html`<p class="hint">${note}</p>` : ''}
   </section>`;
+}
+
+/** How many turns were asked at each hour of the day. */
+function countByHour(turns) {
+  const counts = new Map();
+  for (const t of turns) {
+    const h = new Date(t.created_at).getHours();
+    counts.set(h, (counts.get(h) || 0) + 1);
+  }
+  return counts;
+}
+
+/** One row per hour of the school day (and any hour outside it that has something): "8:00 a. m.". */
+function hourRows(counts) {
+  const cal = schoolCalendar(state.me.school);
+  const first = Math.floor(toMin(cal.day_start) / 60);
+  const last = Math.floor((toMin(cal.day_end) - 1) / 60);
+  const from = Math.min(first, ...counts.keys());
+  const to = Math.max(last, ...counts.keys());
+  const out = [];
+  for (let h = from; h <= to; h++) out.push({ label: plain(fmtTime(`${h}:00`)), value: counts.get(h) || 0 });
+  return out;
 }
 
 function sizeBars(root) {
@@ -359,21 +391,7 @@ export async function servicePanelView(ctx) {
           ${downloaded ? '' : html`<p class="hint">Primero descarga el Excel de este período.</p>`}
         </section>`
       : '';
-    const hours = (() => {
-      const cal = schoolCalendar(state.me.school);
-      const first = Math.floor(toMin(cal.day_start) / 60);
-      const last = Math.floor((toMin(cal.day_end) - 1) / 60);
-      const counts = new Map();
-      for (const t of turns) {
-        const h = new Date(t.created_at).getHours();
-        counts.set(h, (counts.get(h) || 0) + 1);
-      }
-      const from = Math.min(first, ...counts.keys());
-      const to = Math.max(last, ...counts.keys());
-      const out = [];
-      for (let h = from; h <= to; h++) out.push({ label: plain(fmtTime(`${h}:00`)), value: counts.get(h) || 0 });
-      return out;
-    })();
+    const hours = hourRows(countByHour(turns));
     if (support) {
       const referred = count((t) => t.outcome === 'referred');
       return html`
@@ -721,7 +739,8 @@ const serviceChips = (services, current = null) => html`<div class="quick live-s
   (x) => html`<a class="chip-btn ${x.id === current ? 'active' : ''}" href="#/live/service/${x.id}">${x.name}</a>`,
 )}</div>`;
 
-function liveService(s) {
+/** filtered: only a grade's or group's turns show (the day's numbers are the whole service's); link: to its day. */
+function liveService(s, { filtered = false, link = true } = {}) {
   // Late first, then whoever is out of the room, then the queue by level.
   const rank = (t) => (t.late ? 0 : t.status === 'waiting' ? 2 : 1);
   const active = [...s.active].sort((a, b) => rank(a) - rank(b) || (rank(a) === 2 ? b.level - a.level : 0));
@@ -741,8 +760,8 @@ function liveService(s) {
     </div>
     ${staffTags(s)}
     ${active.length ? html`<div class="list flat">${active.map((t) => liveTurn(t, s))}</div>` : html`<p class="muted">Nadie en fila ni en atención.</p>`}
-    <p class="hint">Hoy: ${summary}.</p>
-    <a class="btn btn-secondary btn-block" href="#/live/service/${s.id}">${icon('list', 18)} Ver todos los turnos de hoy</a>
+    <p class="hint">${filtered && s.mode !== 'support' ? 'Hoy, en todo el servicio' : 'Hoy'}: ${summary}.</p>
+    ${link ? html`<a class="btn btn-secondary btn-block" href="#/live/service/${s.id}">${icon('list', 18)} Ver todos los turnos de hoy</a>` : ''}
   </section>`;
 }
 
@@ -752,6 +771,207 @@ function liveSection(title, items, renderItem, { danger = false, note = '' } = {
     <h3 class="section-title">${title} <span class="count ${danger && items.length ? 'danger' : ''}">${items.length}</span></h3>
     ${items.length ? html`<div class="list">${items.map(renderItem)}</div>` : ''}
     ${note ? html`<p class="hint pad">${note}</p>` : ''}
+  </section>`;
+}
+
+const alertItem = (a) => html`<a class="item alert-item is-urgent" href="#/alerts/missing/${a.id}">
+    <span class="item-icon is-danger">${icon('alert')}</span>
+    <span class="item-main"><strong>${who(a.student, a.group)}</strong>
+      <span class="item-sub">${[a.place ? `venía de ${a.place}` : null, `avisó ${a.created_by_name}`, timeAgo(a.created_at)].filter(Boolean).join(' · ')}</span></span>
+  </a>`;
+const pickupItem = (k) => html`<a class="item" href="#/alerts/pickup/${k.id}">
+    <span class="item-icon">${icon('user')}</span>
+    <span class="item-main"><strong>${who(k.student, k.group)}</strong>
+      <span class="item-sub">${[PICKUP_STATUS[k.status], k.expected_time ? `hacia las ${fmtTime(k.expected_time)}` : null].filter(Boolean).join(' · ')}</span></span>
+  </a>`;
+const reliefItem = (x) => html`<a class="item" href="#/alerts/relief/${x.id}">
+    <span class="item-icon is-danger">${icon('users')}</span>
+    <span class="item-main"><strong>${x.name}</strong>
+      <span class="item-sub">${[x.room ? `Salón ${x.room}` : null, timeAgo(x.created_at)].filter(Boolean).join(' · ')}</span></span>
+  </a>`;
+
+// ---- En vivo › a grade or group, the sound and «Fuera del salón ahora» -------------------------
+
+const FILTER_KEY = 'lah:live-filter';
+const SOUND_KEY = 'lah:live-sound';
+/** Minutes an urgent turn waits in line before the board rings. */
+const URGENT_WAIT_MIN = 5;
+/** A student out of their room: on the way to the service, in it, or going back. */
+const OUT = ['sent', 'arrived', 'returning'];
+
+/** This device's choices. A private window may not keep them: then they last while the app is open. */
+const memory = new Map();
+function stored(key) {
+  if (memory.has(key)) return memory.get(key);
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function store(key, value) {
+  memory.set(key, value || null);
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    /* only for now */
+  }
+}
+
+/** "9" from "9-B", "Pre-K" from "Pre-K-A"; a group without a dash is a grade of its own. */
+const gradeOf = (g) => (g.includes('-') ? g.slice(0, g.lastIndexOf('-')) : g);
+/** "9.º grado", "Kínder", "Pre-kínder". */
+const gradeName = (g) => (/^\d+$/.test(g) ? `${g}.º grado` : { K: 'Kínder', 'Pre-K': 'Pre-kínder' }[g] || g);
+
+/** The grade ("grade:9") or group ("group:9-B") chosen on this device, if the school still has it; '' is everyone. */
+function liveFilter() {
+  const value = stored(FILTER_KEY) || '';
+  const { groups } = schoolCalendar(state.me.school);
+  const name = value.slice(6);
+  if (value.startsWith('group:') && groups.includes(name)) return value;
+  if (value.startsWith('grade:') && groups.some((g) => gradeOf(g) === name)) return value;
+  return '';
+}
+const filterLabel = (f) => (f.startsWith('grade:') ? gradeName(f.slice(6)) : f.slice(6));
+/** Whether a student of that group is in the grade or group chosen. */
+const inFilter = (f, group) =>
+  !f || (!!group && (f.startsWith('grade:') ? gradeOf(group) === f.slice(6) : group === f.slice(6)));
+
+/**
+ * The board for a grade or group: its students' turns, «No ha llegado» and pickups. Soporte IT, relief requests,
+ * maintenance and the conference room are the whole school's.
+ */
+function forFilter(b, f) {
+  const mine = (x) => inFilter(f, x.group);
+  const services = b.services.map((s) => (s.mode === 'support' ? s : { ...s, active: s.active.filter(mine) }));
+  return { ...b, services, alerts: b.alerts.filter(mine), pickups: b.pickups.filter(mine), active: services.flatMap((s) => s.active) };
+}
+
+/** «Toda la escuela», then each grade («Todo 9.º grado») with its groups; a grade of one group is just the group. */
+function filterField(f) {
+  const { groups } = schoolCalendar(state.me.school);
+  if (!groups.length) return '';
+  const option = (value, label) => html`<option value="${value}" ${value === f ? 'selected' : ''}>${label}</option>`;
+  return html`<label class="field"><span>Grado o grupo</span>
+    <select data-live-filter>
+      ${option('', 'Toda la escuela')}
+      ${[...new Set(groups.map(gradeOf))].map((g) => {
+        const list = groups.filter((x) => gradeOf(x) === g);
+        return list.length === 1
+          ? option(`group:${list[0]}`, list[0])
+          : html`<optgroup label="${gradeName(g)}">${option(`grade:${g}`, `Todo ${gradeName(g)}`)}${list.map((x) => option(`group:${x}`, x))}</optgroup>`;
+      })}
+    </select></label>`;
+}
+
+/** What already rang on this device while the app is open: each thing rings once. */
+const heard = new Set();
+const soundOn = () => stored(SOUND_KEY) === '1';
+
+/** What rings: a student who didn't arrive, and an urgent turn waiting in line for 5 minutes or more. */
+function alarmKeys(v) {
+  const now = Date.now();
+  return [
+    ...v.alerts.map((a) => `alert-${a.id}`),
+    ...v.active.flatMap((t) => {
+      if (t.late) return [`late-${t.id}`];
+      const waited = (now - new Date(t.since)) / 60000;
+      return t.status === 'waiting' && t.level >= 4 && waited >= URGENT_WAIT_MIN ? [`urgent-${t.id}`] : [];
+    }),
+  ];
+}
+
+/** Rings once when something new needs looking at, if the sound is on here and can play. */
+function ringFor(keys) {
+  if (!soundOn() || !soundReady()) return;
+  const fresh = keys.filter((k) => !heard.has(k));
+  if (!fresh.length) return;
+  for (const k of fresh) heard.add(k);
+  ringOnce();
+}
+
+function soundButton() {
+  const on = soundOn();
+  return html`<button type="button" class="chip-btn ${on ? 'active' : ''}" data-live-sound aria-pressed="${on}">${icon('bell', 16)} Sonido ${on ? 'encendido' : 'apagado'}</button>`;
+}
+
+function soundHint() {
+  if (!soundOn()) return '';
+  return soundReady()
+    ? html`<p class="hint" data-sound-hint>Suena cuando un estudiante no llega o un turno urgente lleva ${URGENT_WAIT_MIN} minutos en fila. Solo en este dispositivo, mientras En vivo está abierto.</p>`
+    : html`<p class="hint" data-sound-hint>El teléfono no deja sonar hasta que tocas la pantalla. <button type="button" class="link-btn" data-sound-unlock>Activar el sonido</button></p>`;
+}
+
+/** The grade or group and the sound, after each render; rerender shows the change. keysNow: what would ring now. */
+function bindTools(root, rerender, keysNow) {
+  $('[data-live-filter]', root)?.addEventListener('change', (e) => {
+    store(FILTER_KEY, e.target.value);
+    rerender();
+  });
+  $('[data-live-sound]', root)?.addEventListener('click', () => {
+    const on = !soundOn();
+    store(SOUND_KEY, on ? '1' : '');
+    if (on) {
+      // It rings now, so the person hears how it sounds; what is already on the board counts as heard.
+      for (const k of keysNow()) heard.add(k);
+      ringOnce();
+    }
+    rerender();
+  });
+  $('[data-sound-unlock]', root)?.addEventListener('click', () => {
+    for (const k of keysNow()) heard.add(k);
+    ringOnce();
+    setTimeout(rerender, 300);
+  });
+}
+
+/**
+ * The students out of their room now, by group in the school's order: whoever didn't arrive first, then whoever
+ * has been out the longest. The «No ha llegado» alerts count as out.
+ */
+function outNow(v) {
+  const list = [
+    ...v.alerts.map((a) => ({
+      key: `alert-${a.id}`, student: a.student, group: a.group, late: true, since: a.created_at,
+      where: a.place ? `No ha llegado · venía de ${a.place}` : 'No ha llegado', link: `#/alerts/missing/${a.id}`,
+    })),
+    ...v.services.filter((s) => s.mode !== 'support').flatMap((s) => s.active.filter((t) => OUT.includes(t.status)).map((t) => ({
+      key: `turn-${t.id}`, student: t.student, group: t.group, late: t.late, since: t.out_since || t.since,
+      where: t.late ? `No ha llegado a ${s.name}` : TURN_STATUS[t.status](s), link: null,
+    }))),
+  ];
+  const order = schoolCalendar(state.me.school).groups;
+  const rank = (g) => (order.includes(g) ? order.indexOf(g) : order.length);
+  const groups = [...new Set(list.map((x) => x.group || ''))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'es'));
+  return groups.map((g) => ({
+    group: g,
+    students: list.filter((x) => (x.group || '') === g).sort((a, b) => b.late - a.late || String(a.since).localeCompare(String(b.since))),
+  }));
+}
+
+function outItem(x) {
+  const minutes = minutesText(minutesBetween(x.since, new Date().toISOString()));
+  const inner = html`<span class="item-icon ${x.late ? 'is-danger' : 'is-ok'}">${icon(x.late ? 'alert' : 'door')}</span>
+    <span class="item-main"><strong>${x.student || 'Estudiante'}</strong>
+      <span class="item-sub">${[x.where, minutes ? `${minutes} fuera del salón` : null].filter(Boolean).join(' · ')}</span></span>`;
+  const cls = `item ${x.late ? 'alert-item is-urgent' : ''}`;
+  return x.link
+    ? html`<a class="${cls}" href="${x.link}" data-out="${x.key}">${inner}</a>`
+    : html`<div class="${cls}" data-out="${x.key}">${inner}</div>`;
+}
+
+/** «Fuera del salón ahora», by group. */
+function outSection(out) {
+  const count = out.reduce((n, g) => n + g.students.length, 0);
+  if (!count) return '';
+  const late = out.some((g) => g.students.some((x) => x.late));
+  return html`<section class="section" data-out-now>
+    <h3 class="section-title">Fuera del salón ahora <span class="count ${late ? 'danger' : 'warn'}">${count}</span></h3>
+    <div class="out-groups">${out.map((g) => html`<div class="out-group" data-out-group="${g.group}">
+      <h4 class="out-group-title">${g.group || 'Sin grupo'} <span>${g.students.length}</span></h4>
+      <div class="list">${g.students.map(outItem)}</div>
+    </div>`)}</div>
   </section>`;
 }
 
@@ -839,18 +1059,56 @@ function dayTurn(t, s) {
   </div>`;
 }
 
+/**
+ * «Horas pico»: today's turns by hour (of the grade or group chosen), or an average day of the 4 weeks before today
+ * (the whole service; it doesn't know groups). history: null when it couldn't be read.
+ */
+function peakCard(today, history, which, f) {
+  const weeks = which === 'weeks' && !!history;
+  const counts = weeks ? new Map(history.hours.map((h) => [h.hour, h.turns / history.days])) : countByHour(today);
+  const rows = hourRows(counts).map((r) => ({ ...r, value: round1(r.value) }));
+  const top = rows.reduce((a, r) => (r.value > a.value ? r : a), rows[0]);
+  const any = !!top?.value;
+  let note;
+  if (weeks) {
+    note = history.days
+      ? `Un día promedio de las 4 semanas antes de hoy (${history.days} ${history.days === 1 ? 'día' : 'días'} con pedidos). La hora más llena: ${top.label}, con ${top.value} por día.${f ? ' Cuenta todos los grupos.' : ''}`
+      : 'No hubo pedidos en las 4 semanas antes de hoy.';
+  } else {
+    note = any ? `La hora con más pedidos hoy: ${top.label} (${top.value}).` : 'Todavía no hay pedidos hoy.';
+  }
+  return html`<section class="card stack" data-peak>
+    <h2 class="card-title">${icon('clock')} Horas pico</h2>
+    ${history ? html`<div class="quick">
+      <button type="button" class="chip-btn ${weeks ? '' : 'active'}" data-peak-show="today">Hoy</button>
+      <button type="button" class="chip-btn ${weeks ? 'active' : ''}" data-peak-show="weeks">Últimas 4 semanas</button>
+    </div>` : ''}
+    ${any ? barRows(rows) : ''}
+    <p class="hint" data-peak-note>${note}</p>
+  </section>`;
+}
+
 /** En vivo › Enfermería: the day of one service — who is in line or being attended now, and everyone attended today. */
 export async function liveServiceView(ctx) {
   const { el, params, isCurrent, setTitle } = ctx;
   const id = Number(params[0]);
+  let board = null;
+  let all = [];
+  // The 4 weeks before today, asked once.
+  let history;
+  let peak = 'today';
 
-  function render(board, turns) {
+  function render() {
     const s = board.services.find((x) => x.id === id);
     if (!s) {
       el.innerHTML = String(html`<div class="card">${empty('pulse', 'Ese servicio no está activo', 'Vuelve a En vivo para ver los demás.')}</div>`);
       return;
     }
     setTitle(`En vivo · ${s.name}`);
+    // Soporte IT helps the staff, not students: no grade or group.
+    const support = s.mode === 'support';
+    const f = support ? '' : liveFilter();
+    const turns = all.filter((t) => inFilter(f, t.group_name));
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     const today = turns.filter((t) => new Date(t.created_at) >= start);
@@ -861,9 +1119,16 @@ export async function liveServiceView(ctx) {
     const finished = done.filter((t) => t.status === 'done');
     const avgWait = average(today.map((t) => turnMinutes(t).wait));
     const avgCare = average(finished.map((t) => turnMinutes(t).care));
+    const rings = () => alarmKeys(forFilter(board, liveFilter()));
     el.innerHTML = String(html`<div class="stack">
       ${serviceChips(board.services, id)}
       <p class="hint live-stamp">${icon('refresh', 14)} Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
+      <div class="stack-sm" data-live-tools>
+        ${support ? '' : filterField(f)}
+        <div class="quick">${soundButton()}</div>
+        ${soundHint()}
+      </div>
+      ${f ? html`<p class="hint" data-filter-note>Solo los turnos de ${filterLabel(f)}.</p>` : ''}
       <div class="stats">
         ${tile(today.length, 'Pedidos hoy')}
         ${tile(now.filter((t) => t.status === 'waiting').length, 'En fila')}
@@ -881,14 +1146,30 @@ export async function liveServiceView(ctx) {
         <h3 class="section-title">Atendidos hoy <span class="count">${done.length}</span></h3>
         ${done.length ? html`<div class="list">${done.map((t) => dayTurn(t, s))}</div>` : html`<p class="muted pad">Todavía no se ha atendido a nadie hoy.</p>`}
       </section>
+      ${peakCard(today, history, peak, f)}
       <p class="hint">Cada turno dice su motivo, quién lo pidió, quién lo atendió y la hora de cada paso. Las notas de los maestros no salen aquí: solo las ve el servicio.</p>
       <a class="btn btn-ghost btn-block" href="#/live">${icon('back', 18)} Todo En vivo</a>
     </div>`);
+    sizeBars(el);
+    bindTools(el, render, rings);
+    for (const b of el.querySelectorAll('[data-peak-show]')) {
+      b.addEventListener('click', () => {
+        peak = b.dataset.peakShow;
+        render();
+      });
+    }
+    ringFor(rings());
   }
 
   async function load() {
-    const [board, turns] = await Promise.all([liveBoard(), liveTurns(id)]);
-    if (isCurrent()) render(board, turns);
+    const [b, turns, hours] = await Promise.all([
+      liveBoard(),
+      liveTurns(id),
+      history === undefined ? liveHours(id).catch(() => null) : history,
+    ]);
+    if (!isCurrent()) return;
+    [board, all, history] = [b, turns, hours || null];
+    render();
   }
 
   await load();
@@ -897,13 +1178,22 @@ export async function liveServiceView(ctx) {
 
 export async function liveView(ctx) {
   const { el, isCurrent } = ctx;
+  let board = null;
 
-  function render(b) {
-    const active = b.services.flatMap((s) => s.active);
+  function render() {
+    const f = liveFilter();
+    const b = forFilter(board, f);
+    const { active } = b;
     const late = active.filter((t) => t.late).length + b.alerts.length;
     const quiet = !active.length && !b.alerts.length && !b.pickups.length && !b.relief.length && !b.maintenance.length && !b.rooms.length;
     el.innerHTML = String(html`<div class="stack">
       <p class="hint live-stamp">${icon('refresh', 14)} Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
+      <div class="stack-sm" data-live-tools>
+        ${filterField(f)}
+        <div class="quick">${soundButton()}<a class="chip-btn" href="#/live/tv" data-live-tv>${icon('live', 16)} Pantalla grande</a></div>
+        ${soundHint()}
+      </div>
+      ${f ? html`<p class="hint" data-filter-note>Solo ${filterLabel(f)}: sus turnos, «No ha llegado», las salidas y quién está fuera del salón. Soporte IT, los relevos, el mantenimiento y el salón de conferencias son de toda la escuela.</p>` : ''}
       <div class="stats">
         ${tile(active.filter((t) => t.status === 'waiting').length, 'En fila')}
         ${tile(active.filter((t) => t.status !== 'waiting').length, 'En atención o en camino')}
@@ -912,22 +1202,11 @@ export async function liveView(ctx) {
       </div>
       ${b.services.length ? html`<div class="stack-sm"><p class="muted">Los turnos de hoy de un servicio, uno por uno:</p>${serviceChips(b.services)}</div>` : ''}
       ${quiet ? html`<div class="card">${empty('check', 'Todo tranquilo', 'No hay movimiento en este momento.')}</div>` : ''}
-      ${liveSection('No ha llegado', b.alerts, (a) => html`<a class="item alert-item is-urgent" href="#/alerts/missing/${a.id}">
-          <span class="item-icon is-danger">${icon('alert')}</span>
-          <span class="item-main"><strong>${who(a.student, a.group)}</strong>
-            <span class="item-sub">${[a.place ? `venía de ${a.place}` : null, `avisó ${a.created_by_name}`, timeAgo(a.created_at)].filter(Boolean).join(' · ')}</span></span>
-        </a>`, { danger: true })}
-      ${b.services.map(liveService)}
-      ${liveSection('Salidas de hoy', b.pickups, (k) => html`<a class="item" href="#/alerts/pickup/${k.id}">
-          <span class="item-icon">${icon('user')}</span>
-          <span class="item-main"><strong>${who(k.student, k.group)}</strong>
-            <span class="item-sub">${[PICKUP_STATUS[k.status], k.expected_time ? `hacia las ${fmtTime(k.expected_time)}` : null].filter(Boolean).join(' · ')}</span></span>
-        </a>`, { note: b.pickups_done ? `${b.pickups_done} ya ${b.pickups_done === 1 ? 'se entregó' : 'se entregaron'} hoy.` : '' })}
-      ${liveSection('Piden relevo', b.relief, (x) => html`<a class="item" href="#/alerts/relief/${x.id}">
-          <span class="item-icon is-danger">${icon('users')}</span>
-          <span class="item-main"><strong>${x.name}</strong>
-            <span class="item-sub">${[x.room ? `Salón ${x.room}` : null, timeAgo(x.created_at)].filter(Boolean).join(' · ')}</span></span>
-        </a>`, { danger: true })}
+      ${liveSection('No ha llegado', b.alerts, alertItem, { danger: true })}
+      ${outSection(outNow(b))}
+      ${b.services.map((s) => liveService(s, { filtered: !!f }))}
+      ${liveSection('Salidas de hoy', b.pickups, pickupItem, { note: !f && b.pickups_done ? `${b.pickups_done} ya ${b.pickups_done === 1 ? 'se entregó' : 'se entregaron'} hoy.` : '' })}
+      ${liveSection('Piden relevo', b.relief, reliefItem, { danger: true })}
       ${liveSection('Mantenimiento', b.maintenance, (m) => html`<a class="item ${m.urgency === 3 ? 'alert-item is-urgent' : ''}" href="#/maintenance/${m.id}">
           <span class="item-icon ${m.urgency === 3 ? 'is-danger' : ''}">${icon((KINDS[m.kind] || KINDS.other).icon)}</span>
           <span class="item-main"><strong>${(KINDS[m.kind] || KINDS.other).label} · ${m.place}</strong>
@@ -941,11 +1220,147 @@ export async function liveView(ctx) {
         </a>`, { note: b.rooms_pending ? `${b.rooms_pending} ${b.rooms_pending === 1 ? 'reserva espera' : 'reservas esperan'} aprobación.` : '' })}
       <p class="hint">Cada turno dice su motivo. Las notas de los maestros no salen aquí: solo las ve el servicio.</p>
     </div>`);
+    bindTools(el, render, () => alarmKeys(b));
+    ringFor(alarmKeys(b));
   }
 
   async function load() {
     const b = await liveBoard();
-    if (isCurrent()) render(b);
+    if (!isCurrent()) return;
+    board = b;
+    render();
+  }
+
+  await load();
+  keepFresh(ctx, load);
+}
+
+// ---- En vivo › pantalla grande ----------------------------------------------------------------
+
+const TV_PAGE_SECONDS = 15;
+
+/** The first page of the big screen: who is out of their room, by group; relief requests and today's pickups. */
+function tvSummary(v, out) {
+  const quiet = !out.length && !v.relief.length && !v.pickups.length;
+  return html`<div class="stack">
+    ${quiet ? html`<div class="card">${empty('check', 'Todo tranquilo', 'Nadie está fuera del salón ahora.')}</div>` : ''}
+    ${outSection(out)}
+    ${liveSection('Piden relevo', v.relief, reliefItem, { danger: true })}
+    ${liveSection('Salidas de hoy', v.pickups, pickupItem)}
+  </div>`;
+}
+
+/**
+ * En vivo for a TV in the office: big letters, without the app's bars. The summary, then each service, one after
+ * the other by itself (it can be paused or a page chosen). The screen stays on while it's open.
+ */
+export async function liveTvView(ctx) {
+  const { el, isCurrent, onLeave } = ctx;
+  let board = null;
+  let loadedAt = new Date();
+  let page = 0;
+  let paused = false;
+  let lock = null;
+
+  const stayAwake = async () => {
+    try {
+      lock = (await navigator.wakeLock?.request('screen')) || null;
+    } catch {
+      lock = null;
+    }
+  };
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') stayAwake();
+  };
+  const turnPage = setInterval(() => {
+    if (board && !paused && isCurrent()) {
+      page += 1;
+      render();
+    }
+  }, TV_PAGE_SECONDS * 1000);
+  const clock = setInterval(() => {
+    const c = $('[data-tv-clock]', el);
+    if (c) c.textContent = fmtTime(new Date());
+  }, 10000);
+  document.body.classList.add('tv-mode');
+  document.addEventListener('visibilitychange', onVisible);
+  stayAwake();
+  onLeave(() => {
+    clearInterval(turnPage);
+    clearInterval(clock);
+    document.body.classList.remove('tv-mode');
+    document.removeEventListener('visibilitychange', onVisible);
+    if (lock) lock.release().catch(() => {});
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  });
+
+  function render() {
+    const f = liveFilter();
+    const v = forFilter(board, f);
+    const pages = [{ label: 'Resumen', key: 'summary' }, ...v.services.map((s) => ({ label: s.name, key: String(s.id), service: s }))];
+    page %= pages.length;
+    const current = pages[page];
+    const out = outNow(v);
+    const outCount = out.reduce((n, g) => n + g.students.length, 0);
+    const late = v.active.filter((t) => t.late).length + v.alerts.length;
+    el.innerHTML = String(html`<div class="tv" data-tv>
+      <header class="tv-head">
+        <img src="${appIcon()}" alt="" width="56" height="56">
+        <div class="tv-title"><strong>En vivo</strong><small>${state.me.school.name}${f ? ` · Solo ${filterLabel(f)}` : ''}</small></div>
+        <span class="tv-clock" data-tv-clock>${fmtTime(new Date())}</span>
+      </header>
+      <div class="stats">
+        ${tile(v.active.filter((t) => t.status === 'waiting').length, 'En fila')}
+        ${tile(v.active.filter((t) => t.status !== 'waiting').length, 'En atención o en camino')}
+        ${tile(outCount, 'Fuera del salón')}
+        ${tile(late, 'No han llegado', late ? 'stat-danger' : '')}
+      </div>
+      <div class="quick" data-tv-pages>${pages.map(
+        (p, i) => html`<button type="button" class="chip-btn ${i === page ? 'active' : ''}" data-tv-go="${i}" aria-pressed="${i === page}">${p.label}</button>`,
+      )}</div>
+      <div class="tv-page" data-tv-page="${current.key}">
+        ${current.service ? liveService(current.service, { filtered: !!f, link: false }) : tvSummary(v, out)}
+      </div>
+      <footer class="tv-foot">
+        <p class="hint" data-tv-stamp>${paused ? 'En pausa.' : `Cambia cada ${TV_PAGE_SECONDS} segundos.`} Se actualiza solo. Última vez: ${fmtTime(loadedAt)}</p>
+        <div class="quick">
+          ${soundButton()}
+          <button type="button" class="chip-btn" data-tv-pause aria-pressed="${paused}">${paused ? 'Seguir' : 'Pausar'}</button>
+          ${document.fullscreenEnabled ? html`<button type="button" class="chip-btn" data-tv-full>${document.fullscreenElement ? 'Salir de pantalla completa' : 'Pantalla completa'}</button>` : ''}
+          <a class="chip-btn" href="#/live" data-tv-exit>Salir</a>
+        </div>
+        ${soundHint()}
+      </footer>
+    </div>`);
+    bindTools(el, render, () => alarmKeys(v));
+    for (const b of el.querySelectorAll('[data-tv-go]')) {
+      b.addEventListener('click', () => {
+        page = Number(b.dataset.tvGo);
+        render();
+      });
+    }
+    $('[data-tv-pause]', el)?.addEventListener('click', () => {
+      paused = !paused;
+      render();
+    });
+    $('[data-tv-full]', el)?.addEventListener('click', async () => {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+      } catch {
+        /* the browser said no */
+      }
+      render();
+    });
+    ringFor(alarmKeys(v));
+  }
+
+  async function load() {
+    const b = await liveBoard();
+    if (!isCurrent()) return;
+    board = b;
+    loadedAt = new Date();
+    render();
   }
 
   await load();

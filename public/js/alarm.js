@@ -1,7 +1,7 @@
 // In-app alarm for urgent notices (a student who didn't arrive, a parent at the door, a relief request) while
 // the app is open: a full-screen notice with sound and vibration until the person looks at it or closes it.
 // A web app can't ring like an alarm when the phone is silenced or the app is closed; the push notification
-// (long vibration, stays on screen) covers that.
+// (long vibration, stays on screen) covers that. The live board rings once (ringOnce) when something needs looking at.
 import { html } from './lib.js';
 import { icon } from './icons.js';
 
@@ -46,6 +46,14 @@ function ring() {
     osc.start(start + offset);
     osc.stop(start + offset + 0.24);
   });
+}
+
+/** Whether a sound can play now: the person already touched the page. */
+export const soundReady = () => !!audio && audio.state === 'running';
+
+/** One ring (sound and vibration), without the notice on screen: the live board's alerts. */
+export function ringOnce() {
+  ring();
 }
 
 function stop() {
