@@ -12,7 +12,7 @@ import { absencesListView, dashboardView } from './views/staff.js';
 import { dataView, employeeFormView, employeesView, settingsView } from './views/admin.js';
 import { accessCardsView } from './views/access.js';
 import { rolesView } from './views/roles.js';
-import { calendarView } from './views/calendar.js';
+import { calendarView, groupsView } from './views/calendar.js';
 import {
   alertsView,
   missingDetailView,
@@ -55,6 +55,7 @@ const ROUTES = [
   { re: /^\/settings$/, view: settingsView, title: 'Escuela y Teams', allow: may('settings'), back: true },
   { re: /^\/roles$/, view: rolesView, title: 'Roles y permisos', allow: ADMIN, back: true },
   { re: /^\/calendar$/, view: calendarView, title: 'Calendario escolar', back: true },
+  { re: /^\/groups$/, view: groupsView, title: 'Grados y grupos', allow: may('calendar'), back: true },
   { re: /^\/alerts$/, view: alertsView, title: 'Alertas' },
   { re: /^\/alerts\/new\/missing$/, view: newMissingView, title: 'No ha llegado', back: true },
   { re: /^\/alerts\/new\/pickup$/, view: newPickupView, title: 'Salida', back: true },

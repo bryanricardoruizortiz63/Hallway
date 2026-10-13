@@ -1,5 +1,6 @@
-// Calendario escolar: class hours, days without classes and the school's grades and groups.
-// Everyone can see it; roles with the "calendar" permission (Secretaría, Director(a)…) change it.
+// Calendario escolar: class hours and days without classes. Everyone can see it; roles with the "calendar"
+// permission (Secretaría, Director(a)…) change it. They also keep the school's grades and groups, on a screen of
+// their own (Grados y grupos).
 import {
   addSchoolGroups,
   deleteClosure,
@@ -122,8 +123,6 @@ export async function calendarView({ el, isCurrent }) {
   const today = todayStr();
   let closures = [];
   let showPast = false;
-  // How many people have each group (only for those who see the staff list).
-  let people = null;
 
   const hoursCard = () => {
     const cal = schoolCalendar(state.me.school);
@@ -174,43 +173,17 @@ export async function calendarView({ el, isCurrent }) {
     </section>`;
   };
 
-  const groupsCard = () => {
-    if (!editor) return '';
-    const { groups } = schoolCalendar(state.me.school);
-    const count = (g) => people?.filter((p) => p.groups?.includes(g)).length ?? null;
-    return html`<section class="card stack" data-groups>
-      <h2 class="card-title">${icon('users')} Grados y grupos</h2>
-      <p class="muted">Cada maestro verá solo a los estudiantes de sus grupos. Los grupos de cada persona se eligen en su ficha de <b>Personal</b>.</p>
-      ${groups.length
-        ? html`<div class="group-chips">${groups.map((g) => {
-            const n = count(g);
-            return html`<button type="button" class="chip-btn group-chip" data-group="${g}"
-                aria-label="${g}${n === null ? '' : `, ${n} persona(s)`}">${g}${n === null ? '' : html`<small>${n}</small>`}</button>`;
-          })}</div>
-          <p class="hint">Toca un grupo para cambiarle el nombre o borrarlo.${people ? ' El número es cuántas personas lo tienen.' : ''}</p>`
-        : html`<p class="hint">Aún no hay grupos. Añádelos uno a uno o créalos todos a la vez.</p>`}
-      <form class="add-row" data-add-group novalidate>
-        <input name="group" maxlength="80" placeholder="Ej. 9-B" autocomplete="off" aria-label="Grupo nuevo (o varios separados por comas)">
-        <button class="btn btn-secondary" type="submit">${icon('plus', 16)} Añadir</button>
-      </form>
-      <button type="button" class="btn btn-ghost btn-sm" data-bulk>${icon('grid', 16)} Crear varios grados a la vez</button>
-    </section>`;
-  };
-
   const render = () => {
-    el.innerHTML = String(html`<div class="stack">${hoursCard()}${closuresCard()}${groupsCard()}</div>`);
+    el.innerHTML = String(html`<div class="stack">${hoursCard()}${closuresCard()}
+      ${editor
+        ? html`<a class="card link-card" href="#/groups">${icon('users')}<span><strong>Grados y grupos</strong><small>Los grupos de la escuela, en su propia pantalla</small></span>${icon('chevron', 18)}</a>`
+        : ''}</div>`);
     bind();
   };
 
   const reloadClosures = async () => {
     closures = await listClosures();
     if (isCurrent()) render();
-  };
-
-  const groupsChanged = (groups, message) => {
-    setGroups(groups);
-    toast(message, 'ok');
-    render();
   };
 
   function bind() {
@@ -259,7 +232,56 @@ export async function calendarView({ el, isCurrent }) {
         });
       });
     }
+  }
 
+  closures = await listClosures();
+  if (!isCurrent()) return;
+  render();
+}
+
+/**
+ * Grados y grupos: the school's groups (7-A, 7-B…), which each person gets in their file in Personal. Only for whoever
+ * keeps the calendar.
+ */
+export async function groupsView({ el, isCurrent }) {
+  const user = state.me.user;
+  // How many people have each group (only for those who see the staff list).
+  let people = null;
+
+  const groupsCard = () => {
+    const { groups } = schoolCalendar(state.me.school);
+    const count = (g) => people?.filter((p) => p.groups?.includes(g)).length ?? null;
+    return html`<section class="card stack" data-groups>
+      <h2 class="card-title">${icon('users')} Grados y grupos</h2>
+      <p class="muted">Cada maestro verá solo a los estudiantes de sus grupos. Los grupos de cada persona se eligen en su ficha de <b>Personal</b>.</p>
+      ${groups.length
+        ? html`<div class="group-chips">${groups.map((g) => {
+            const n = count(g);
+            return html`<button type="button" class="chip-btn group-chip" data-group="${g}"
+                aria-label="${g}${n === null ? '' : `, ${n} persona(s)`}">${g}${n === null ? '' : html`<small>${n}</small>`}</button>`;
+          })}</div>
+          <p class="hint">Toca un grupo para cambiarle el nombre o borrarlo.${people ? ' El número es cuántas personas lo tienen.' : ''}</p>`
+        : html`<p class="hint">Aún no hay grupos. Añádelos uno a uno o créalos todos a la vez.</p>`}
+      <form class="add-row" data-add-group novalidate>
+        <input name="group" maxlength="80" placeholder="Ej. 9-B" autocomplete="off" aria-label="Grupo nuevo (o varios separados por comas)">
+        <button class="btn btn-secondary" type="submit">${icon('plus', 16)} Añadir</button>
+      </form>
+      <button type="button" class="btn btn-ghost btn-sm" data-bulk>${icon('grid', 16)} Crear varios grados a la vez</button>
+    </section>`;
+  };
+
+  const render = () => {
+    el.innerHTML = String(html`<div class="stack">${groupsCard()}</div>`);
+    bind();
+  };
+
+  const groupsChanged = (groups, message) => {
+    setGroups(groups);
+    toast(message, 'ok');
+    render();
+  };
+
+  function bind() {
     const add = $('[data-add-group]', el);
     add?.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -362,12 +384,8 @@ export async function calendarView({ el, isCurrent }) {
     people = (await listEmployees()).filter((p) => p.active);
   }
 
-  const [rows] = await Promise.all([
-    listClosures(),
-    // Group counts for those who see the whole staff (they also assign the groups).
-    editor && (isStaff(user) || can(user, 'staff')) ? loadPeople().catch(() => (people = null)) : null,
-  ]);
-  closures = rows;
+  // Group counts for those who see the whole staff (they also assign the groups).
+  if (isStaff(user) || can(user, 'staff')) await loadPeople().catch(() => (people = null));
   if (!isCurrent()) return;
   render();
 }
