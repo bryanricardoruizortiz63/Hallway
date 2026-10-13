@@ -37,7 +37,7 @@ import { xDate, xDateTime } from '../xlsx.js';
 import { empty } from './common.js';
 import { KINDS, URGENCY } from './maintenance.js';
 import { keepFresh } from './students.js';
-import { OUTCOMES, SEVERITY, STAFF_STATUS } from './turns.js';
+import { OUTCOMES, SEVERITY, STAFF_STATUS, SUPPORT_OUTCOMES } from './turns.js';
 
 // ---- Shared ----------------------------------------------------------------------------------
 
@@ -191,6 +191,8 @@ export async function servicePanelView(ctx) {
   if (!service.serves && !can(state.me.user, 'reports')) throw new Error('Solo quien atiende este servicio y la dirección ven su panel.');
   setTitle(`Panel de ${service.name}`);
   const visit = service.mode === 'visit';
+  // Soporte IT and other help for the staff: no students; who asked, where, and what was done.
+  const support = service.mode === 'support';
   const today = todayStr();
   let rows = [];
   let downloaded = false;
@@ -206,9 +208,89 @@ export async function servicePanelView(ctx) {
   const walkIn = (t) => visit && !t.called_at && !t.sent_at && !!t.arrived_at;
   const waitOf = (t) => (walkIn(t) ? null : minutesBetween(t.created_at, t.called_at || t.on_the_way_at || t.arrived_at));
   const careOf = (t) => (visit ? minutesBetween(t.arrived_at, t.returning_at || t.closed_at) : minutesBetween(t.on_the_way_at, t.closed_at));
-  const resultOf = (t) => (t.status === 'cancelled' ? 'Cancelado' : OUTCOMES[t.outcome] || 'En curso');
+  const resultOf = (t) =>
+    t.status === 'cancelled' ? 'Cancelado' : (support && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'En curso';
+  const totalOf = (t) => minutesBetween(t.created_at, t.closed_at);
+  const whole = (m) => (m === null ? null : Math.round(m));
+  const isOpen = (t) => t.status !== 'done' && t.status !== 'cancelled';
+
+  /** Soporte IT: a summary, every request (who, where, what, what was done, times) and by reason, room and person. */
+  function exportSupportExcel() {
+    const r = range();
+    const turns = rows.filter((t) => t.status !== 'cancelled');
+    const count = (pred) => turns.filter(pred).length;
+    const byRoom = new Map();
+    for (const t of turns) {
+      const x = byRoom.get(t.room || '—') || { count: 0, reasons: new Set() };
+      x.count++;
+      if (t.reason) x.reasons.add(t.reason);
+      byRoom.set(t.room || '—', x);
+    }
+    const byPerson = new Map();
+    for (const t of turns) {
+      const x = byPerson.get(t.created_by_name) || { count: 0, last: null };
+      x.count++;
+      if (!x.last || t.created_at > x.last) x.last = t.created_at;
+      byPerson.set(t.created_by_name, x);
+    }
+    const avg = (f) => whole(average(turns.map(f)));
+    downloadXlsx(`${slug(service.name)}_${r.from}_${r.to}.xlsx`, [
+      {
+        name: 'Resumen',
+        columns: [{ header: 'Dato', width: 34 }, { header: 'Valor', width: 14 }],
+        rows: [
+          ['Desde', xDate(r.from)], ['Hasta', xDate(r.to)],
+          ['Pedidos', turns.length],
+          ['Resueltos', count((t) => t.outcome === 'attended')],
+          ['Necesitan seguimiento', count((t) => t.outcome === 'referred')],
+          ['Abiertos', count(isOpen)],
+          ['Cancelados', rows.length - turns.length],
+          ['Urgentes', count((t) => t.severity === 4)],
+          ['Personas que pidieron ayuda', byPerson.size],
+          ['Espera promedio (min)', avg(waitOf)],
+          ['Atención promedio (min)', avg(careOf)],
+          ['Tiempo total promedio (min)', avg(totalOf)],
+        ],
+      },
+      {
+        name: 'Pedidos',
+        columns: [
+          { header: 'Fecha', width: 11 }, { header: 'Hora', width: 11 }, { header: 'Pidió', width: 24 },
+          { header: 'Dónde', width: 14 }, { header: 'Motivo', width: 22 }, { header: 'Gravedad', width: 10 },
+          { header: 'Resultado', width: 20 }, { header: 'Qué se hizo', width: 40, wrap: true }, { header: 'Espera (min)', width: 12 },
+          { header: 'Atención (min)', width: 13 }, { header: 'Total (min)', width: 11 }, { header: 'Atendió', width: 22 },
+        ],
+        rows: rows.map((t) => [
+          xDate(localDay(t.created_at)), clock(t.created_at), t.created_by_name, t.room, t.reason, SEVERITY[t.severity]?.label,
+          resultOf(t), t.resolution, whole(waitOf(t)), whole(careOf(t)), whole(totalOf(t)), t.handled_by_name,
+        ]),
+      },
+      {
+        name: 'Por motivo',
+        columns: [{ header: 'Motivo', width: 28 }, { header: 'Pedidos', width: 9 }, { header: 'Resueltos', width: 10 }, { header: 'Seguimiento', width: 12 }],
+        rows: countBy(turns, (t) => t.reason || 'Sin motivo').map((x) => [
+          x.label, x.value,
+          turns.filter((t) => (t.reason || 'Sin motivo') === x.label && t.outcome === 'attended').length,
+          turns.filter((t) => (t.reason || 'Sin motivo') === x.label && t.outcome === 'referred').length,
+        ]),
+      },
+      {
+        name: 'Por salón',
+        columns: [{ header: 'Dónde', width: 16 }, { header: 'Pedidos', width: 9 }, { header: 'Motivos', width: 40, wrap: true }],
+        rows: [...byRoom].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0], 'es'))
+          .map(([room, x]) => [room, x.count, [...x.reasons].join(', ')]),
+      },
+      {
+        name: 'Por persona',
+        columns: [{ header: 'Persona', width: 26 }, { header: 'Pedidos', width: 9 }, { header: 'Último pedido', width: 13 }],
+        rows: [...byPerson].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0], 'es'))
+          .map(([name, x]) => [name, x.count, xDate(localDay(x.last))]),
+      },
+    ]);
+  }
 
   function exportExcel() {
+    if (support) return exportSupportExcel();
     const r = range();
     const turns = rows.filter((t) => t.status !== 'cancelled');
     const byStudent = new Map();
@@ -263,10 +345,19 @@ export async function servicePanelView(ctx) {
     const turns = rows.filter((t) => t.status !== 'cancelled');
     const closable = rows.filter((t) => t.status === 'done' || t.status === 'cancelled').length;
     if (!rows.length) {
-      return html`<div class="card">${empty('chart', 'Sin turnos en este período', 'Elige otras fechas.')}</div>`;
+      return html`<div class="card">${empty('chart', support ? 'Sin pedidos en este período' : 'Sin turnos en este período', 'Elige otras fechas.')}</div>`;
     }
     const students = new Set(turns.map((t) => t.student_key)).size;
     const count = (pred) => turns.filter(pred).length;
+    const closeCard = service.serves && r.to < today && closable
+      ? html`<section class="card stack" data-close-card>
+          <h2 class="card-title">${icon('archive')} Cerrar este período</h2>
+          <p class="muted">Al terminar el año escolar, descarga el Excel y después borra de la app los ${support ? 'pedidos terminados' : 'turnos terminados'} de este
+            período, para que el historial con nombres no pase al año siguiente. Los que siguen abiertos se quedan.</p>
+          <button type="button" class="btn btn-ghost-danger btn-block" data-close ${downloaded ? '' : 'disabled'}>${icon('trash', 18)} ${closable === 1 ? `Borrar este ${support ? 'pedido' : 'turno'}` : `Borrar estos ${closable} ${support ? 'pedidos' : 'turnos'}`}</button>
+          ${downloaded ? '' : html`<p class="hint">Primero descarga el Excel de este período.</p>`}
+        </section>`
+      : '';
     const hours = (() => {
       const cal = schoolCalendar(state.me.school);
       const first = Math.floor(toMin(cal.day_start) / 60);
@@ -282,6 +373,36 @@ export async function servicePanelView(ctx) {
       for (let h = from; h <= to; h++) out.push({ label: plain(fmtTime(`${h}:00`)), value: counts.get(h) || 0 });
       return out;
     })();
+    if (support) {
+      const referred = count((t) => t.outcome === 'referred');
+      return html`
+        <div class="stats">
+          ${tile(turns.length, 'Pedidos')}
+          ${tile(new Set(turns.map((t) => t.created_by_name)).size, 'Personas')}
+          ${tile(fmtMinutes(average(turns.map(waitOf))), 'Espera promedio')}
+          ${tile(fmtMinutes(average(turns.map(careOf))), 'Atención promedio')}
+        </div>
+        <div class="stats">
+          ${tile(count((t) => t.outcome === 'attended'), 'Resueltos')}
+          ${tile(referred, 'Necesitan seguimiento', referred ? 'stat-warn' : '')}
+          ${tile(count(isOpen), 'Abiertos')}
+          ${tile(rows.length - turns.length, 'Cancelados')}
+        </div>
+        <section class="card stack">
+          <h2 class="card-title">${icon('download')} Descargar</h2>
+          <p class="muted">Un Excel con el resumen del período, cada pedido (fecha, hora, quién lo pidió, dónde, motivo, gravedad,
+            resultado, qué se hizo y tiempos) y los pedidos por motivo, por salón y por persona.</p>
+          <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar Excel</button>
+        </section>
+        ${bars('Motivos', 'list', countBy(turns, (t) => t.reason || 'Sin motivo'))}
+        ${bars('Resultado', 'check', countBy(rows, resultOf))}
+        ${bars('Salones con más pedidos', 'school', countBy(turns, (t) => t.room).slice(0, 10))}
+        ${bars('Quién pide más', 'users', countBy(turns, (t) => t.created_by_name).slice(0, 10))}
+        ${bars('Por día de la semana', 'calendar', byWeekday(turns, (t) => localDay(t.created_at)))}
+        ${bars('Por hora', 'clock', hours, { note: 'Hora en que se pidió la ayuda.' })}
+        ${bars('Gravedad', 'alert', [1, 2, 3, 4].map((n) => ({ label: SEVERITY[n].label, value: count((t) => t.severity === n) })))}
+        ${closeCard}`;
+    }
     const topStudents = (() => {
       const m = new Map();
       for (const t of turns) {
@@ -316,15 +437,7 @@ export async function servicePanelView(ctx) {
       ${bars('Por hora', 'clock', hours, { note: 'Hora en que se pidió el turno.' })}
       ${bars('Por grupo', 'grid', countBy(turns, (t) => t.group_name).slice(0, 12))}
       ${bars('Gravedad', 'alert', [1, 2, 3, 4].map((n) => ({ label: SEVERITY[n].label, value: count((t) => t.severity === n) })))}
-      ${service.serves && r.to < today && closable
-        ? html`<section class="card stack" data-close-card>
-            <h2 class="card-title">${icon('archive')} Cerrar este período</h2>
-            <p class="muted">Al terminar el año escolar, descarga el Excel y después borra de la app los turnos terminados de este
-              período, para que el historial con nombres no pase al año siguiente. Los que siguen abiertos se quedan.</p>
-            <button type="button" class="btn btn-ghost-danger btn-block" data-close ${downloaded ? '' : 'disabled'}>${icon('trash', 18)} ${closable === 1 ? 'Borrar este turno' : `Borrar estos ${closable} turnos`}</button>
-            ${downloaded ? '' : html`<p class="hint">Primero descarga el Excel de este período.</p>`}
-          </section>`
-        : ''}`;
+      ${closeCard}`;
   }
 
   function bind() {
@@ -583,12 +696,13 @@ const PICKUP_STATUS = { scheduled: 'Por llegar el encargado', arrived: 'Llegó e
 const who = (name, group) => html`${name || 'Estudiante'} <span class="nowrap">(${group})</span>`;
 
 function liveTurn(t, service) {
-  const status = t.late ? 'No ha llegado' : TURN_STATUS[t.status]?.(service) || t.status;
+  const support = service.mode === 'support';
+  const status = t.late ? 'No ha llegado' : support && t.status === 'on_the_way' ? `${service.name} va en camino` : TURN_STATUS[t.status]?.(service) || t.status;
   const sev = SEVERITY[t.level] || SEVERITY[1];
   return html`<div class="item ${t.late ? 'alert-item is-urgent' : ''}">
-    <span class="item-icon ${t.late ? 'is-danger' : t.status === 'waiting' ? '' : 'is-ok'}">${icon('pulse')}</span>
+    <span class="item-icon ${t.late ? 'is-danger' : t.status === 'waiting' ? '' : 'is-ok'}">${icon(support ? 'wrench' : 'pulse')}</span>
     <span class="item-main">
-      <strong>${who(t.student, t.group)}</strong>
+      <strong>${support ? html`${t.created_by_name}${t.room ? html` <span class="nowrap">(${t.room})</span>` : ''}` : who(t.student, t.group)}</strong>
       ${t.reason ? html`<span class="item-sub" data-reason>${t.reason}</span>` : ''}
       <span class="item-sub">${[status, t.handled_by_name && t.status !== 'waiting' ? t.handled_by_name : null, timeAgo(t.since)].filter(Boolean).join(' · ')}</span>
     </span>
@@ -606,12 +720,12 @@ function liveService(s) {
     `${d.requested} ${d.requested === 1 ? 'pedido' : 'pedidos'}`,
     `${d.done} ${d.done === 1 ? 'terminado' : 'terminados'}`,
     s.mode === 'visit' && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
-    d.referred ? `${d.referred} referido${d.referred === 1 ? '' : 's'}` : null,
+    d.referred ? (s.mode === 'support' ? `${d.referred} con seguimiento` : `${d.referred} referido${d.referred === 1 ? '' : 's'}`) : null,
     d.late ? `${d.late} no ${d.late === 1 ? 'llegó' : 'llegaron'} a tiempo` : null,
   ].filter(Boolean).join(' · ');
   return html`<section class="card stack live-service">
     <div class="card-head">
-      <h2 class="card-title">${icon('pulse')} ${s.name}</h2>
+      <h2 class="card-title">${icon(s.mode === 'support' ? 'wrench' : 'pulse')} ${s.name}</h2>
       <span class="count ${waiting ? 'warn' : ''}">${waiting} en fila</span>
     </div>
     <div class="chips">${s.staff.length

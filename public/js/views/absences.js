@@ -39,6 +39,7 @@ import {
   myAbsences,
   myCoverages,
   receiveAbsence,
+  replyCoverage,
   setCovers,
   updateAbsence,
 } from '../backend.js';
@@ -89,9 +90,9 @@ export async function homeView({ el }) {
 
 // ---- Reportar / modificar ---------------------------------------------------
 
-/** Only the employee (while the absence hasn't passed) or the Administración account can edit or cancel it. */
+/** The employee (while the absence hasn't passed) or whoever registers the staff's absences can edit or cancel it. */
 function canChange(a, me) {
-  return a.status !== 'cancelled' && (me.role === 'admin' || (a.user_id === me.id && a.end_date >= todayStr()));
+  return a.status !== 'cancelled' && (can(me, 'register') || (a.user_id === me.id && a.end_date >= todayStr()));
 }
 
 export const reportView = (ctx) => absenceForm(ctx, null);
@@ -102,7 +103,7 @@ export async function editAbsenceView(ctx) {
     throw new Error(
       absence.status === 'cancelled'
         ? 'La ausencia está cancelada.'
-        : 'Solo el empleado o la cuenta de Administración pueden modificar esta ausencia.',
+        : 'Solo el empleado o quien registra las ausencias del personal pueden modificar esta ausencia.',
     );
   }
   return absenceForm(ctx, absence);
@@ -111,11 +112,13 @@ export async function editAbsenceView(ctx) {
 async function absenceForm({ el, query }, absence) {
   const me = state.me.user;
   const editing = !!absence;
-  // Only the school's Administración account registers absences for other people.
-  const forOthers = !editing && me.role === 'admin';
+  // Whoever registers the staff's absences (and the Administración account) can report one for someone else;
+  // the Administración account always does, the rest also their own.
+  const forOthers = !editing && can(me, 'register');
+  const onlyOthers = me.role === 'admin';
   const today = todayStr();
   const [employees, closures] = await Promise.all([
-    forOthers ? listEmployees().then((list) => list.filter((e) => e.active)) : [],
+    forOthers ? listEmployees().then((list) => list.filter((e) => e.active && e.role !== 'admin' && e.id !== me.id)) : [],
     // To warn when the chosen days have no classes; the form works without it.
     listClosures({ from: addDays(today, -60) }).catch(() => []),
   ]);
@@ -124,8 +127,8 @@ async function absenceForm({ el, query }, absence) {
   const v0 = absence || { start_date: today, end_date: today, partial: false, category: '', reason: '', coverage_notes: '' };
   // Teachers' absences need someone to cover them; nursing, maintenance or security don't.
   const needsCoverage = (roleKey) => !!roleKey && roleNeedsCoverage(roleKey);
-  const roleOf = (userId) => employees.find((e) => e.id === userId)?.role;
-  const initialRole = editing ? absence.employee_role : forOthers ? roleOf(preselect) : me.role;
+  const roleOf = (userId) => (userId ? employees.find((e) => e.id === userId)?.role : onlyOthers ? null : me.role);
+  const initialRole = editing ? absence.employee_role : roleOf(preselect);
   const startTime = absence?.start_time?.slice(0, 5) || '08:00';
   const endTime = absence?.end_time?.slice(0, 5) || '';
   const category = v0.category || '';
@@ -135,8 +138,10 @@ async function absenceForm({ el, query }, absence) {
       ${forOthers
         ? html`<section class="card">
             <label class="field"><span>¿Quién va a faltar?</span>
-              <select name="user_id" required>
-                <option value="" ${preselect ? '' : 'selected'} disabled>Selecciona un empleado…</option>
+              <select name="user_id" ${onlyOthers ? 'required' : ''}>
+                ${onlyOthers
+                  ? html`<option value="" ${preselect ? '' : 'selected'} disabled>Selecciona un empleado…</option>`
+                  : html`<option value="" ${preselect && preselect !== me.id ? '' : 'selected'}>Yo (${me.full_name})</option>`}
                 ${employees.map(
                   (e) => html`<option value="${e.id}" ${String(e.id) === preselect ? 'selected' : ''}>
                     ${e.full_name}${e.position ? ` — ${e.position}` : ''}</option>`,
@@ -314,7 +319,7 @@ async function absenceForm({ el, query }, absence) {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
       const v = formValues(form);
-      if (forOthers && !v.user_id) throw new Error('Selecciona el empleado que va a faltar.');
+      if (onlyOthers && !v.user_id) throw new Error('Selecciona el empleado que va a faltar.');
       if (!v.start_date) throw new Error('Selecciona la fecha.');
       if (v.partial === '1' && !v.start_time) throw new Error('Indica desde qué hora vas a faltar.');
       if (!multi) v.end_date = null;
@@ -389,6 +394,36 @@ const coversOf = (a) =>
     : a.substitute
       ? [{ substitute_id: a.substitute_id, name: a.substitute, groups: a.cover_groups || [], room: a.cover_room, days: [] }]
       : [];
+
+/** Whether an answer (received_at, on_the_way_at) is from today, on this phone. */
+const fromToday = (iso) => !!iso && todayStr(new Date(iso)) === todayStr();
+/** "9:10 a. m." today, "12 oct, 9:10 a. m." another day. */
+const answeredAt = (iso) => (fromToday(iso) ? fmtTime(new Date(iso)) : fmtDateTime(iso));
+
+/**
+ * What each person of the staff answered («Recibido», «Voy en camino» today): one line each. Rows assigned before
+ * there were answers (without set_by) only show an answer they got.
+ */
+function coverReplies(a) {
+  if (a.status === 'cancelled') return '';
+  const people = new Map();
+  for (const c of coversOf(a)) {
+    if (c.substitute_id) people.set(c.substitute_id, [...(people.get(c.substitute_id) || []), c]);
+  }
+  return [...people.values()].map((rows) => {
+    const { name } = rows[0];
+    const way = rows.map((c) => c.on_the_way_at).filter(fromToday).sort().pop();
+    const got = rows.map((c) => c.received_at).filter(Boolean).sort();
+    if (way) return html`<p class="status-note ok" data-cover-reply>${icon('send', 16)} ${name} va en camino · ${answeredAt(way)}</p>`;
+    if (got.length === rows.length) {
+      return html`<p class="status-note ok" data-cover-reply>${icon('check', 16)} ${name} recibió el aviso · ${answeredAt(got.pop())}</p>`;
+    }
+    if (rows.some((c) => c.set_by) && a.end_date >= todayStr()) {
+      return html`<p class="status-note warn" data-cover-reply>${icon('clock', 16)} ${name} ${got.length ? 'aún no confirma el cambio' : 'aún no confirma que lo recibió'}</p>`;
+    }
+    return '';
+  });
+}
 
 /** The school days of an absence of more than one day, to choose who covers which ([] for a single day). */
 function absenceDays(a) {
@@ -468,6 +503,7 @@ function coverageCard(a, { form, employees }) {
           </div>`)}</div>`
         : html`<p class="muted">Aún no se han registrado arreglos.</p>`}
       ${missing.length ? missingNote(missing) : ''}
+      ${coverReplies(a)}
     </section>`;
   }
   const ctx = coverContext(a, employees);
@@ -477,6 +513,7 @@ function coverageCard(a, { form, employees }) {
     ${told.length
       ? html`<p class="status-note ok">${icon('check', 16)} Se le avisó a ${told.join(', ')}${a.cover_set_by_name ? ` · ${a.cover_set_by_name}, ${fmtDateTime(a.cover_set_at)}` : ''}</p>`
       : ''}
+    ${coverReplies(a)}
     <form class="stack" data-coverage novalidate>
       <div class="stack" data-covers>${covers.length ? covers.map((c) => coverRow(c, ctx)) : coverRow(null, ctx, ctx.first)}</div>
       ${missingNote(missing)}
@@ -635,6 +672,8 @@ export function coveringSection(list) {
     <h3 class="section-title">Vas a cubrir <span class="count">${absences.length}</span></h3>
     <div class="list">${absences.map((parts) => {
       const c = parts[0];
+      // Before the answers existed the rows don't bring them: nothing to confirm.
+      const ask = 'received_at' in c && parts.some((p) => !p.received_at);
       return html`<a class="item" href="#/cover/${c.id}">
         ${avatar(c.employee_name)}
         <span class="item-main">
@@ -643,70 +682,111 @@ export function coveringSection(list) {
             const where = coverWhere(p.cover_groups, p.cover_room);
             return html`<span class="item-sub">${partWhen(p)} · ${partHours(p)}</span>${where ? html`<span class="item-sub">${where}</span>` : ''}`;
           })}
+          ${ask ? html`<span class="item-tags"><span class="tag tag-info">Sin confirmar</span></span>` : ''}
         </span>
-        ${parts.some((p) => coversDay(p, today)) ? html`<span class="tag tag-warn">Hoy</span>` : ''}
+        ${parts.some((p) => fromToday(p.on_the_way_at))
+          ? html`<span class="tag tag-ok">En camino</span>`
+          : parts.some((p) => coversDay(p, today)) ? html`<span class="tag tag-warn">Hoy</span>` : ''}
       </a>`;
     })}</div>
   </section>`;
 }
 
-/** What the substitute needs: who, when, their days, groups, hours and room, the instructions and who else covers. */
+/**
+ * What the substitute needs: who, when, their days, groups, hours and room, the instructions and who else covers.
+ * «Recibido» and, on a day they cover, «Voy en camino» reach whoever assigned it.
+ */
 export async function coverView({ el, params }) {
   const id = Number(params[0]);
-  const parts = await getCoverage(id);
-  markAlertsRead(`#/cover/${id}`).catch(() => {});
-  if (!parts.length) {
-    el.innerHTML = String(html`<div class="card">${empty('users', 'Ya no tienes esta cobertura',
-      'Se le asignó a otra persona o se quitó. Si tienes dudas, pregúntale a la secretaría o a la dirección.')}</div>`);
-    return;
-  }
-  const c = parts[0];
-  const today = todayStr();
-  const first = c.employee_name.split(' ')[0];
-  const range = c.start_date === c.end_date ? fmtLongDate(c.start_date) : `${fmtLongDate(c.start_date)} → ${fmtLongDate(c.end_date)}`;
-  // A single row for every day of the absence: as always; otherwise each of my rows with its days.
-  const simple = parts.length === 1 && !c.cover_days?.length;
-  const hours = coverHours(c.cover_start_time, c.cover_end_time);
-  const none = html`<span class="muted">No se indicó</span>`;
-  const others = c.others || [];
-  const lastDay = parts.map((p) => (p.cover_days?.length ? p.cover_days[p.cover_days.length - 1] : p.end_date)).sort().pop();
-  const assigned = [...parts].sort((x, y) => String(y.cover_set_at).localeCompare(String(x.cover_set_at)))[0];
-  el.innerHTML = String(html`
-    <div class="stack">
-      <section class="card absence-head">
-        <div class="row">
-          ${avatar(c.employee_name, 'lg')}
-          <div class="grow">
-            <p class="muted">Cubres a</p>
-            <h2>${c.employee_name}</h2>
-            <p class="muted">${c.employee_position || roleLabel(c.employee_role)}</p>
+
+  async function load() {
+    const parts = await getCoverage(id);
+    if (!parts.length) {
+      el.innerHTML = String(html`<div class="card">${empty('users', 'Ya no tienes esta cobertura',
+        'Se le asignó a otra persona o se quitó. Si tienes dudas, pregúntale a la secretaría o a la dirección.')}</div>`);
+      return;
+    }
+    const c = parts[0];
+    const today = todayStr();
+    const first = c.employee_name.split(' ')[0];
+    const range = c.start_date === c.end_date ? fmtLongDate(c.start_date) : `${fmtLongDate(c.start_date)} → ${fmtLongDate(c.end_date)}`;
+    // A single row for every day of the absence: as always; otherwise each of my rows with its days.
+    const simple = parts.length === 1 && !c.cover_days?.length;
+    const hours = coverHours(c.cover_start_time, c.cover_end_time);
+    const none = html`<span class="muted">No se indicó</span>`;
+    const others = c.others || [];
+    const lastDay = parts.map((p) => (p.cover_days?.length ? p.cover_days[p.cover_days.length - 1] : p.end_date)).sort().pop();
+    const assigned = [...parts].sort((x, y) => String(y.cover_set_at).localeCompare(String(x.cover_set_at)))[0];
+    const boss = assigned.cover_set_by_name || 'la secretaría o la dirección';
+    // Before the answers existed the rows don't bring them: no buttons.
+    const answers = 'received_at' in c && c.status !== 'cancelled' && lastDay >= today;
+    const received = parts.every((p) => p.received_at);
+    const todayParts = parts.filter((p) => coversDay(p, today));
+    const way = todayParts.map((p) => p.on_the_way_at).filter(fromToday).sort().pop();
+    el.innerHTML = String(html`
+      <div class="stack">
+        <section class="card absence-head">
+          <div class="row">
+            ${avatar(c.employee_name, 'lg')}
+            <div class="grow">
+              <p class="muted">Cubres a</p>
+              <h2>${c.employee_name}</h2>
+              <p class="muted">${c.employee_position || roleLabel(c.employee_role)}</p>
+            </div>
+            ${c.status !== 'cancelled' && todayParts.length ? html`<span class="tag tag-warn">Hoy</span>` : ''}
           </div>
-          ${c.status !== 'cancelled' && parts.some((p) => coversDay(p, today)) ? html`<span class="tag tag-warn">Hoy</span>` : ''}
-        </div>
-        <div class="when">
-          ${icon('calendar')}
-          <div><strong class="capitalize">${simple ? range : partWhen({ ...c, cover_days: parts.flatMap((p) => p.cover_days || []).sort() }) || range}</strong>
-            <span>${simple ? (hours ? `Tu horario: ${hours}` : scheduleText(c)) : `Ausencia: ${fmtRange(c.start_date, c.end_date)}`}</span></div>
-        </div>
-        ${c.status === 'cancelled'
-          ? html`<p class="status-note muted">${icon('x', 16)} Se canceló la ausencia: ya no tienes que cubrir.</p>`
-          : lastDay < today ? html`<p class="status-note muted">${icon('check', 16)} Ya pasó.</p>` : ''}
-      </section>
-      <section class="card">
-        <dl class="details">
-          ${simple
-            ? html`<div><dt>Grado y grupo</dt><dd>${c.cover_groups.length ? html`<span class="chips">${c.cover_groups.map((g) => html`<span class="tag">${g}</span>`)}</span>` : none}</dd></div>
-                <div><dt>Salón</dt><dd>${c.cover_room || none}</dd></div>`
-            : html`<div><dt>Tus días</dt><dd data-parts>${parts.map((p) => html`<div>${partWhen(p)} · ${partHours(p)}${coverWhere(p.cover_groups, p.cover_room) ? html` <span class="muted">· ${coverWhere(p.cover_groups, p.cover_room)}</span>` : ''}</div>`)}</dd></div>`}
-          <div><dt>Instrucciones de ${first}</dt><dd class="pre">${c.coverage_notes || html`<span class="muted">No dejó instrucciones.</span>`}</dd></div>
-          ${others.length
-            ? html`<div><dt>También cubren</dt><dd data-others>${others.map((o) => html`<div>${o.name}${coverLine(o) ? html` <span class="muted">· ${coverLine(o)}</span>` : ''}</div>`)}</dd></div>`
-            : ''}
-          ${assigned.cover_set_by_name ? html`<div><dt>Te la asignó</dt><dd>${assigned.cover_set_by_name} · ${fmtDateTime(assigned.cover_set_at)}</dd></div>` : ''}
-        </dl>
-      </section>
-      <p class="hint">Si tienes dudas, pregúntale a la secretaría o a la dirección.</p>
-    </div>`);
+          <div class="when">
+            ${icon('calendar')}
+            <div><strong class="capitalize">${simple ? range : partWhen({ ...c, cover_days: parts.flatMap((p) => p.cover_days || []).sort() }) || range}</strong>
+              <span>${simple ? (hours ? `Tu horario: ${hours}` : scheduleText(c)) : `Ausencia: ${fmtRange(c.start_date, c.end_date)}`}</span></div>
+          </div>
+          ${c.status === 'cancelled'
+            ? html`<p class="status-note muted">${icon('x', 16)} Se canceló la ausencia: ya no tienes que cubrir.</p>`
+            : lastDay < today ? html`<p class="status-note muted">${icon('check', 16)} Ya pasó.</p>` : ''}
+        </section>
+        ${answers
+          ? html`<section class="card stack" data-cover-answer>
+              ${received
+                ? html`<p class="status-note ok">${icon('check', 16)} Le avisaste a ${boss} que la recibiste · ${answeredAt(parts.map((p) => p.received_at).sort().pop())}</p>`
+                : html`<p>${parts.some((p) => p.received_at) ? `Cambió tu cobertura: avísale a ${boss} que lo viste.` : `Avísale a ${boss} que te llegó.`}</p>
+                    <button type="button" class="btn btn-primary btn-block btn-lg" data-reply="received">${icon('check')} Recibido</button>`}
+              ${way ? html`<p class="status-note ok">${icon('send', 16)} Le avisaste a ${boss} que vas en camino · ${answeredAt(way)}</p>` : ''}
+              ${todayParts.length && !way
+                ? html`<button type="button" class="btn ${received ? 'btn-primary btn-lg' : 'btn-secondary'} btn-block" data-reply="on_the_way">${icon('send')} Voy en camino</button>`
+                : ''}
+              ${todayParts.length ? '' : html`<p class="hint">El día que cubres, toca «Voy en camino» al salir hacia el salón.</p>`}
+            </section>`
+          : ''}
+        <section class="card">
+          <dl class="details">
+            ${simple
+              ? html`<div><dt>Grado y grupo</dt><dd>${c.cover_groups.length ? html`<span class="chips">${c.cover_groups.map((g) => html`<span class="tag">${g}</span>`)}</span>` : none}</dd></div>
+                  <div><dt>Salón</dt><dd>${c.cover_room || none}</dd></div>`
+              : html`<div><dt>Tus días</dt><dd data-parts>${parts.map((p) => html`<div>${partWhen(p)} · ${partHours(p)}${coverWhere(p.cover_groups, p.cover_room) ? html` <span class="muted">· ${coverWhere(p.cover_groups, p.cover_room)}</span>` : ''}</div>`)}</dd></div>`}
+            <div><dt>Instrucciones de ${first}</dt><dd class="pre">${c.coverage_notes || html`<span class="muted">No dejó instrucciones.</span>`}</dd></div>
+            ${others.length
+              ? html`<div><dt>También cubren</dt><dd data-others>${others.map((o) => html`<div>${o.name}${coverLine(o) ? html` <span class="muted">· ${coverLine(o)}</span>` : ''}</div>`)}</dd></div>`
+              : ''}
+            ${assigned.cover_set_by_name ? html`<div><dt>Te la asignó</dt><dd>${assigned.cover_set_by_name} · ${fmtDateTime(assigned.cover_set_at)}</dd></div>` : ''}
+          </dl>
+        </section>
+        <p class="hint">Si tienes dudas, pregúntale a la secretaría o a la dirección.</p>
+      </div>`);
+
+    for (const btn of el.querySelectorAll('[data-reply]')) {
+      btn.addEventListener('click', () =>
+        busy(btn, async () => {
+          const step = btn.dataset.reply;
+          await replyCoverage(id, step, todayStr());
+          toast(`Le avisamos a ${boss} que ${step === 'received' ? 'la recibiste' : 'vas en camino'}.`, 'ok');
+          await load();
+        }),
+      );
+    }
+  }
+
+  await load();
+  markAlertsRead(`#/cover/${id}`).catch(() => {});
 }
 
 export async function absenceView({ el, params }) {

@@ -359,12 +359,17 @@ export const setCovers = (id, covers) =>
 
 /**
  * What I cover (Vas a cubrir): from a day on, one row per row of the list (cover_days: my days, null = every day),
- * with my hours and who else covers. No type or reason of the absence.
+ * with my hours, who else covers and my answers (received_at, on_the_way_at). No type or reason of the absence.
  */
 export const myCoverages = (from) => rpc('my_coverages', { p_from: from });
 
 /** My rows of one coverage, also a cancelled one; [] if it's no longer mine. */
 export const getCoverage = async (id) => (await rpc('my_coverages', { p_id: id })) || [];
+/**
+ * Whoever covers answers whoever assigned it: 'received' («Recibido») or 'on_the_way' («Voy en camino», on day: a
+ * day they cover). Saying it again doesn't tell them again.
+ */
+export const replyCoverage = (id, step, day) => rpc('reply_coverage', { p_id: id, p_step: step, p_day: day || null });
 export const addComment = (id, body) => rpc('add_comment', { p_id: id, p_body: body });
 /** reason: 'no_absence' | 'error' | 'other' (note required for 'other'). */
 export const cancelAbsence = (id, reason, note) =>
@@ -643,7 +648,10 @@ export const turnHistory = (t) =>
       .limit(10),
   );
 
-/** student: { id } of one noted today, or { name, group }. here: the professional notes a student already in the office. */
+/**
+ * student: { id } of one noted today, or { name, group } ({} for support services such as Soporte IT, where the room
+ * is where the help is needed). here: the professional notes a student already in the office.
+ */
 export const requestService = ({ serviceId, student, room, severity, reason, note, here }) =>
   rpc('request_service', {
     p_service_id: serviceId,
@@ -659,6 +667,8 @@ export const requestService = ({ serviceId, student, room, severity, reason, not
 
 /** step: call · go · sent · arrived · return · back · finish (value: the outcome) · cancel · take (value: the room). */
 export const advanceTurn = (id, step, value) => rpc('advance_turn', { p_id: id, p_step: step, p_value: value || null });
+/** What the service did (Soporte IT), for the panel and the Excel. */
+export const noteTurnResolution = (id, text) => rpc('note_turn_resolution', { p_id: id, p_text: text || null });
 
 // ---- Visitas (llega un padre y busca a alguien) ------------------------------------------
 

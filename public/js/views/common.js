@@ -1,4 +1,4 @@
-import { CATEGORIES, STATUS, colorIndex, coversOn, dialog, fmtRange, html, initials, roleNeedsCoverage, scheduleText, $ } from '../lib.js';
+import { CATEGORIES, STATUS, colorIndex, coversOn, dialog, fmtRange, html, initials, roleNeedsCoverage, scheduleText, todayStr, $ } from '../lib.js';
 import { appIcon } from '../branding.js';
 import { icon } from '../icons.js';
 import { canPromptInstall, isIos, isStandalone, promptInstall } from '../pwa.js';
@@ -30,9 +30,17 @@ export function absenceItem(a, { showName = true, on = null } = {}) {
     a.category ? CATEGORIES[a.category] : null,
   ].filter(Boolean);
   let coverage = '';
-  const covering = on ? [...new Set(coversOn(a, on).map((c) => c.name))].join(', ') : a.substitute;
+  const that = on ? coversOn(a, on) : [];
+  const covering = on ? [...new Set(that.map((c) => c.name))].join(', ') : a.substitute;
   if (!cancelled && covering) coverage = html`<span class="tag tag-ok">${icon('check', 14)} ${covering}</span>`;
   else if (!cancelled && showName && roleNeedsCoverage(a.employee_role)) coverage = html`<span class="tag tag-warn">Sin cubrir</span>`;
+  // That day's list: whoever covers is on the way, or hasn't confirmed the notice yet (rows that ask for it).
+  let answer = '';
+  if (!cancelled && that.some((c) => c.on_the_way_at && todayStr(new Date(c.on_the_way_at)) === on)) {
+    answer = html`<span class="tag tag-ok">${icon('send', 14)} En camino</span>`;
+  } else if (!cancelled && that.some((c) => c.substitute_id && c.set_by && !c.received_at)) {
+    answer = html`<span class="tag tag-info">Sin confirmar</span>`;
+  }
 
   return html`
     <a class="item ${cancelled ? 'is-muted' : ''}" href="#/absence/${a.id}">
@@ -42,6 +50,7 @@ export function absenceItem(a, { showName = true, on = null } = {}) {
         <span class="item-sub">${sub.join(' · ')}</span>
         <span class="item-tags">
           ${coverage}
+          ${answer}
           ${a.attachment_count ? html`<span class="tag">${icon('clip', 14)} ${a.attachment_count}</span>` : ''}
           ${a.comment_count ? html`<span class="tag">${icon('chat', 14)} ${a.comment_count}</span>` : ''}
         </span>

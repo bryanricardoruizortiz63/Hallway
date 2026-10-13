@@ -68,8 +68,8 @@ const ROUTES = [
   { re: /^\/turns\/visit\/(\d+)$/, view: visitDetailView, title: 'Visita', back: true },
   // Only whoever attends the service (checked in the view and by the database).
   { re: /^\/turns\/panel\/(\d+)$/, view: servicePanelView, title: 'Panel del servicio', back: true },
-  { re: /^\/services$/, view: servicesView, title: 'Servicios', allow: may('settings'), back: true },
-  { re: /^\/services\/(new|\d+)$/, view: serviceFormView, title: 'Servicio', allow: may('settings'), back: true },
+  { re: /^\/services$/, view: servicesView, title: 'Servicios', allow: may('services'), back: true },
+  { re: /^\/services\/(new|\d+)$/, view: serviceFormView, title: 'Servicio', allow: may('services'), back: true },
   { re: /^\/maintenance$/, view: maintenanceView, title: 'Mantenimiento' },
   { re: /^\/maintenance\/new$/, view: newMaintenanceView, title: 'Pedir mantenimiento', back: true },
   { re: /^\/maintenance\/(\d+)$/, view: maintenanceDetailView, title: 'Mantenimiento', back: true },
@@ -78,7 +78,7 @@ const ROUTES = [
   { re: /^\/rooms\/new$/, view: newBookingView, title: 'Reservar el salón', back: true },
   { re: /^\/rooms\/history$/, view: bookingHistoryView, title: 'Historial de reservas', back: true },
   { re: /^\/rooms\/(\d+)$/, view: bookingDetailView, title: 'Reserva del salón', back: true },
-  { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso del salón', allow: may('calendar'), back: true },
+  { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso del salón', allow: may('rooms'), back: true },
   { re: /^\/live$/, view: liveView, title: 'En vivo', allow: may('live') },
   // Enfermería, Trabajo Social…: only their own service's panel.
   { re: /^\/data$/, view: dataView, title: 'Datos y reportes', allow: (u) => can(u, 'reports') || !!u.serves?.length, back: true },

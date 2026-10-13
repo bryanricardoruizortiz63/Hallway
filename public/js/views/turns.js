@@ -7,6 +7,7 @@ import {
   listTurns,
   listVisits,
   markAlertsRead,
+  noteTurnResolution,
   requestService,
   saveService,
   servicesOverview,
@@ -39,11 +40,20 @@ export const OUTCOMES = {
   unconfirmed: 'Regreso sin confirmar',
 };
 
+// Support services (Soporte IT): the help is for whoever asks, not for a student.
+export const SUPPORT_OUTCOMES = { attended: 'Resuelto', referred: 'Necesita seguimiento' };
+
 const OPEN = ['waiting', 'called', 'sent', 'arrived', 'on_the_way', 'returning'];
 const isOpen = (t) => OPEN.includes(t.status);
-const who = (t) => `${t.student_name} (${t.group_name})`;
+const isSupport = (t) => t.service_mode === 'support';
+/** What a support request is about: its reason ("Proyector o pantalla"). */
+const supportTitle = (t) => t.reason || 'Pedido de ayuda';
+/** Where help is needed, as typed: "204" → "Salón 204"; "Biblioteca" stays. */
+const placeText = (room) => (room ? (/^\d/.test(room) ? `Salón ${room}` : room) : null);
+const outcomeLabel = (t) => (isSupport(t) && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'Terminado';
+const who = (t) => (isSupport(t) ? `${supportTitle(t)}${t.room ? ` (${t.room})` : ''}` : `${t.student_name} (${t.group_name})`);
 // The group doesn't break at its hyphen.
-const whoHtml = (t) => html`${t.student_name} <span class="nowrap">(${t.group_name})</span>`;
+const whoHtml = (t) => (isSupport(t) ? html`${supportTitle(t)}` : html`${t.student_name} <span class="nowrap">(${t.group_name})</span>`);
 const timeOf = (iso) => fmtTime(new Date(iso));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -65,13 +75,14 @@ function statusTag(t) {
     called: { label: 'Lo llamaron', cls: 'tag-warn' },
     sent: { label: `Va a ${t.service_name}`, cls: 'tag-warn' },
     arrived: { label: `En ${t.service_name}`, cls: 'tag-ok' },
-    on_the_way: { label: `${t.service_name} va al salón`, cls: 'tag-warn' },
+    on_the_way: { label: `${t.service_name} va ${isSupport(t) ? 'en camino' : 'al salón'}`, cls: 'tag-warn' },
     returning: { label: 'Regresa al salón', cls: 'tag-warn' },
   }[t.status];
   if (open) return open;
   if (t.status === 'cancelled') return { label: 'Cancelado', cls: '' };
   if (t.outcome === 'unconfirmed') return { label: OUTCOMES.unconfirmed, cls: 'tag-warn' };
-  return { label: OUTCOMES[t.outcome] || 'Terminado', cls: t.outcome === 'expired' ? '' : 'tag-ok' };
+  if (isSupport(t) && t.outcome === 'referred') return { label: outcomeLabel(t), cls: 'tag-warn' };
+  return { label: outcomeLabel(t), cls: t.outcome === 'expired' ? '' : 'tag-ok' };
 }
 
 /** "Quedan 3:12" or "Atrasado 2 min". */
@@ -133,12 +144,46 @@ const FINISH_ASK = {
   referred: ['¿Marcar como referido?', 'Se cierra el turno y se le avisa al maestro.'],
   attended: ['¿Ya lo atendiste?', 'Se cierra el turno y se le avisa al maestro.'],
 };
+const SUPPORT_ASK = {
+  attended: ['¿Ya quedó resuelto?', 'Se cierra el pedido y se le avisa a quien lo pidió.'],
+  referred: ['¿Necesita seguimiento?', 'Se cierra como pendiente (una pieza, un técnico de fuera…) y se le avisa a quien lo pidió.'],
+};
+const SUPPORT_DONE = { go: 'Le avisamos que vas en camino.', finish: 'Pedido cerrado.', cancel: 'Pedido cancelado.' };
+
+/** What the service did, for the panel and the Excel (support). Resolves null if cancelled. */
+function askResolution(t, current = '') {
+  return dialog({
+    title: '¿Qué se hizo?',
+    message: who(t),
+    body: html`<label class="field"><span>Lo que se hizo <em class="optional">opcional</em></span>
+      <textarea name="resolution" rows="3" maxlength="300" placeholder="Ej. Se cambió el cable HDMI">${current}</textarea></label>`,
+    confirmText: 'Guardar',
+    collect: true,
+  });
+}
 
 /** Asks what needs asking (out of order, outcome, cancel, room) and does the step. Resolves false if cancelled. */
 async function doStep(t, step, value) {
+  if (isSupport(t) && step === 'finish') {
+    const [title, message] = SUPPORT_ASK[value];
+    const v = await dialog({
+      title,
+      message: `${who(t)}. ${message}`,
+      body: html`<label class="field"><span>¿Qué se hizo? <em class="optional">opcional</em></span>
+        <textarea name="resolution" rows="3" maxlength="300" placeholder="Ej. Se cambió el cable HDMI"></textarea></label>`,
+      confirmText: SUPPORT_OUTCOMES[value],
+      cancelText: 'Volver',
+      collect: true,
+    });
+    if (!v) return false;
+    await advanceTurn(t.id, step, value);
+    if (v.resolution.trim()) await noteTurnResolution(t.id, v.resolution.trim());
+    toast(SUPPORT_DONE.finish, 'ok');
+    return true;
+  }
   if ((step === 'call' || step === 'go') && t.position > 1) {
     const ok = await dialog({
-      title: `¿${step === 'call' ? 'Llamar' : 'Atender'} a ${t.student_name}?`,
+      title: isSupport(t) ? `¿Atender «${supportTitle(t)}» primero?` : `¿${step === 'call' ? 'Llamar' : 'Atender'} a ${t.student_name}?`,
       message: `Hay ${plural(t.position - 1, 'turno', 'turnos')} antes en la fila. Se anota que lo escogiste antes.`,
       confirmText: step === 'call' ? 'Llamar' : 'Voy en camino',
       cancelText: 'Volver',
@@ -150,7 +195,8 @@ async function doStep(t, step, value) {
     if (!(await dialog({ title, message: `${who(t)}. ${message}`, confirmText: OUTCOMES[value], cancelText: 'Volver' }))) return false;
   }
   if (step === 'cancel') {
-    const ok = await dialog({ title: '¿Cancelar este turno?', message: who(t), confirmText: 'Cancelar turno', cancelText: 'Volver', danger: true });
+    const what = isSupport(t) ? 'pedido' : 'turno';
+    const ok = await dialog({ title: `¿Cancelar este ${what}?`, message: who(t), confirmText: `Cancelar ${what}`, cancelText: 'Volver', danger: true });
     if (!ok) return false;
   }
   if (step === 'take') {
@@ -168,7 +214,7 @@ async function doStep(t, step, value) {
     value = v.room.trim();
   }
   await advanceTurn(t.id, step, value);
-  toast(STEP_DONE[step], 'ok');
+  toast((isSupport(t) && SUPPORT_DONE[step]) || STEP_DONE[step], 'ok');
   return true;
 }
 
@@ -196,14 +242,20 @@ function turnActions(t, service, me) {
     if (t.status === 'waiting') add('finish', 'Ya lo atendí', 'secondary', 'attended');
     if (t.status === 'on_the_way') add('finish', 'Referido', 'secondary', 'referred');
   }
-  if (teacher) {
+  if (service.serves && isSupport(t)) {
+    if (t.status === 'waiting') add('go', 'Voy en camino', 'primary');
+    if (t.status === 'on_the_way') add('finish', 'Resuelto', 'primary', 'attended');
+    if (t.status === 'waiting') add('finish', 'Ya lo resolví', 'secondary', 'attended');
+    add('finish', 'Necesita seguimiento', 'secondary', 'referred');
+  }
+  if (teacher && !isSupport(t)) {
     if (t.status === 'called') add('sent', 'Ya salió', 'primary');
     if (t.status === 'returning') add('back', 'Llegó al salón', 'primary');
     if (['waiting', 'called', 'on_the_way', 'returning'].includes(t.status) && t.teacher_id !== me.id && !service.serves) add('take', 'Está conmigo');
   }
   if (service.serves && t.status === 'returning') add('back', 'Llegó al salón');
   const mine = t.created_by === me.id || t.teacher_id === me.id;
-  if (service.serves || (mine && ['waiting', 'called'].includes(t.status))) add('cancel', 'Cancelar turno', 'ghost-danger');
+  if (service.serves || (mine && ['waiting', 'called'].includes(t.status))) add('cancel', isSupport(t) ? 'Cancelar pedido' : 'Cancelar turno', 'ghost-danger');
   return out;
 }
 
@@ -248,7 +300,10 @@ function queueItem(t, me, service) {
         : html`<span class="item-icon ${late ? 'is-danger' : ''}">${icon('pulse')}</span>`}
       <span class="item-main">
         <strong>${whoHtml(t)}</strong>
-        <span class="item-sub">${[t.reason, t.room ? `Salón ${t.room}` : null, `pidió ${t.created_by_name}`].filter(Boolean).join(' · ')}</span>
+        <span class="item-sub">${(isSupport(t)
+          ? [placeText(t.room), `pidió ${t.created_by_name}`, t.note]
+          : [t.reason, t.room ? `Salón ${t.room}` : null, `pidió ${t.created_by_name}`]
+        ).filter(Boolean).join(' · ')}</span>
         <span class="item-tags">
           <span class="tag ${sev.cls}">${sev.label}</span>
           ${t.status === 'waiting'
@@ -283,6 +338,24 @@ function studentTurnItem(t, me) {
       </span>
     </a>
     ${next ? actionButton(next, 'sm') : ''}
+  </div>`;
+}
+
+/** A support request (Soporte IT): what, where and how it's going; for whoever asked, or in the service's list. */
+function supportItem(t, { serving = false } = {}) {
+  const s = statusTag(t);
+  const sub = [placeText(t.room), serving ? `pidió ${t.created_by_name}` : null,
+    t.handled_by_name && t.status !== 'waiting' ? `atiende ${t.handled_by_name}` : null];
+  return html`<div class="item alert-item ${isOpen(t) ? '' : 'is-muted'}" data-turn="${t.id}">
+    <a class="item-link" href="#/turns/${t.id}">
+      <span class="item-icon">${icon('wrench')}</span>
+      <span class="item-main">
+        <strong>${serving ? supportTitle(t) : `${t.service_name}: ${supportTitle(t)}`}</strong>
+        <span class="item-sub">${sub.filter(Boolean).join(' · ')}</span>
+        <span class="item-tags"><span class="tag ${s.cls}">${s.label}</span>
+          ${t.status === 'waiting' ? html`<span class="tag">${icon('clock', 14)} ${timeAgo(t.created_at)}</span>` : ''}</span>
+      </span>
+    </a>
   </div>`;
 }
 
@@ -328,7 +401,10 @@ export async function turnsView(ctx) {
     const myServices = services.filter((s) => s.serves);
     const myIds = new Set(myServices.map((s) => s.id));
     const toRequest = services.filter((s) => s.active && !s.serves);
-    const students = turns.filter((t) => !myIds.has(t.service_id));
+    const others = turns.filter((t) => !myIds.has(t.service_id));
+    // Help I asked for (Soporte IT), and my students' turns.
+    const myRequests = [...others.filter((t) => isSupport(t) && isOpen(t)), ...others.filter((t) => isSupport(t) && !isOpen(t)).reverse()];
+    const students = others.filter((t) => !isSupport(t));
     // What the teacher has to do first: send the student, receive them back.
     const firstFor = (t) => (isLate(t) ? -1 : { called: 0, returning: 1, sent: 2, on_the_way: 3, arrived: 4 }[t.status] ?? 5);
     const studentsOpen = students.filter(isOpen).sort((a, b) => firstFor(a) - firstFor(b) || a.created_at.localeCompare(b.created_at));
@@ -366,10 +442,17 @@ export async function turnsView(ctx) {
               <div class="alert-actions">
                 ${toRequest.map((s) => {
                   const a = availability(s);
-                  return html`<a class="alert-action" href="#/turns/new?service=${s.id}">${icon('pulse', 26)}<strong>${s.name}</strong>
+                  return html`<a class="alert-action" href="#/turns/new?service=${s.id}">${icon(s.mode === 'support' ? 'wrench' : 'pulse', 26)}<strong>${s.name}</strong>
                     <small class="${a.ok ? '' : 'is-off'}">${availabilityText(s)}</small></a>`;
                 })}
               </div>
+            </section>`
+          : ''}
+
+        ${myRequests.length
+          ? html`<section class="section" data-my-requests>
+              <h3 class="section-title">Tus pedidos</h3>
+              <div class="list">${myRequests.map((t) => supportItem(t))}</div>
             </section>`
           : ''}
 
@@ -381,13 +464,13 @@ export async function turnsView(ctx) {
           : ''}
 
         ${!services.length ? html`<div class="card">${empty('pulse', 'No hay servicios', 'La dirección todavía no activó Enfermería ni Trabajo Social.')}</div>` : ''}
-        ${services.length && !myServices.length && !students.length
+        ${services.length && !myServices.length && !students.length && !myRequests.length
           ? html`<p class="hint">Aquí verás los turnos que pidas y los de los estudiantes de tus grupos. Te avisamos cuando los llamen.</p>`
           : ''}
 
         ${doneToday.length
           ? html`<button type="button" class="btn btn-ghost btn-sm" data-done>${showDone ? 'Ocultar' : 'Ver'} los atendidos hoy (${doneToday.length})</button>
-            ${showDone ? html`<div class="list">${doneToday.map((t) => studentTurnItem(t, me))}</div>` : ''}`
+            ${showDone ? html`<div class="list">${doneToday.map((t) => (isSupport(t) ? supportItem(t, { serving: true }) : studentTurnItem(t, me)))}</div>` : ''}`
           : ''}
 
         <p class="hint">${myServices.length
@@ -444,7 +527,8 @@ export async function newTurnView(ctx) {
   if (here) ctx.setTitle('Llegó sin turno');
   // Already chosen on Turnos (or the only one): don't ask again, just show it. To change it, go back.
   const chosen = !here && !!service;
-  const modeText = (s) => (s.mode === 'visit' ? 'El estudiante va a la oficina' : 'Va al salón');
+  const modeText = (s) => ({ visit: 'El estudiante va a la oficina', room: 'Va al salón', support: 'Ayuda para ti o tu salón' }[s.mode]);
+  const support = () => service?.mode === 'support';
 
   el.innerHTML = String(html`
     <form class="stack" data-form novalidate>
@@ -452,7 +536,7 @@ export async function newTurnView(ctx) {
         ? html`<p class="status-note ok">${icon('check', 16)} ${service.name}: el estudiante ya está en la oficina.</p>`
         : html`${chosen
             ? html`<section class="card stack" data-chosen>
-                <h2 class="card-title">${icon('pulse')} Turno para ${service.name}</h2>
+                <h2 class="card-title">${icon(support() ? 'wrench' : 'pulse')} Turno para ${service.name}</h2>
                 <p class="hint">${modeText(service)} · ${availabilityText(service)}</p>
               </section>`
             : html`<section class="card stack" data-pick-service>
@@ -464,7 +548,7 @@ export async function newTurnView(ctx) {
                   )}
                 </div>
               </section>`}`}
-      <section class="card stack">
+      <section class="card stack" data-student>
         <h2 class="card-title">${icon('user')} ¿Para quién?</h2>
         ${studentFields()}
       </section>
@@ -475,21 +559,21 @@ export async function newTurnView(ctx) {
             (n) => html`<label class="chip sev-${n}"><input type="radio" name="severity" value="${n}"><span>${SEVERITY[n].label}</span></label>`,
           )}
         </div>
-        <p class="hint">Urgente le llega con alarma al servicio y pasa primero en la fila.</p>
+        <p class="hint" data-sev-hint>Urgente le llega con alarma al servicio y pasa primero en la fila.</p>
       </section>
       <section class="card stack">
-        <h2 class="card-title">${icon('chat')} Motivo</h2>
+        <h2 class="card-title">${icon('chat')} <span data-reason-title>Motivo</span></h2>
         <div class="chips" role="radiogroup" aria-label="Motivo" data-reasons></div>
         <label class="field"><span>Nota <em class="optional">opcional</em></span>
           <textarea name="note" rows="2" maxlength="500" placeholder="Ej. Se golpeó en educación física"></textarea></label>
         <p class="hint" data-privacy></p>
       </section>
       <section class="card stack">
-        <label class="field"><span>${here ? html`Salón de donde viene <em class="optional">opcional</em>` : 'Salón donde está'}</span>
+        <label class="field"><span data-room-label>${here ? html`Salón de donde viene <em class="optional">opcional</em>` : 'Salón donde está'}</span>
           <input name="room" maxlength="40" value="${here ? '' : me.room || ''}" placeholder="Ej. 204" autocomplete="off"></label>
       </section>
-      <button class="btn btn-primary btn-block btn-lg" type="submit">${icon('send')} ${here ? 'Anotar visita' : 'Pedir turno'}</button>
-      ${here ? '' : html`<p class="hint center">Te avisamos cuando lo llamen. Si cambia de salón, a los otros maestros de su grupo también les llega el aviso.</p>`}
+      <button class="btn btn-primary btn-block btn-lg" type="submit">${icon('send')} <span data-submit-label>${here ? 'Anotar visita' : 'Pedir turno'}</span></button>
+      ${here ? '' : html`<p class="hint center" data-after>Te avisamos cuando lo llamen. Si cambia de salón, a los otros maestros de su grupo también les llega el aviso.</p>`}
     </form>`);
 
   const form = $('[data-form]', el);
@@ -501,6 +585,21 @@ export async function newTurnView(ctx) {
     $('[data-privacy]', el).textContent = service
       ? `El motivo y la nota solo los ven tú y ${service.name}.`
       : 'El motivo y la nota solo los ven tú y el servicio.';
+    // Support (Soporte IT): no student; what's wrong and where.
+    const help = support();
+    $('[data-student]', el).hidden = help;
+    $('[data-reason-title]', el).textContent = help ? '¿Qué pasa?' : 'Motivo';
+    form.note.placeholder = help ? 'Ej. El proyector no prende' : 'Ej. Se golpeó en educación física';
+    if (!here) {
+      $('[data-room-label]', el).textContent = help ? '¿Dónde?' : 'Salón donde está';
+      $('[data-submit-label]', el).textContent = help ? 'Pedir ayuda' : 'Pedir turno';
+      $('[data-after]', el).textContent = help
+        ? `Te avisamos cuando alguien de ${service.name} vaya en camino y cuando quede resuelto.`
+        : 'Te avisamos cuando lo llamen. Si cambia de salón, a los otros maestros de su grupo también les llega el aviso.';
+      $('[data-sev-hint]', el).textContent = help
+        ? 'Urgente le llega con alarma: úsalo si no puedes dar la clase.'
+        : 'Urgente le llega con alarma al servicio y pasa primero en la fila.';
+    }
   };
   showService();
   for (const input of el.querySelectorAll('[name=service]')) {
@@ -514,12 +613,14 @@ export async function newTurnView(ctx) {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
       if (!service) throw new Error('Elige el servicio.');
-      const typed = studentFrom(form);
+      const help = support();
+      const typed = help ? null : studentFrom(form);
       const severity = Number(form.querySelector('[name=severity]:checked')?.value || 0);
       if (!severity) throw new Error('Elige qué tan grave es.');
       const reason = form.querySelector('[name=reason]:checked')?.value || '';
-      if (service.reasons.length && !reason) throw new Error('Elige el motivo.');
-      const student = await confirmStudent(typed.name, typed.group);
+      if (service.reasons.length && !reason) throw new Error(help ? 'Elige qué pasa.' : 'Elige el motivo.');
+      if (help && !form.room.value.trim()) throw new Error('Escribe dónde es (tu salón u oficina).');
+      const student = help ? {} : await confirmStudent(typed.name, typed.group);
       if (!student) return;
       const t = await requestService({
         serviceId: service.id,
@@ -530,7 +631,7 @@ export async function newTurnView(ctx) {
         note: form.note.value.trim(),
         here,
       });
-      toast(here ? 'Visita anotada' : `Turno pedido. Le avisamos a ${service.name}.`, 'ok');
+      toast(here ? 'Visita anotada' : help ? `Pedido enviado. Le avisamos a ${service.name}.` : `Turno pedido. Le avisamos a ${service.name}.`, 'ok');
       go(`/turns/${t.id}`, { replace: true });
     });
   });
@@ -550,9 +651,9 @@ function steps(t) {
         ]
       : [
           ['Pedido', t.created_by_name, t.created_at],
-          [`${t.service_name} va al salón`, t.on_the_way_at ? t.handled_by_name : null, t.on_the_way_at],
+          [`${t.service_name} va ${isSupport(t) ? 'en camino' : 'al salón'}`, t.on_the_way_at ? t.handled_by_name : null, t.on_the_way_at],
         ];
-  if (t.status === 'done') list.push([OUTCOMES[t.outcome] || 'Terminado', t.closed_by_name, t.closed_at]);
+  if (t.status === 'done') list.push([outcomeLabel(t), t.closed_by_name, t.closed_at]);
   if (t.status === 'cancelled') list.push(['Cancelado', t.closed_by_name, t.closed_at]);
   return html`<ol class="timeline steps">
     ${list.map(([label, name, at]) => html`<li class="${at ? 'is-done' : ''}"><strong>${label}</strong>${at ? html`${name ? ` · ${name}` : ''}<small>${timeAgo(at)}</small>` : ''}</li>`)}
@@ -560,6 +661,9 @@ function steps(t) {
 }
 
 function teacherHint(t) {
+  if (isSupport(t)) {
+    return t.status === 'waiting' ? `Te avisamos cuando alguien de ${t.service_name} vaya en camino. Puedes cancelarlo mientras nadie va.` : '';
+  }
   if (t.status === 'waiting') return 'Te avisamos cuando lo llamen. Si cambia de salón, a los otros maestros de su grupo también les llega el aviso.';
   if (t.status === 'called') {
     return 'Le toca ahora: envíalo y toca «Ya salió». El tiempo para llegar empieza entonces. Hasta que alguien lo toque, te lo recordamos cada 3 minutos, a ti y a los maestros de su grupo.';
@@ -586,7 +690,7 @@ export async function turnDetailView(ctx) {
     const [t, services] = await Promise.all([getTurn(id), servicesOverview()]);
     if (!isCurrent()) return;
     const service = services.find((s) => s.id === t.service_id) || { serves: false };
-    if (service.serves && !history) history = await turnHistory(t).catch(() => []);
+    if (service.serves && !isSupport(t) && !history) history = await turnHistory(t).catch(() => []);
     if (!isCurrent()) return;
     const late = isLate(t);
     const s = statusTag(t);
@@ -596,23 +700,29 @@ export async function turnDetailView(ctx) {
     el.innerHTML = String(html`
       <div class="stack" data-turn="${t.id}">
         <section class="card stack alert-head ${late || (isOpen(t) && t.severity === 4) ? 'is-urgent' : ''} ${t.status === 'done' ? 'is-ok' : ''}">
-          <p class="alert-kind">${icon('pulse', 18)} ${t.service_name} · <span class="tag ${s.cls}">${s.label}</span></p>
-          <h2>${t.student_name} <span class="muted">· ${t.group_name}</span></h2>
+          <p class="alert-kind">${icon(isSupport(t) ? 'wrench' : 'pulse', 18)} ${t.service_name} · <span class="tag ${s.cls}">${s.label}</span></p>
+          ${isSupport(t)
+            ? html`<h2>${supportTitle(t)}${t.room ? html` <span class="muted">· ${t.room}</span>` : ''}</h2>`
+            : html`<h2>${t.student_name} <span class="muted">· ${t.group_name}</span></h2>`}
           ${timed ? html`<p class="turn-timer ${late ? 'is-late' : ''}" data-due="${t.due_at}">${countdown(t.due_at)}</p>` : ''}
           ${late ? html`<p class="status-note danger">${icon('alert', 16)} No llegó a tiempo: se avisó a ${t.service_name}, al maestro y a Seguridad.</p>` : ''}
           <div class="facts">
             ${fact('Gravedad', `${SEVERITY[t.severity].label}${t.level > t.severity ? ` · sube a ${SEVERITY[t.level].label} por la espera` : ''}`)}
-            ${fact('Motivo', t.reason)}
-            ${fact('Nota', t.note)}
-            ${fact('Salón', t.room)}
+            ${isSupport(t) ? '' : fact('Motivo', t.reason)}
+            ${fact(isSupport(t) ? 'Detalle' : 'Nota', t.note)}
+            ${fact(isSupport(t) ? 'Dónde' : 'Salón', t.room)}
             ${fact('Pidió', `${t.created_by_name} · ${fmtDateTime(t.created_at)}`)}
             ${t.teacher_name && t.teacher_id !== t.created_by ? fact('Ahora está con', t.teacher_name) : ''}
             ${fact('Atiende', t.handled_by_name)}
+            ${fact('Qué se hizo', t.resolution)}
             ${service.serves && t.out_of_order ? fact('Orden', 'Se escogió antes que otros turnos de la fila') : ''}
           </div>
           ${steps(t)}
         </section>
         ${actions.map((a) => actionButton(a))}
+        ${service.serves && isSupport(t) && t.status === 'done'
+          ? html`<button type="button" class="btn btn-secondary btn-block" data-resolution>${icon('edit', 18)} ${t.resolution ? 'Cambiar lo que se hizo' : 'Anotar qué se hizo'}</button>`
+          : ''}
         ${hint ? html`<p class="hint">${hint}</p>` : ''}
         ${service.serves && history
           ? html`<section class="section">
@@ -632,6 +742,15 @@ export async function turnDetailView(ctx) {
         <a class="btn btn-ghost btn-block" href="#/turns">${icon('back', 18)} Todos los turnos</a>
       </div>`);
     bindSteps(el, [t], load);
+    $('[data-resolution]', el)?.addEventListener('click', (e) =>
+      busy(e.currentTarget, async () => {
+        const v = await askResolution(t, t.resolution || '');
+        if (!v) return;
+        await noteTurnResolution(t.id, v.resolution.trim());
+        toast('Guardado', 'ok');
+        await load();
+      }),
+    );
   }
 
   await load();
@@ -653,10 +772,10 @@ export async function servicesView({ el }) {
       ${services.length
         ? html`<div class="list">${services.map(
             (s) => html`<a class="item ${s.active ? '' : 'is-muted'}" href="#/services/${s.id}">
-              <span class="item-icon">${icon('pulse')}</span>
+              <span class="item-icon">${icon(s.mode === 'support' ? 'wrench' : 'pulse')}</span>
               <span class="item-main">
                 <strong>${s.name}</strong>
-                <span class="item-sub">${s.mode === 'visit' ? `El estudiante va · ${s.arrive_minutes} min para llegar` : 'El profesional va al salón'}
+                <span class="item-sub">${{ visit: `El estudiante va · ${s.arrive_minutes} min para llegar`, room: 'El profesional va al salón', support: 'Ayuda al personal' }[s.mode]}
                   · ${s.roles.map(roleName).join(', ')}</span>
                 <span class="item-tags">
                   ${s.active ? '' : html`<span class="tag">Desactivado</span>`}
@@ -694,6 +813,8 @@ export async function serviceFormView(ctx) {
             <span><strong>El estudiante va a la oficina</strong><small>Como Enfermería: lo llaman, el maestro lo envía y corre el tiempo para llegar.</small></span></label>
           <label class="choice"><input type="radio" name="mode" value="room" ${s.mode === 'room' ? 'checked' : ''}>
             <span><strong>El profesional va al salón</strong><small>Como Trabajo Social: «Voy en camino» y luego «Atendido».</small></span></label>
+          <label class="choice"><input type="radio" name="mode" value="support" ${s.mode === 'support' ? 'checked' : ''}>
+            <span><strong>Ayuda al personal</strong><small>Como Soporte IT: sin estudiante; el maestro pide ayuda para su salón, «Voy en camino» y luego «Resuelto».</small></span></label>
         </div>
         <label class="field" data-minutes ${s.mode === 'visit' ? '' : 'hidden'}><span>Minutos para llegar</span>
           <input type="number" name="minutes" min="1" max="30" value="${s.arrive_minutes}" inputmode="numeric"></label>
