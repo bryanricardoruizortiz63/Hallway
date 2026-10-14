@@ -25,7 +25,7 @@ Funciona con servicios gratuitos:
 **Maestros y personal**
 - Entran con **usuario + contraseña**. El código de escuela viene ya puesto en el enlace que reciben con sus credenciales (`…/?escuela=CÓDIGO`) y el teléfono lo recuerda; solo lo escriben si abren la app sin ese enlace. La primera vez deben cambiar la contraseña temporal.
 - **¿Olvidaste tu contraseña?**: avisa a la dirección (en la app, push y Teams). La dirección le da una contraseña temporal desde *Personal*.
-- Reportan una ausencia en segundos: hoy, mañana o varios días, día completo o parte del día.
+- Reportan una ausencia en segundos: hoy, mañana o varios días, día completo o parte del día (con hora de inicio y hora final, las dos obligatorias).
 - **Causa opcional** (y tipo opcional: enfermedad, cita médica, asunto personal, etc.).
 - **Suben su excusa**: foto desde la cámara, PDF o Word (hasta 5 archivos, 10 MB c/u). También pueden añadirla después.
 - Dejan instrucciones para quien cubra su clase (solo en los roles que necesitan cobertura, como Maestro(a); Enfermería, Mantenimiento o Seguridad no ven esos campos).
@@ -214,7 +214,7 @@ index.html                Redirige de la raíz del sitio a public/ (conservando 
 
 **Seguridad:**
 - Row Level Security en todas las tablas: cada persona solo ve datos de su escuela; los maestros solo sus propias ausencias.
-- Todos los cambios pasan por funciones SQL que validan permisos (`create_absence`, `update_absence`, `cancel_absence`, `receive_absence`, …) y quedan en `absence_history`.
+- Todos los cambios pasan por funciones SQL que validan permisos (`create_absence`, `update_absence`, `cancel_absence`, `receive_absence`, …) y quedan en `absence_history`. En una ausencia de parte del día, `create_absence` y `update_absence` piden la hora de inicio y la final (después de la de inicio); las que se guardaron antes sin hora final siguen igual, y al modificarlas hay que ponerla.
 - Los roles de cada escuela están en `school_roles` (nombre, permisos y si necesita cobertura); `profiles.role` apunta a uno de ellos. Las reglas de seguridad y las funciones preguntan por permisos (`private.can`, `private.has_perm`), no por nombres de rol. Permisos: `absences`, `register` (registrar, modificar y cancelar ausencias de otros: `create_absence` con `p_user_id`, `private.require_owner_or_admin`; exige `absences`, igual que `staff`, `reports` y `summary`), `staff`, `settings`, `services` (`save_service`, servicios inactivos en `services_overview`), `messages`, `reports`, `live`, `calendar`, `rooms` (aprobar, rechazar y cancelar reservas, sus notas y avisos), `security`, `visitors`, `maintenance` y `summary` (el resumen del día).
 - Las excusas se guardan en un bucket privado y se ven con enlaces temporales; cada quien solo sube a su propia carpeta.
 - El webhook de Teams solo acepta dominios de Microsoft.
