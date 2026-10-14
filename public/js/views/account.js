@@ -246,6 +246,7 @@ export async function moreView({ el }) {
         ? ['#/rooms', 'room', 'Salón de conferencias', 'Reserva el salón y aprueba las reservas del personal']
         : ['#/rooms', 'room', 'Salón de conferencias', 'Resérvalo o mira quién lo tiene'],
       can(user, 'live') ? ['#/live', 'live', 'En vivo', 'Enfermería, Trabajo Social, alertas, mantenimiento y salón ahora mismo'] : null,
+      can(user, 'summary') ? ['#/summary', 'chart', 'Resumen del día', 'Quién faltó y si se cubrió, turnos, alertas, mantenimiento y mañana'] : null,
       ['#/calendar', 'calendar', 'Calendario escolar', 'Horario de clases y días sin clases'],
     ]],
     ['Administración', [

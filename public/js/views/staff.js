@@ -59,6 +59,7 @@ export async function dashboardView({ el, onLeave, isCurrent }) {
           ? 'Registrar ausencia de un empleado'
           : can(me, 'register') ? 'Registrar una ausencia' : 'Reportar mi ausencia'}</a>
         <a class="btn btn-ghost" href="#/absences">${icon('list', 18)} Ver todas</a>
+        ${can(me, 'summary') ? html`<a class="btn btn-ghost" href="#/summary" data-summary-link>${icon('chart', 18)} Resumen del día</a>` : ''}
       </div>`);
 
     // In-page anchors must not change the route.

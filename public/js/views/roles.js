@@ -49,9 +49,9 @@ export async function roleDialog(role = null) {
     onOpen(dlg) {
       const form = dlg.querySelector('form');
       const box = (key) => form.querySelector(`[name=perm][value=${key}]`);
-      // Managing the staff, the reports and registering absences need to see everyone's absences.
+      // Managing the staff, the reports, registering absences and the day's summary need to see everyone's absences.
       const sync = () => {
-        const needed = ['staff', 'reports', 'register'].some((key) => box(key).checked);
+        const needed = ['staff', 'reports', 'register', 'summary'].some((key) => box(key).checked);
         if (needed) box('absences').checked = true;
         box('absences').disabled = needed;
       };

@@ -1,4 +1,4 @@
-import { CATEGORIES, STATUS, colorIndex, coversOn, dialog, fmtRange, html, initials, roleNeedsCoverage, scheduleText, todayStr, $ } from '../lib.js';
+import { CATEGORIES, NO_COVER, STATUS, colorIndex, coversOn, dialog, fmtRange, html, initials, roleNeedsCoverage, scheduleText, todayStr, $ } from '../lib.js';
 import { appIcon } from '../branding.js';
 import { icon } from '../icons.js';
 import { canPromptInstall, isIos, isStandalone, promptInstall } from '../pwa.js';
@@ -33,6 +33,7 @@ export function absenceItem(a, { showName = true, on = null } = {}) {
   const that = on ? coversOn(a, on) : [];
   const covering = on ? [...new Set(that.map((c) => c.name))].join(', ') : a.substitute;
   if (!cancelled && covering) coverage = html`<span class="tag tag-ok">${icon('check', 14)} ${covering}</span>`;
+  else if (!cancelled && showName && NO_COVER[a.no_cover]) coverage = html`<span class="tag" data-no-cover-tag>${NO_COVER[a.no_cover].tag}</span>`;
   else if (!cancelled && showName && roleNeedsCoverage(a.employee_role)) coverage = html`<span class="tag tag-warn">Sin cubrir</span>`;
   // That day's list: whoever covers is on the way, or hasn't confirmed the notice yet (rows that ask for it).
   let answer = '';

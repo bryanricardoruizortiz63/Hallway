@@ -75,6 +75,7 @@ export const PERMISSIONS = [
   { key: 'reports', label: 'Datos y reportes', hint: 'Estadísticas, paneles de los servicios con sus motivos, exportar a Excel, respaldo y archivo anual.' },
   { key: 'settings', label: 'Configurar la escuela', hint: 'Nombre, Teams, correo y mensaje de bienvenida.' },
   { key: 'services', label: 'Configurar Turnos', hint: 'Los servicios de Turnos (Enfermería, Trabajo Social, Soporte IT…): quién los atiende, sus motivos y el tiempo para llegar.' },
+  { key: 'summary', label: 'Resumen del día', hint: 'Al terminar las clases le llega un aviso con el resumen del día: quién faltó y si se cubrió, los turnos, las alertas, el mantenimiento y quién falta mañana. Incluye ver las ausencias de todos.' },
 ];
 
 /** Duties rather than powers over other people's data: whoever manages the staff can give a role with them. */
@@ -88,6 +89,12 @@ export function setSchoolRoles(list) {
 export const getSchoolRoles = () => schoolRoles;
 const findRole = (key) => schoolRoles.find((r) => r.key === key);
 export const roleLabel = (key) => findRole(key)?.name || ROLE_LABELS[key] || '';
+/** «Nadie cubrirá»: why nobody covers an absence that needs it. */
+export const NO_COVER = {
+  not_needed: { label: 'No hace falta cubrir', tag: 'No necesita cobertura' },
+  no_one: { label: 'No hay quién cubra', tag: 'Nadie cubre' },
+};
+
 /** Absences of this role need someone to cover them (teachers); nursing or maintenance don't. */
 export const roleNeedsCoverage = (key) => findRole(key)?.coverage ?? key !== 'admin';
 

@@ -1,6 +1,6 @@
 // All data access for the app: Supabase Auth, database (RLS + RPC functions), Storage and Edge Functions.
 import { MAX_UPLOAD_MB, SUPABASE_KEY, SUPABASE_URL } from './config.js';
-import { CATEGORIES, STATUS, addDays, coversOn, fmtDate, roleLabel, roleNeedsCoverage, scheduleText, setSchoolRoles, todayStr, weekdays } from './lib.js';
+import { CATEGORIES, NO_COVER, STATUS, addDays, coversOn, fmtDate, roleLabel, roleNeedsCoverage, scheduleText, setSchoolRoles, todayStr, weekdays } from './lib.js';
 import { buildXlsx, xDate, xDateTime } from './xlsx.js';
 import { zip } from './zip.js';
 
@@ -222,7 +222,7 @@ export async function dashboard(today = todayStr()) {
     pending,
     counts: {
       today: todayList.length,
-      uncovered_today: todayList.filter((a) => !coversOn(a, today).length && roleNeedsCoverage(a.employee_role)).length,
+      uncovered_today: todayList.filter((a) => !coversOn(a, today).length && !a.no_cover && roleNeedsCoverage(a.employee_role)).length,
       pending: pending.length,
       upcoming: upcoming.length,
     },
@@ -356,6 +356,12 @@ export const setCovers = (id, covers) =>
       end_time: c.end || null,
     })),
   });
+
+/**
+ * «Nadie cubrirá»: reason 'not_needed' (no hace falta) or 'no_one' (no hay quién cubra); null undoes it. Whoever
+ * covered is taken off and told. Assigning someone later undoes it too.
+ */
+export const setNoCover = (id, reason) => rpc('set_absence_no_cover', { p_id: id, p_reason: reason || null });
 
 /**
  * What I cover (Vas a cubrir): from a day on, one row per row of the list (cover_days: my days, null = every day),
@@ -853,6 +859,11 @@ export const liveBoard = () => rpc('live_board', { p_since: startOfToday(), p_to
 export const liveTurns = async (serviceId) => (await rpc('live_turns', { p_service_id: serviceId, p_since: startOfToday() })) || [];
 /** How many turns a service had at each hour of the day over the 4 weeks before today: { days, hours: [{ hour, turns }] }. */
 export const liveHours = (serviceId) => rpc('live_hours', { p_service_id: serviceId, p_since: startOfToday() });
+/**
+ * Resumen del día (permission summary): the staff's absences with who covered them, the services' turns, alerts,
+ * visits and maintenance in numbers, and the next school day. day: 'YYYY-MM-DD' of the last 60 days; null = today.
+ */
+export const dailySummary = (day) => rpc('daily_summary', { p_day: day || null });
 
 /** A service closes a finished period: its finished turns are deleted. */
 export function closeServiceYear(serviceId, from, to) {
@@ -943,7 +954,7 @@ const scheduleLabel = (a) => scheduleText(a).replace(/\u00a0/g, ' ');
 const coveredBy = (a) =>
   a.covers?.some((c) => c.days?.length)
     ? a.covers.map((c) => (c.days?.length ? `${c.name} (${c.days.map((d) => fmtDate(d).replace(/[,.]/g, '')).join(', ')})` : c.name)).join('; ')
-    : a.substitute;
+    : a.substitute || (NO_COVER[a.no_cover] ? `Nadie: ${NO_COVER[a.no_cover].label.toLowerCase()}` : '');
 
 function absenceRow(a, cancelReasons = new Map()) {
   return [
