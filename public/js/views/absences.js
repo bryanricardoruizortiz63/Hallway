@@ -178,7 +178,7 @@ async function absenceForm({ el, query }, absence) {
         </div>
         <div class="grid2" data-times hidden>
           <label class="field"><span>Desde</span><input type="time" name="start_time" value="${startTime}"></label>
-          <label class="field"><span>Hasta <em class="optional">opcional</em></span><input type="time" name="end_time" value="${endTime}"></label>
+          <label class="field"><span>Hasta</span><input type="time" name="end_time" value="${endTime}"></label>
         </div>
         <p class="hint" data-summary></p>
         <p class="status-note warn" data-closure-note hidden></p>
@@ -324,6 +324,8 @@ async function absenceForm({ el, query }, absence) {
       if (onlyOthers && !v.user_id) throw new Error('Selecciona el empleado que va a faltar.');
       if (!v.start_date) throw new Error('Selecciona la fecha.');
       if (v.partial === '1' && !v.start_time) throw new Error('Indica desde qué hora vas a faltar.');
+      if (v.partial === '1' && !v.end_time) throw new Error('Indica hasta qué hora vas a faltar.');
+      if (v.partial === '1' && v.end_time <= v.start_time) throw new Error('La hora final debe ser después de la hora de inicio.');
       if (!multi) v.end_date = null;
       if (editing) {
         await updateAbsence(absence.id, v);
