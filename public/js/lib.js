@@ -208,6 +208,9 @@ export function schoolCalendar(school) {
   return {
     day_start: c.day_start || '07:40',
     day_end: c.day_end || '15:30',
+    // When the conference room can be reserved (its own hours; the class hours before there were any).
+    room_start: c.room_start || c.day_start || '07:40',
+    room_end: c.room_end || c.day_end || '15:30',
     school_days: c.school_days?.length ? c.school_days : [1, 2, 3, 4, 5],
     groups: c.groups || [],
   };
