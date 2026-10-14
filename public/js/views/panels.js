@@ -633,9 +633,9 @@ export async function roomsPanelView({ el, isCurrent }) {
     cancelled: 'Cancelada',
   })[b.status] || b.status;
 
-  /** Hours of class in the period: school days, minus days without classes. */
+  /** Hours the room can be reserved in the period: its hours on school days, minus days without classes. */
   function schoolHours(r) {
-    const perDay = (toMin(cal.day_end) - toMin(cal.day_start)) / 60;
+    const perDay = (toMin(cal.room_end) - toMin(cal.room_start)) / 60;
     let days = 0;
     for (let d = r.from; d <= r.to; d = addDays(d, 1)) {
       if (!cal.school_days.includes(isoWeekday(d))) continue;
@@ -674,7 +674,7 @@ export async function roomsPanelView({ el, isCurrent }) {
       <div class="stats">
         ${tile(approved.length, 'Reservas aprobadas')}
         ${tile(hoursFmt(hours), 'Horas reservadas')}
-        ${tile(capacity ? `${Math.round((hours / capacity) * 100)} %` : '—', 'Del horario de clases')}
+        ${tile(capacity ? `${Math.round((hours / capacity) * 100)} %` : '—', 'Del horario del salón')}
         ${tile(rows.filter((b) => b.status === 'rejected').length, 'No aprobadas')}
       </div>
       <section class="card stack">
@@ -686,7 +686,7 @@ export async function roomsPanelView({ el, isCurrent }) {
         .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'es')).slice(0, 10), { format: hoursFmt })}
       ${bars('Horas por día de la semana', 'calendar', byWeekday(approved, (b) => b.day, hoursOf), { format: hoursFmt })}
       ${bars('Estado de las reservas', 'list', countBy(rows, statusOf))}
-      <p class="hint">«Del horario de clases»: horas aprobadas entre las horas de clase del período (días de clases, sin los días sin clases).</p>`;
+      <p class="hint">«Del horario del salón»: horas aprobadas entre las horas que se puede reservar en el período (su horario en días de clases, sin los días sin clases).</p>`;
   }
 
   async function load() {

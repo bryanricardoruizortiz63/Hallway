@@ -82,10 +82,10 @@ function dayProblem(day, closures, cal) {
   return '';
 }
 
-/** Free times of a day within class hours (15 minutes or more), outside approved reservations; today, from now on. */
+/** Free times of a day within the room's hours (15 minutes or more), outside approved reservations; today, from now on. */
 export function freeSlots(dayBookings, day, cal) {
-  let at = toMin(cal.day_start);
-  const end = toMin(cal.day_end);
+  let at = toMin(cal.room_start);
+  const end = toMin(cal.room_end);
   if (day === todayStr()) at = Math.max(at, Math.ceil(nowMin() / 5) * 5);
   const taken = dayBookings
     .filter((b) => b.status === 'approved')
@@ -210,7 +210,7 @@ export async function roomsView(ctx) {
     ].sort((a, b) => a.at - b.at || (a.s ? 1 : -1));
     return html`<div class="agenda">
       <h3 class="agenda-title">${longDay(day)}${day === today ? ' · hoy' : ''}</h3>
-      ${problem ? html`<p class="status-note warn">${icon('calendar', 16)} ${problem}</p>` : ''}
+      ${problem ? html`<p class="status-note warn">${icon('calendar', 16)} ${problem}</p>` : html`<p class="hint" data-room-hours>Horario del salón: ${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}</p>`}
       ${rows.length
         ? html`<div class="agenda-list">${rows.map(({ b, s }) => (b
             ? html`<a class="agenda-row is-${b.status}" href="#/rooms/${b.id}">
@@ -397,11 +397,11 @@ export async function newBookingView({ el, query }) {
         <p class="status-note warn" data-day-note hidden></p>
         <div class="grid2">
           <label class="field"><span>Desde</span>
-            <input type="time" name="start" required step="300" min="${cal.day_start}" max="${cal.day_end}" value="${start}"></label>
+            <input type="time" name="start" required step="300" min="${cal.room_start}" max="${cal.room_end}" value="${start}"></label>
           <label class="field"><span>Hasta</span>
-            <input type="time" name="end" required step="300" min="${cal.day_start}" max="${cal.day_end}" value="${end}"></label>
+            <input type="time" name="end" required step="300" min="${cal.room_start}" max="${cal.room_end}" value="${end}"></label>
         </div>
-        <p class="hint">Horario escolar: ${fmtTime(cal.day_start)} – ${fmtTime(cal.day_end)}, de ${daysText(cal.school_days)}.</p>
+        <p class="hint" data-room-hours>Horario del salón: ${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}, de ${daysText(cal.school_days)}.</p>
         <p class="status-note" data-clash hidden></p>
         <label class="field"><span>${manager ? 'Nota' : 'Nota para la dirección'} <em class="optional">opcional</em></span>
           <textarea name="note" rows="2" maxlength="1000" placeholder="Ej. Necesito el proyector y 30 sillas"></textarea></label>
@@ -481,7 +481,7 @@ export async function newBookingView({ el, query }) {
     // An hour by default.
     const s = field('start').value;
     if (TIME_RE.test(s) && (!field('end').value || field('end').value <= s)) {
-      field('end').value = fromMin(Math.min(toMin(s) + 60, toMin(cal.day_end)));
+      field('end').value = fromMin(Math.min(toMin(s) + 60, toMin(cal.room_end)));
     }
     showClash();
   });
@@ -502,8 +502,8 @@ export async function newBookingView({ el, query }) {
       if (!TIME_RE.test(s) || !TIME_RE.test(en)) throw new Error('Elige la hora de inicio y la de fin.');
       if (en <= s) throw new Error('La hora de fin debe ser después de la de inicio.');
       if (toMin(en) - toMin(s) < 15) throw new Error('Reserva al menos 15 minutos.');
-      if (s < cal.day_start || en > cal.day_end) {
-        throw new Error(`Elige una hora dentro del horario escolar: de ${fmtTime(cal.day_start)} a ${fmtTime(cal.day_end)}`);
+      if (s < cal.room_start || en > cal.room_end) {
+        throw new Error(`Elige una hora dentro del horario del salón: de ${fmtTime(cal.room_start)} a ${fmtTime(cal.room_end)}`);
       }
       if (d === today && toMin(s) < nowMin() - 5) throw new Error('Esa hora ya pasó.');
 

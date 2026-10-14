@@ -9,6 +9,7 @@ import {
   removeSchoolGroup,
   renameSchoolGroup,
   saveClosure,
+  saveRoomHours,
   saveSchoolHours,
 } from '../backend.js';
 import {
@@ -127,7 +128,7 @@ export async function calendarView({ el, isCurrent }) {
   const hoursCard = () => {
     const cal = schoolCalendar(state.me.school);
     if (!editor) {
-      return html`<section class="card stack">
+      return html`<section class="card stack" data-class-hours>
         <h2 class="card-title">${icon('clock')} Horario de clases</h2>
         <p><strong>${fmtTime(cal.day_start)} – ${fmtTime(cal.day_end)}</strong></p>
         <p class="muted">De ${daysText(cal.school_days)}.</p>
@@ -145,7 +146,29 @@ export async function calendarView({ el, isCurrent }) {
             <span title="${d.name}">${d.short}</span></label>`,
         )}</div>
       </div>
+      <p class="hint">Con la salida terminan los recordatorios de cobertura y llega el resumen del día.</p>
       <button class="btn btn-secondary" type="submit">Guardar horario</button>
+    </form>`;
+  };
+
+  /** When the conference room can be reserved: its own hours, apart from the classes. */
+  const roomCard = () => {
+    const cal = schoolCalendar(state.me.school);
+    if (!editor) {
+      return html`<section class="card stack" data-room-hours>
+        <h2 class="card-title">${icon('room')} Horario del salón de conferencias</h2>
+        <p><strong>${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}</strong></p>
+        <p class="muted">Se reserva en ese horario, de ${daysText(cal.school_days)}.</p>
+      </section>`;
+    }
+    return html`<form class="card stack" data-room-hours novalidate>
+      <h2 class="card-title">${icon('room')} Horario del salón de conferencias</h2>
+      <div class="grid2">
+        <label class="field"><span>Desde</span><input type="time" name="room_start" required value="${cal.room_start}"></label>
+        <label class="field"><span>Hasta</span><input type="time" name="room_end" required value="${cal.room_end}"></label>
+      </div>
+      <p class="hint">Se puede reservar en este horario, los días de clases. Es aparte del horario de clases: puede empezar antes o terminar más tarde.</p>
+      <button class="btn btn-secondary" type="submit">Guardar horario del salón</button>
     </form>`;
   };
 
@@ -174,7 +197,7 @@ export async function calendarView({ el, isCurrent }) {
   };
 
   const render = () => {
-    el.innerHTML = String(html`<div class="stack">${hoursCard()}${closuresCard()}
+    el.innerHTML = String(html`<div class="stack">${hoursCard()}${roomCard()}${closuresCard()}
       ${editor
         ? html`<a class="card link-card" href="#/groups">${icon('users')}<span><strong>Grados y grupos</strong><small>Los grupos de la escuela, en su propia pantalla</small></span>${icon('chevron', 18)}</a>`
         : ''}</div>`);
@@ -198,6 +221,18 @@ export async function calendarView({ el, isCurrent }) {
         if (end <= start) throw new Error('La hora de salida debe ser después de la de entrada.');
         state.me.school.calendar = await saveSchoolHours(start, end, days);
         toast('Horario guardado', 'ok');
+      });
+    });
+
+    const room = $('form[data-room-hours]', el);
+    room?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      busy(room.querySelector('[type=submit]'), async () => {
+        const { room_start: start, room_end: end } = Object.fromEntries(new FormData(room));
+        if (!start || !end) throw new Error('Indica desde qué hora y hasta qué hora se puede reservar.');
+        if (end <= start) throw new Error('La hora final debe ser después de la inicial.');
+        state.me.school.calendar = await saveRoomHours(start, end);
+        toast('Horario del salón guardado', 'ok');
       });
     });
 
