@@ -859,6 +859,11 @@ export const bookingsBetween = (from, to) =>
 export const liveBoard = () => rpc('live_board', { p_since: startOfToday(), p_today: todayStr() });
 /** One service's turns of today (and any still open), with every step and how it ended; never the note. */
 export const liveTurns = async (serviceId) => (await rpc('live_turns', { p_service_id: serviceId, p_since: startOfToday() })) || [];
+/**
+ * One turn, with everything about it, also the teacher's note: the student (or who asked and where), reason, how
+ * serious, place in line, who asked, has the student and attends, every step with its time and how it ended.
+ */
+export const getLiveTurn = (id) => rpc('live_turn', { p_id: id });
 /** How many turns a service had at each hour of the day over the 4 weeks before today: { days, hours: [{ hour, turns }] }. */
 export const liveHours = (serviceId) => rpc('live_hours', { p_service_id: serviceId, p_since: startOfToday() });
 /**

@@ -49,8 +49,8 @@ const isSupport = (t) => t.service_mode === 'support';
 /** What a support request is about: its reason ("Proyector o pantalla"). */
 const supportTitle = (t) => t.reason || 'Pedido de ayuda';
 /** Where help is needed, as typed: "204" → "Salón 204"; "Biblioteca" stays. */
-const placeText = (room) => (room ? (/^\d/.test(room) ? `Salón ${room}` : room) : null);
-const outcomeLabel = (t) => (isSupport(t) && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'Terminado';
+export const placeText = (room) => (room ? (/^\d/.test(room) ? `Salón ${room}` : room) : null);
+export const outcomeLabel = (t) => (isSupport(t) && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'Terminado';
 const who = (t) => (isSupport(t) ? `${supportTitle(t)}${t.room ? ` (${t.room})` : ''}` : `${t.student_name} (${t.group_name})`);
 // The group doesn't break at its hyphen.
 const whoHtml = (t) => (isSupport(t) ? html`${supportTitle(t)}` : html`${t.student_name} <span class="nowrap">(${t.group_name})</span>`);
@@ -58,17 +58,17 @@ const timeOf = (iso) => fmtTime(new Date(iso));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // With a time to get there: to the service (it starts with «Ya salió»), or back to class.
-const TIMED = ['sent', 'returning'];
+export const TIMED = ['sent', 'returning'];
 const pastDue = (t) => !!t.due_at && Date.now() > new Date(t.due_at);
 
 /** Past the time to get to the service, or back to class. */
-const isLate = (t) =>
+export const isLate = (t) =>
   (['called', 'sent'].includes(t.status) && (!!t.late_at || pastDue(t))) || (t.status === 'returning' && (!!t.return_late_at || pastDue(t)));
 
 /** The teacher who asked, has the student now, or teaches the group. */
 const teacherSide = (t, me) => t.created_by === me.id || t.teacher_id === me.id || (me.groups || []).includes(t.group_name);
 
-function statusTag(t) {
+export function statusTag(t) {
   if (isLate(t)) return { label: t.status === 'returning' ? 'No ha llegado al salón' : `No ha llegado a ${t.service_name}`, cls: 'tag-danger' };
   const open = {
     waiting: { label: t.position ? `En fila · turno ${t.position}` : 'En fila', cls: '' },
@@ -86,14 +86,14 @@ function statusTag(t) {
 }
 
 /** "Quedan 3:12" or "Atrasado 2 min". */
-function countdown(dueAt) {
+export function countdown(dueAt) {
   const secs = Math.round((new Date(dueAt) - Date.now()) / 1000);
   if (secs <= 0) return `Atrasado ${Math.max(1, Math.round(-secs / 60))} min`;
   return `Quedan ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
 /** The countdowns on screen tick every second. */
-function tickCountdowns(ctx) {
+export function tickCountdowns(ctx) {
   const timer = setInterval(() => {
     for (const el of ctx.el.querySelectorAll('[data-due]')) {
       el.textContent = countdown(el.dataset.due);
@@ -475,7 +475,7 @@ export async function turnsView(ctx) {
 
         <p class="hint">${myServices.length
           ? 'La fila va por gravedad y, dentro de cada nivel, por orden de llegada. Cada 30 minutos de espera un turno sube un nivel. Solo tu servicio ve el motivo y el historial.'
-          : 'El motivo y la nota solo los ven tú y el servicio. Los otros maestros del grupo ven cómo va el turno. Los nombres se borran de tu lista a las 24 horas.'}</p>
+          : 'El motivo y la nota solo los ven tú, el servicio y la dirección. Los otros maestros del grupo ven cómo va el turno. Los nombres se borran de tu lista a las 24 horas.'}</p>
       </div>`);
 
     for (const input of el.querySelectorAll('[name=staff-status]')) {
@@ -583,8 +583,8 @@ export async function newTurnView(ctx) {
     box.hidden = !reasons.length;
     box.innerHTML = String(html`${reasons.map((r) => html`<label class="chip"><input type="radio" name="reason" value="${r}"><span>${r}</span></label>`)}`);
     $('[data-privacy]', el).textContent = service
-      ? `El motivo y la nota solo los ven tú y ${service.name}.`
-      : 'El motivo y la nota solo los ven tú y el servicio.';
+      ? `El motivo y la nota solo los ven tú, ${service.name} y la dirección.`
+      : 'El motivo y la nota solo los ven tú, el servicio y la dirección.';
     // Support (Soporte IT): no student; what's wrong and where.
     const help = support();
     $('[data-student]', el).hidden = help;

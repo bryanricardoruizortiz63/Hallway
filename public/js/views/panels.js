@@ -6,11 +6,13 @@
 //   * Conference room: Secretaría and the dirección (permission "calendar").
 //   * En vivo: the dirección and Secretaría (permission "live"), with each turn's reason; it refreshes by itself.
 //     A grade or group can be chosen, it can ring when a student doesn't arrive, it shows who is out of their room,
-//     each service's peak hours, and a big screen for a TV.
+//     each service's peak hours, and a big screen for a TV. Each turn opens with everything about it, also the
+//     teacher's note.
 import {
   bookingsBetween,
   closeServiceYear,
   downloadXlsx,
+  getLiveTurn,
   listClosures,
   liveBoard,
   liveHours,
@@ -26,6 +28,7 @@ import {
   busy,
   can,
   dialog,
+  fmtDateTime,
   fmtTime,
   html,
   isoWeekday,
@@ -42,8 +45,20 @@ import { state } from '../store.js';
 import { xDate, xDateTime } from '../xlsx.js';
 import { empty } from './common.js';
 import { KINDS, URGENCY } from './maintenance.js';
-import { keepFresh } from './students.js';
-import { OUTCOMES, SEVERITY, STAFF_STATUS, SUPPORT_OUTCOMES } from './turns.js';
+import { fact, keepFresh } from './students.js';
+import {
+  OUTCOMES,
+  SEVERITY,
+  STAFF_STATUS,
+  SUPPORT_OUTCOMES,
+  TIMED,
+  countdown,
+  isLate,
+  outcomeLabel,
+  placeText,
+  statusTag,
+  tickCountdowns,
+} from './turns.js';
 
 // ---- Shared ----------------------------------------------------------------------------------
 
@@ -718,7 +733,7 @@ function liveTurn(t, service) {
   const support = service.mode === 'support';
   const status = t.late ? 'No ha llegado' : support && t.status === 'on_the_way' ? `${service.name} va en camino` : TURN_STATUS[t.status]?.(service) || t.status;
   const sev = SEVERITY[t.level] || SEVERITY[1];
-  return html`<div class="item ${t.late ? 'alert-item is-urgent' : ''}">
+  return html`<a class="item ${t.late ? 'alert-item is-urgent' : ''}" href="#/live/turn/${t.id}" data-live-turn="${t.id}">
     <span class="item-icon ${t.late ? 'is-danger' : t.status === 'waiting' ? '' : 'is-ok'}">${icon(support ? 'wrench' : 'pulse')}</span>
     <span class="item-main">
       <strong>${support ? html`${t.created_by_name}${t.room ? html` <span class="nowrap">(${t.room})</span>` : ''}` : who(t.student, t.group)}</strong>
@@ -726,7 +741,8 @@ function liveTurn(t, service) {
       <span class="item-sub">${[status, t.handled_by_name && t.status !== 'waiting' ? t.handled_by_name : null, timeAgo(t.since)].filter(Boolean).join(' · ')}</span>
     </span>
     <span class="tag ${sev.cls}">${sev.label}</span>
-  </div>`;
+    ${icon('chevron', 18)}
+  </a>`;
 }
 
 /** Who attends a service and how they are now (Disponible, En reunión hasta…). */
@@ -938,7 +954,7 @@ function outNow(v) {
     })),
     ...v.services.filter((s) => s.mode !== 'support').flatMap((s) => s.active.filter((t) => OUT.includes(t.status)).map((t) => ({
       key: `turn-${t.id}`, student: t.student, group: t.group, late: t.late, since: t.out_since || t.since,
-      where: t.late ? `No ha llegado a ${s.name}` : TURN_STATUS[t.status](s), link: null,
+      where: t.late ? `No ha llegado a ${s.name}` : TURN_STATUS[t.status](s), link: `#/live/turn/${t.id}`,
     }))),
   ];
   const order = schoolCalendar(state.me.school).groups;
@@ -1016,7 +1032,7 @@ function turnSteps(t, s) {
     .join(' · ');
 }
 
-/** A turn of the day with everything about it (never the teacher's note). */
+/** A turn of the day with what happened to it (the teacher's note only when it's opened). */
 function dayTurn(t, s) {
   const support = s.mode === 'support';
   const open = isLiveOpen(t);
@@ -1044,7 +1060,7 @@ function dayTurn(t, s) {
     t.return_late_at ? 'Tardó en regresar al salón' : null,
     t.out_of_order ? 'Se atendió antes de su turno' : null,
   ].filter(Boolean);
-  return html`<div class="item day-turn ${missing ? 'alert-item is-urgent' : ''}" data-turn="${t.id}">
+  return html`<a class="item day-turn ${missing ? 'alert-item is-urgent' : ''}" href="#/live/turn/${t.id}" data-turn="${t.id}">
     <span class="item-icon ${missing ? 'is-danger' : open && t.status !== 'waiting' ? 'is-ok' : ''}">${icon(support ? 'wrench' : 'pulse')}</span>
     <span class="item-main">
       <strong>${support ? html`${t.reason || 'Pedido de ayuda'}${place ? html` <span class="nowrap">(${place})</span>` : ''}` : who(t.student_name, t.group_name)}</strong>
@@ -1056,7 +1072,8 @@ function dayTurn(t, s) {
       ${support && t.resolution ? html`<span class="item-sub">Qué se hizo: «${t.resolution}»</span>` : ''}
     </span>
     <span class="tag ${statusCls}">${status}</span>
-  </div>`;
+    ${icon('chevron', 18)}
+  </a>`;
 }
 
 /**
@@ -1147,7 +1164,7 @@ export async function liveServiceView(ctx) {
         ${done.length ? html`<div class="list">${done.map((t) => dayTurn(t, s))}</div>` : html`<p class="muted pad">Todavía no se ha atendido a nadie hoy.</p>`}
       </section>
       ${peakCard(today, history, peak, f)}
-      <p class="hint">Cada turno dice su motivo, quién lo pidió, quién lo atendió y la hora de cada paso. Las notas de los maestros no salen aquí: solo las ve el servicio.</p>
+      <p class="hint">Cada turno dice su motivo, quién lo pidió, quién lo atendió y la hora de cada paso. Toca uno para ver todo, también la nota del maestro.</p>
       <a class="btn btn-ghost btn-block" href="#/live">${icon('back', 18)} Todo En vivo</a>
     </div>`);
     sizeBars(el);
@@ -1218,7 +1235,7 @@ export async function liveView(ctx) {
           <span class="item-main"><strong>${r.purpose}</strong>
             <span class="item-sub">${fmtTime(r.start_time)} – ${fmtTime(r.end_time)} · ${r.created_by_name}</span></span>
         </a>`, { note: b.rooms_pending ? `${b.rooms_pending} ${b.rooms_pending === 1 ? 'reserva espera' : 'reservas esperan'} aprobación.` : '' })}
-      <p class="hint">Cada turno dice su motivo. Las notas de los maestros no salen aquí: solo las ve el servicio.</p>
+      <p class="hint">Cada turno dice su motivo. Toca uno para ver todos sus detalles, también la nota del maestro.</p>
     </div>`);
     bindTools(el, render, () => alarmKeys(b));
     ringFor(alarmKeys(b));
@@ -1233,6 +1250,163 @@ export async function liveView(ctx) {
 
   await load();
   keepFresh(ctx, load);
+}
+
+// ---- En vivo › one turn: everything about it --------------------------------------------------
+
+/** "las 9:05 a. m." or "la 1:05 p. m." */
+const hourText = (ts) => {
+  const t = at(ts);
+  return `${/^1:/.test(t) ? 'la' : 'las'} ${t}`;
+};
+
+/** A sentence ends with one period, also after "p. m.". */
+const sentence = (parts) => parts.filter(Boolean).map((x) => (x.endsWith('.') ? x : `${x}.`)).join(' ');
+
+/** What is happening now, in a sentence or two. */
+function liveNow(t) {
+  const s = t.service_name;
+  switch (t.status) {
+    case 'waiting':
+      return sentence([`En fila desde ${hourText(t.created_at)}${t.position ? `: es el turno ${t.position}` : ''}`]);
+    case 'called':
+      return sentence([`Lo llamaron a ${hourText(t.called_at)}`, 'Falta que el maestro lo envíe']);
+    case 'sent':
+      return sentence([`Salió del salón a ${hourText(t.sent_at)} hacia ${s}`]);
+    case 'arrived':
+      return sentence([`Está en ${s} desde ${hourText(t.arrived_at)}`, t.handled_by_name && `Lo atiende ${t.handled_by_name}`]);
+    case 'on_the_way':
+      return sentence([`${t.handled_by_name || s} va ${t.service_mode === 'support' ? 'en camino' : 'al salón'} desde ${hourText(t.on_the_way_at)}`]);
+    case 'returning':
+      return sentence([`Va de regreso al salón desde ${hourText(t.returning_at)}`]);
+    case 'done':
+      return sentence([`Terminó a ${hourText(t.closed_at)}: ${outcomeLabel(t).toLowerCase()}`]);
+    case 'cancelled':
+      return sentence([`Se canceló a ${hourText(t.closed_at)}${t.closed_by_name ? ` (lo canceló ${t.closed_by_name})` : ''}`]);
+    default:
+      return '';
+  }
+}
+
+/** How long it waited in line, was attended and (a student) was out of the room; until now while it lasts. */
+function liveTimes(t) {
+  const visit = t.service_mode === 'visit';
+  const end = t.closed_at || new Date().toISOString();
+  const started = t.called_at || t.on_the_way_at || t.arrived_at;
+  const careFrom = visit ? t.arrived_at : t.on_the_way_at;
+  const out = visit ? t.sent_at || t.arrived_at : null;
+  return [
+    [minutesBetween(t.created_at, started || end), t.status === 'waiting' ? 'En fila' : 'Esperó en fila'],
+    careFrom ? [minutesBetween(careFrom, (visit && t.returning_at) || end), visit ? `En ${t.service_name}` : 'Atención'] : null,
+    out ? [minutesBetween(out, end), 'Fuera del salón'] : null,
+  ]
+    .filter(Boolean)
+    .map(([m, label]) => [minutesText(m), label])
+    .filter(([value]) => value);
+}
+
+/** Everything about the turn, the teacher's note too. */
+function liveFacts(t) {
+  const support = t.service_mode === 'support';
+  const open = isLiveOpen(t);
+  const level = t.level > t.severity ? ` · subió a ${SEVERITY[t.level].label} por la espera` : '';
+  return html`<div class="facts" data-facts>
+    ${support ? '' : fact('Motivo', t.reason)}
+    ${support ? fact('Detalle', t.note) : fact('Nota del maestro', t.note || 'No dejó nota')}
+    ${fact('Gravedad', `${(SEVERITY[t.severity] || SEVERITY[1]).label}${level}`)}
+    ${support ? fact('Dónde', placeText(t.room)) : fact('Salón', t.room)}
+    ${fact('Pidió', `${t.created_by_name} · ${fmtDateTime(t.created_at)}`)}
+    ${!support && t.teacher_name && t.teacher_name !== t.created_by_name ? fact(open ? 'Ahora está con' : 'Estaba con', t.teacher_name) : ''}
+    ${fact(open ? 'Atiende' : 'Atendió', t.handled_by_name)}
+    ${t.status === 'done' ? fact('Cómo terminó', outcomeLabel(t)) : ''}
+    ${t.status === 'cancelled' ? fact('Lo canceló', t.closed_by_name) : ''}
+    ${fact('Qué se hizo', t.resolution)}
+    ${t.out_of_order ? fact('Orden', 'Se atendió antes que otros turnos de la fila') : ''}
+  </div>`;
+}
+
+/**
+ * Every step, in order, with who did it and when. While the turn is open, the steps still to come are grey; not
+ * getting there (or back) in time is a red step.
+ */
+function liveSteps(t) {
+  const s = t.service_name;
+  const steps = t.service_mode === 'visit'
+    ? [
+        ['Pedido', t.created_by_name, t.created_at],
+        ['Lo llamaron', t.called_at && t.handled_by_name, t.called_at],
+        ['Salió del salón', t.sent_at && t.teacher_name, t.sent_at],
+        [`No llegó a tiempo a ${s}`, null, t.late_at, 'is-late'],
+        [`Llegó a ${s}`, null, t.arrived_at],
+        ['Regresa al salón', null, t.returning_at],
+        ['No llegó a tiempo al salón', null, t.return_late_at, 'is-late'],
+      ]
+    : [
+        ['Pedido', t.created_by_name, t.created_at],
+        [`${s} va ${t.service_mode === 'support' ? 'en camino' : 'al salón'}`, t.on_the_way_at && t.handled_by_name, t.on_the_way_at],
+      ];
+  const open = isLiveOpen(t);
+  const last = steps.reduce((n, step, i) => (step[2] ? i : n), 0);
+  const shown = steps.filter((step, i) => step[2] || (open && !step[3] && i > last));
+  if (t.status === 'done') shown.push([outcomeLabel(t), t.closed_by_name, t.closed_at]);
+  if (t.status === 'cancelled') shown.push(['Cancelado', t.closed_by_name, t.closed_at, 'is-cancelled']);
+  return html`<ol class="timeline steps" data-steps>
+    ${shown.map(([label, name, ts, cls = '']) => html`<li class="${ts ? 'is-done' : ''} ${cls}"><strong>${label}</strong>${name ? ` · ${name}` : ''}
+      ${ts ? html`<small>${at(ts)} · ${timeAgo(ts)}</small>` : ''}</li>`)}
+  </ol>`;
+}
+
+/**
+ * En vivo › a turn (tapping it on the board, in «Fuera del salón ahora» or in a service's day): who, what is happening
+ * now, how long it took, every detail (also the teacher's note) and every step with its time. It refreshes by itself.
+ */
+export async function liveTurnView(ctx) {
+  const { el, params, isCurrent } = ctx;
+  const id = Number(params[0]);
+
+  async function load() {
+    const t = await getLiveTurn(id);
+    if (!isCurrent()) return;
+    const support = t.service_mode === 'support';
+    const open = isLiveOpen(t);
+    const late = isLate(t);
+    const status = statusTag(t);
+    const sev = SEVERITY[t.level] || SEVERITY[t.severity] || SEVERITY[1];
+    const timed = TIMED.includes(t.status) && t.due_at;
+    const flags = [
+      t.late_at && t.arrived_at ? `Tardó en llegar a ${t.service_name}.` : null,
+      t.return_late_at && !late ? 'Tardó en regresar al salón.' : null,
+    ].filter(Boolean);
+    el.innerHTML = String(html`<div class="stack" data-live-turn-view="${t.id}">
+      <section class="card stack alert-head ${late || (open && t.level === 4) ? 'is-urgent' : ''} ${t.status === 'done' ? 'is-ok' : ''}">
+        <p class="alert-kind">${icon(support ? 'wrench' : 'pulse', 18)} ${t.service_name} · <span class="tag ${status.cls}" data-status>${status.label}</span></p>
+        ${support
+          ? html`<h2>${t.reason || 'Pedido de ayuda'}${t.room ? html` <span class="muted">· ${placeText(t.room)}</span>` : ''}</h2>`
+          : html`<h2>${t.student_name} <span class="muted">· ${t.group_name}</span></h2>`}
+        <p data-now>${liveNow(t)}</p>
+        <div class="chips"><span class="tag ${sev.cls}" data-severity>${sev.label}</span>${open && t.level > t.severity ? html`<span class="tag">Sube por la espera</span>` : ''}</div>
+        ${timed ? html`<p class="turn-timer ${late ? 'is-late' : ''}" data-due="${t.due_at}">${countdown(t.due_at)}</p>` : ''}
+        ${late ? html`<p class="status-note danger">${icon('alert', 16)} No llegó a tiempo: se avisó a ${t.service_name}, al maestro y a Seguridad.</p>` : ''}
+        ${flags.map((f) => html`<p class="status-note warn" data-flag>${icon('alert', 16)} ${f}</p>`)}
+      </section>
+      <div class="stats" data-times>${liveTimes(t).map(([value, label]) => tile(value, label))}</div>
+      <section class="card stack">
+        <h2 class="card-title">${icon('list')} Detalles</h2>
+        ${liveFacts(t)}
+      </section>
+      <section class="card stack">
+        <h2 class="card-title">${icon('clock')} Paso a paso</h2>
+        ${liveSteps(t)}
+      </section>
+      <a class="btn btn-secondary btn-block" href="#/live/service/${t.service_id}">${icon('list', 18)} Todos los turnos de hoy de ${t.service_name}</a>
+      <a class="btn btn-ghost btn-block" href="#/live">${icon('back', 18)} Todo En vivo</a>
+      <p class="hint live-stamp">${icon('refresh', 14)} Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
+    </div>`);
+  }
+
+  await load();
+  keepFresh(ctx, load);
+  tickCountdowns(ctx);
 }
 
 // ---- En vivo › pantalla grande ----------------------------------------------------------------
