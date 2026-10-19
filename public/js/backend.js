@@ -237,13 +237,33 @@ export async function getAbsence(id) {
     run(sb.from('absence_history').select('*').eq('absence_id', id).order('id')),
   ]);
   if (!absence) throw new ApiError('No se encontró la ausencia.', 404);
-  if (attachments.length) {
-    const { data } = await sb.storage.from(BUCKET).createSignedUrls(attachments.map((a) => a.path), 3600);
-    const urls = new Map((data || []).map((d) => [d.path, d.signedUrl]));
-    for (const a of attachments) a.url = urls.get(a.path) || null;
-  }
+  await signFiles(attachments);
+  // The plan or material for whoever covers: the coverage form says they get it.
+  absence.cover_files = attachments.filter((f) => f.for_cover).length;
   return { absence, attachments, comments, history };
 }
+
+/** Links that open each file for an hour (url; null if it can't be read). */
+async function signFiles(files) {
+  if (files.length) {
+    const { data } = await sb.storage.from(BUCKET).createSignedUrls(files.map((f) => f.path), 3600);
+    const urls = new Map((data || []).map((d) => [d.path, d.signedUrl]));
+    for (const f of files) f.url = urls.get(f.path) || null;
+  }
+  return files;
+}
+
+/**
+ * The plan or material the absent teacher left for whoever covers: whoever covers can read only these (never the
+ * excuse), until the coverage is taken from them or the absence is cancelled.
+ */
+export const getCoverFiles = async (absenceId) =>
+  signFiles(
+    await run(
+      sb.from('attachments').select('id, path, original_name, mime, size, uploaded_by_name, created_at')
+        .eq('absence_id', absenceId).eq('for_cover', true).order('id'),
+    ),
+  );
 
 const EXT_TYPES = {
   pdf: 'application/pdf',
@@ -298,8 +318,9 @@ function removeFiles(paths) {
   if (paths.length) sb.storage.from(BUCKET).remove(paths).catch(() => {});
 }
 
-export async function createAbsence(me, v, files) {
-  const uploaded = await uploadFiles(files, me);
+/** files: the excuse or evidence (only the employee and the dirección see it); coverFiles: for whoever covers. */
+export async function createAbsence(me, v, files, coverFiles = []) {
+  const uploaded = (await uploadFiles([...files, ...coverFiles], me)).map((f, i) => (i < files.length ? f : { ...f, cover: true }));
   try {
     return await rpc('create_absence', {
       p_start_date: v.start_date,
@@ -320,10 +341,11 @@ export async function createAbsence(me, v, files) {
   }
 }
 
-export async function addAttachments(me, absenceId, files) {
+/** cover: the plan or material for whoever covers (they get a notice); otherwise the excuse or evidence. */
+export async function addAttachments(me, absenceId, files, { cover = false } = {}) {
   const uploaded = await uploadFiles(files, me);
   try {
-    await rpc('add_attachments', { p_absence_id: absenceId, p_files: uploaded });
+    await rpc('add_attachments', { p_absence_id: absenceId, p_files: cover ? uploaded.map((f) => ({ ...f, cover: true })) : uploaded });
   } catch (err) {
     removeFiles(uploaded.map((f) => f.path));
     throw err;
@@ -1019,7 +1041,7 @@ export async function exportBackupJson(school) {
     all('absences'),
     all('absence_history'),
     all('comments'),
-    all('attachments', 'id, absence_id, uploaded_by, uploaded_by_name, original_name, mime, size, created_at'),
+    all('attachments', 'id, absence_id, uploaded_by, uploaded_by_name, original_name, mime, size, for_cover, created_at'),
     all('school_closures', 'id, start_date, end_date, name, kind, created_at'),
     // How the services work (the turns stay with each service).
     all('school_services', 'id, name, mode, arrive_minutes, roles, reasons, active, position, created_at'),
@@ -1134,11 +1156,11 @@ export function exportArchiveXlsx(school, data) {
       columns: [
         { header: 'Ausencia', width: 9 }, { header: 'Empleado', width: 26 }, { header: 'Archivo', width: 30 },
         { header: 'Tamaño (KB)', width: 12 }, { header: 'Subido por', width: 22 }, { header: 'Fecha', width: 17 },
-        { header: 'Carpeta en el ZIP', width: 60 },
+        { header: 'Para quien cubre', width: 16 }, { header: 'Carpeta en el ZIP', width: 60 },
       ],
       rows: data.attachments.map((f) => [
         f.absence_id, names.get(f.absence_id), f.original_name, Math.round((f.size || 0) / 1024), f.uploaded_by_name,
-        xDateTime(f.created_at), paths.get(f.id),
+        xDateTime(f.created_at), f.for_cover ? 'Sí' : 'No', paths.get(f.id),
       ]),
     },
   ]);

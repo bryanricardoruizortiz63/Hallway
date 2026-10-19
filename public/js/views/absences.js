@@ -33,6 +33,7 @@ import {
   createAbsence,
   deleteAttachment,
   getAbsence,
+  getCoverFiles,
   getCoverage,
   listClosures,
   listEmployees,
@@ -126,6 +127,8 @@ async function absenceForm({ el, query }, absence) {
   ]);
   const preselect = query.get('user_id') || '';
   const files = [];
+  // The plan or material for whoever covers.
+  const coverFiles = [];
   const v0 = absence || { start_date: today, end_date: today, partial: false, category: '', reason: '', coverage_notes: '' };
   // Teachers' absences need someone to cover them; nursing, maintenance or security don't.
   const needsCoverage = (roleKey) => !!roleKey && roleNeedsCoverage(roleKey);
@@ -203,6 +206,14 @@ async function absenceForm({ el, query }, absence) {
           <textarea name="coverage_notes" rows="3" maxlength="1000"
             placeholder="Ej.: El plan está en el escritorio. Grupo 3-B: lectura pág. 45.">${v0.coverage_notes || ''}</textarea>
         </label>
+        ${editing
+          ? ''
+          : html`<label class="btn btn-secondary btn-block file-btn" data-cover-pick>
+              ${icon('clip', 18)} Adjuntar plan o material
+              <input type="file" name="cover_files" multiple accept="${ACCEPT}" hidden>
+            </label>
+            <ul class="file-list" data-cover-files></ul>
+            <p class="hint">Quien te cubra lo ve y lo baja junto con las instrucciones. PDF, foto o Word · hasta ${MAX_FILES} archivos.</p>`}
       </section>
 
       ${editing
@@ -222,6 +233,7 @@ async function absenceForm({ el, query }, absence) {
               <small>PDF, foto o Word · máx. ${maxMb} MB · hasta ${MAX_FILES} archivos</small>
             </label>
             <ul class="file-list" data-files></ul>
+            <p class="hint">Solo la ve la dirección; quien te cubra, no.</p>
           </section>`}
 
       <button class="btn btn-primary btn-block btn-lg" type="submit">
@@ -280,42 +292,44 @@ async function absenceForm({ el, query }, absence) {
   end.addEventListener('change', update);
   form.user_id?.addEventListener('change', () => {
     const notes = $('[data-coverage-notes]', el);
-    notes.hidden = !needsCoverage(roleOf(form.user_id.value)) && !notes.querySelector('textarea').value.trim();
+    notes.hidden = !needsCoverage(roleOf(form.user_id.value)) && !notes.querySelector('textarea').value.trim() && !coverFiles.length;
   });
   for (const r of form.querySelectorAll('[name=partial]')) r.addEventListener('change', update);
   update();
 
-  // Files are kept in an array so people can take several photos one by one.
-  const fileInput = form.querySelector('[type=file]');
-  const list = $('[data-files]', el);
-  function renderFiles() {
-    list.innerHTML = String(html`${files.map(
-      (f, i) => html`<li>${icon('file', 18)}<span>${f.name}</span><small>${fileSize(f.size)}</small>
-        <button type="button" class="icon-btn" data-remove="${i}" aria-label="Quitar">${icon('x', 16)}</button></li>`,
-    )}`);
-    for (const btn of list.querySelectorAll('[data-remove]')) {
-      btn.addEventListener('click', () => {
-        files.splice(Number(btn.dataset.remove), 1);
-        renderFiles();
-      });
+  // Files are kept in arrays so people can take several photos one by one.
+  function filePicker(input, list, chosen) {
+    function render() {
+      list.innerHTML = String(html`${chosen.map(
+        (f, i) => html`<li>${icon('file', 18)}<span>${f.name}</span><small>${fileSize(f.size)}</small>
+          <button type="button" class="icon-btn" data-remove="${i}" aria-label="Quitar">${icon('x', 16)}</button></li>`,
+      )}`);
+      for (const btn of list.querySelectorAll('[data-remove]')) {
+        btn.addEventListener('click', () => {
+          chosen.splice(Number(btn.dataset.remove), 1);
+          render();
+        });
+      }
     }
+    input?.addEventListener('change', () => {
+      for (const f of input.files) {
+        if (chosen.length >= MAX_FILES) {
+          toast(`Máximo ${MAX_FILES} archivos.`, 'error');
+          break;
+        }
+        const problem = checkFile(f);
+        if (problem) {
+          toast(problem, 'error');
+          continue;
+        }
+        chosen.push(f);
+      }
+      input.value = '';
+      render();
+    });
   }
-  fileInput?.addEventListener('change', () => {
-    for (const f of fileInput.files) {
-      if (files.length >= MAX_FILES) {
-        toast(`Máximo ${MAX_FILES} archivos.`, 'error');
-        break;
-      }
-      const problem = checkFile(f);
-      if (problem) {
-        toast(problem, 'error');
-        continue;
-      }
-      files.push(f);
-    }
-    fileInput.value = '';
-    renderFiles();
-  });
+  filePicker(form.querySelector('[name=files]'), $('[data-files]', el), files);
+  if (!editing) filePicker(form.querySelector('[name=cover_files]'), $('[data-cover-files]', el), coverFiles);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -333,7 +347,7 @@ async function absenceForm({ el, query }, absence) {
         go(`/absence/${absence.id}`, { replace: true });
         return;
       }
-      const id = await createAbsence(state.me, v, files);
+      const id = await createAbsence(state.me, v, files, coverFiles);
       toast('Ausencia enviada. La dirección fue notificada.', 'ok');
       go(`/absence/${id}`, { replace: true });
     });
@@ -594,7 +608,7 @@ function bindCoverage(form, a, employees, reload) {
     const told = before.filter((c) => c.substitute_id).length;
     $('[data-cover-hint]', form).textContent = [
       staffRows
-        ? `${staffRows === 1 ? 'Le llega un aviso' : 'A cada uno le llega un aviso'} con sus días, su horario, su grupo, el salón y ${a.coverage_notes ? `las instrucciones que dejó ${first}` : `que ${first} no dejó instrucciones`}. No ven la causa de la ausencia.`
+        ? `${staffRows === 1 ? 'Le llega un aviso' : 'A cada uno le llega un aviso'} con sus días, su horario, su grupo, el salón y ${a.coverage_notes ? `las instrucciones que dejó ${first}` : `que ${first} no dejó instrucciones`}.${a.cover_files ? ` También pueden bajar ${a.cover_files === 1 ? 'el archivo' : `los ${a.cover_files} archivos`} que dejó ${first} para cubrir.` : ''} No ven la causa de la ausencia.`
         : '',
       outside ? 'A quien no usa la app no le llega aviso: avísale tú.' : '',
       rows().some(who) ? `A ${first} no le llega aviso: lo ve en su ausencia.` : '',
@@ -777,14 +791,14 @@ export function coveringSection(list) {
 }
 
 /**
- * What the substitute needs: who, when, their days, groups, hours and room, the instructions and who else covers.
- * «Recibido» and, on a day they cover, «Voy en camino» reach whoever assigned it.
+ * What the substitute needs: who, when, their days, groups, hours and room, the instructions, the plan or material
+ * the teacher left and who else covers. «Recibido» and, on a day they cover, «Voy en camino» reach whoever assigned it.
  */
 export async function coverView({ el, params }) {
   const id = Number(params[0]);
 
   async function load() {
-    const parts = await getCoverage(id);
+    const [parts, files] = await Promise.all([getCoverage(id), getCoverFiles(id).catch(() => [])]);
     if (!parts.length) {
       el.innerHTML = String(html`<div class="card">${empty('users', 'Ya no tienes esta cobertura',
         'Se le asignó a otra persona o se quitó. Si tienes dudas, pregúntale a la secretaría o a la dirección.')}</div>`);
@@ -860,6 +874,13 @@ export async function coverView({ el, params }) {
             ${assigned.cover_set_by_name ? html`<div><dt>Te la asignó</dt><dd>${assigned.cover_set_by_name} · ${fmtDateTime(assigned.cover_set_at)}</dd></div>` : ''}
           </dl>
         </section>
+        ${files.length
+          ? html`<section class="card stack" data-cover-material>
+              <h3 class="card-title">${icon('clip')} Plan y material de ${first} <span class="count">${files.length}</span></h3>
+              ${fileGrid(files, null)}
+              <p class="hint">Toca un archivo para abrirlo o bajarlo.</p>
+            </section>`
+          : ''}
         <p class="hint">Si tienes dudas, pregúntale a la secretaría o a la dirección.</p>
       </div>`);
 
@@ -879,6 +900,24 @@ export async function coverView({ el, params }) {
   markAlertsRead(`#/cover/${id}`).catch(() => {});
 }
 
+/** Files to open or download; me: who may remove each one (null: nobody, as for whoever covers). */
+function fileGrid(files, me) {
+  return html`<div class="attachments">${files.map(
+    (f) => html`<div class="att">
+      <a href="${f.url || '#'}" target="_blank" rel="noopener" class="att-link">
+        ${IMAGE_MIME.includes(f.mime) && f.url
+          ? html`<img src="${f.url}" alt="" loading="lazy">`
+          : html`<span class="att-icon">${icon('file', 28)}</span>`}
+        <span class="att-name">${f.original_name}</span>
+        <small>${fileSize(f.size)} · ${f.uploaded_by_name || ''}</small>
+      </a>
+      ${me && (f.uploaded_by === me.id || can(me, 'staff'))
+        ? html`<button class="icon-btn att-del" data-del-att="${f.id}" aria-label="Eliminar archivo">${icon('trash', 16)}</button>`
+        : ''}
+    </div>`,
+  )}</div>`;
+}
+
 export async function absenceView({ el, params }) {
   const id = params[0];
   const me = state.me.user;
@@ -889,6 +928,10 @@ export async function absenceView({ el, params }) {
   const render = () => {
     const { absence: a, attachments, comments, history } = data;
     const mine = a.user_id === me.id;
+    // The plan or material for whoever covers, and the excuse or evidence (private).
+    const forCover = attachments.filter((f) => f.for_cover);
+    const excuses = attachments.filter((f) => !f.for_cover);
+    const coverable = roleNeedsCoverage(a.employee_role);
     const cancelled = a.status === 'cancelled';
     const days = a.partial ? null : weekdays(a.start_date, a.end_date);
     const editable = canChange(a, me);
@@ -940,32 +983,32 @@ export async function absenceView({ el, params }) {
           </dl>
         </section>
 
-        ${roleNeedsCoverage(a.employee_role) || a.substitute ? coverageCard(a, { form: staff && !cancelled, employees }) : ''}
+        ${coverable || a.substitute ? coverageCard(a, { form: staff && !cancelled, employees }) : ''}
 
-        <section class="card stack">
-          <h3 class="card-title">${icon('clip')} Documentos ${attachments.length ? html`<span class="count">${attachments.length}</span>` : ''}</h3>
-          ${attachments.length
-            ? html`<div class="attachments">${attachments.map(
-                (f) => html`<div class="att">
-                  <a href="${f.url || '#'}" target="_blank" rel="noopener" class="att-link">
-                    ${IMAGE_MIME.includes(f.mime) && f.url
-                      ? html`<img src="${f.url}" alt="" loading="lazy">`
-                      : html`<span class="att-icon">${icon('file', 28)}</span>`}
-                    <span class="att-name">${f.original_name}</span>
-                    <small>${fileSize(f.size)} · ${f.uploaded_by_name || ''}</small>
-                  </a>
-                  ${f.uploaded_by === me.id || can(me, 'staff')
-                    ? html`<button class="icon-btn att-del" data-del-att="${f.id}" aria-label="Eliminar archivo">${icon('trash', 16)}</button>`
-                    : ''}
-                </div>`,
-              )}</div>`
-            : html`<p class="muted">No hay documentos adjuntos.</p>`}
+        ${coverable || forCover.length
+          ? html`<section class="card stack" data-cover-files>
+              <h3 class="card-title">${icon('users')} Para quien cubra ${forCover.length ? html`<span class="count">${forCover.length}</span>` : ''}</h3>
+              ${forCover.length ? fileGrid(forCover, me) : html`<p class="muted">No hay plan ni material para quien cubra.</p>`}
+              ${!cancelled && (mine || staff)
+                ? html`<label class="btn btn-secondary btn-block file-btn">
+                    ${icon('upload', 18)} Añadir plan o material
+                    <input type="file" multiple accept="${ACCEPT}" data-upload="cover" hidden>
+                  </label>`
+                : ''}
+              <p class="hint">Quien cubre lo ve y lo baja desde «Vas a cubrir», junto con las instrucciones. Si ya hay alguien cubriendo, le avisamos del material nuevo.</p>
+            </section>`
+          : ''}
+
+        <section class="card stack" data-excuse-files>
+          <h3 class="card-title">${icon('clip')} Documentos ${excuses.length ? html`<span class="count">${excuses.length}</span>` : ''}</h3>
+          ${excuses.length ? fileGrid(excuses, me) : html`<p class="muted">No hay documentos adjuntos.</p>`}
           ${!cancelled && (mine || staff)
             ? html`<label class="btn btn-secondary btn-block file-btn">
                 ${icon('upload', 18)} Añadir documento
-                <input type="file" multiple accept="${ACCEPT}" data-upload hidden>
+                <input type="file" multiple accept="${ACCEPT}" data-upload="excuse" hidden>
               </label>`
             : ''}
+          ${coverable ? html`<p class="hint">La excusa o evidencia solo la ven ${mine ? 'tú' : 'el empleado'} y la dirección; quien cubre, no.</p>` : ''}
         </section>
 
         <section class="card stack">
@@ -1037,25 +1080,27 @@ export async function absenceView({ el, params }) {
       });
     });
 
-    $('[data-upload]', el)?.addEventListener('change', (e) => {
-      const input = e.currentTarget;
-      const chosen = [...input.files];
-      input.value = '';
-      const problem = chosen.map(checkFile).find(Boolean);
-      if (problem) return toast(problem, 'error');
-      if (!chosen.length) return;
-      const label = input.closest('label');
-      label.classList.add('is-busy');
-      addAttachments(state.me, Number(id), chosen.slice(0, MAX_FILES))
-        .then(async () => {
-          toast('Documento añadido', 'ok');
-          await reload();
-        })
-        .catch((err) => {
-          toast(err.message, 'error');
-          label.classList.remove('is-busy');
-        });
-    });
+    for (const input of el.querySelectorAll('[data-upload]')) {
+      input.addEventListener('change', () => {
+        const chosen = [...input.files];
+        input.value = '';
+        const problem = chosen.map(checkFile).find(Boolean);
+        if (problem) return toast(problem, 'error');
+        if (!chosen.length) return;
+        const cover = input.dataset.upload === 'cover';
+        const label = input.closest('label');
+        label.classList.add('is-busy');
+        addAttachments(state.me, Number(id), chosen.slice(0, MAX_FILES), { cover })
+          .then(async () => {
+            toast(cover ? 'Material añadido para quien cubra' : 'Documento añadido', 'ok');
+            await reload();
+          })
+          .catch((err) => {
+            toast(err.message, 'error');
+            label.classList.remove('is-busy');
+          });
+      });
+    }
 
     for (const btn of el.querySelectorAll('[data-del-att]')) {
       btn.addEventListener('click', async () => {
