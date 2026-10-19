@@ -230,20 +230,53 @@ export async function dashboard(today = todayStr()) {
 }
 
 export async function getAbsence(id) {
-  const [absence, attachments, comments, history] = await Promise.all([
+  const [absence, attachments, comments, history, links] = await Promise.all([
     run(sb.from('absences_v').select('*').eq('id', id).maybeSingle()),
     run(sb.from('attachments').select('*').eq('absence_id', id).order('id')),
     run(sb.from('comments').select('*').eq('absence_id', id).order('id')),
     run(sb.from('absence_history').select('*').eq('absence_id', id).order('id')),
+    getCoverLinks(id).catch(() => []),
   ]);
   if (!absence) throw new ApiError('No se encontró la ausencia.', 404);
-  if (attachments.length) {
-    const { data } = await sb.storage.from(BUCKET).createSignedUrls(attachments.map((a) => a.path), 3600);
-    const urls = new Map((data || []).map((d) => [d.path, d.signedUrl]));
-    for (const a of attachments) a.url = urls.get(a.path) || null;
-  }
-  return { absence, attachments, comments, history };
+  await signFiles(attachments);
+  // The plan, material and links for whoever covers: the coverage form says they get them.
+  absence.cover_files = attachments.filter((f) => f.for_cover).length;
+  absence.cover_links = links.length;
+  return { absence, attachments, comments, history, links };
 }
+
+/** The links for whoever covers (a Google Doc, a presentation, a video…); whoever covers can read them too. */
+export const getCoverLinks = (absenceId) =>
+  run(
+    sb.from('cover_links').select('id, url, label, added_by, added_by_name, created_at')
+      .eq('absence_id', absenceId).is('removed_at', null).order('id'),
+  );
+/** links: [{ url, label }] (only http or https; up to 5 per absence). Whoever covers now gets a notice. */
+export const addCoverLinks = (absenceId, links) => rpc('add_cover_links', { p_absence_id: absenceId, p_links: links });
+/** Takes a link away: whoever left it, or whoever manages the staff. */
+export const removeCoverLink = (id) => rpc('remove_cover_link', { p_id: id });
+
+/** Links that open each file for an hour (url; null if it can't be read). */
+async function signFiles(files) {
+  if (files.length) {
+    const { data } = await sb.storage.from(BUCKET).createSignedUrls(files.map((f) => f.path), 3600);
+    const urls = new Map((data || []).map((d) => [d.path, d.signedUrl]));
+    for (const f of files) f.url = urls.get(f.path) || null;
+  }
+  return files;
+}
+
+/**
+ * The plan or material the absent teacher left for whoever covers: whoever covers can read only these (never the
+ * excuse), until the coverage is taken from them or the absence is cancelled.
+ */
+export const getCoverFiles = async (absenceId) =>
+  signFiles(
+    await run(
+      sb.from('attachments').select('id, path, original_name, mime, size, uploaded_by_name, created_at')
+        .eq('absence_id', absenceId).eq('for_cover', true).order('id'),
+    ),
+  );
 
 const EXT_TYPES = {
   pdf: 'application/pdf',
@@ -298,8 +331,9 @@ function removeFiles(paths) {
   if (paths.length) sb.storage.from(BUCKET).remove(paths).catch(() => {});
 }
 
-export async function createAbsence(me, v, files) {
-  const uploaded = await uploadFiles(files, me);
+/** files: the excuse or evidence (only the employee and the dirección see it); coverFiles: for whoever covers. */
+export async function createAbsence(me, v, files, coverFiles = []) {
+  const uploaded = (await uploadFiles([...files, ...coverFiles], me)).map((f, i) => (i < files.length ? f : { ...f, cover: true }));
   try {
     return await rpc('create_absence', {
       p_start_date: v.start_date,
@@ -320,10 +354,11 @@ export async function createAbsence(me, v, files) {
   }
 }
 
-export async function addAttachments(me, absenceId, files) {
+/** cover: the plan or material for whoever covers (they get a notice); otherwise the excuse or evidence. */
+export async function addAttachments(me, absenceId, files, { cover = false } = {}) {
   const uploaded = await uploadFiles(files, me);
   try {
-    await rpc('add_attachments', { p_absence_id: absenceId, p_files: uploaded });
+    await rpc('add_attachments', { p_absence_id: absenceId, p_files: cover ? uploaded.map((f) => ({ ...f, cover: true })) : uploaded });
   } catch (err) {
     removeFiles(uploaded.map((f) => f.path));
     throw err;
@@ -859,6 +894,11 @@ export const bookingsBetween = (from, to) =>
 export const liveBoard = () => rpc('live_board', { p_since: startOfToday(), p_today: todayStr() });
 /** One service's turns of today (and any still open), with every step and how it ended; never the note. */
 export const liveTurns = async (serviceId) => (await rpc('live_turns', { p_service_id: serviceId, p_since: startOfToday() })) || [];
+/**
+ * One turn, with everything about it, also the teacher's note: the student (or who asked and where), reason, how
+ * serious, place in line, who asked, has the student and attends, every step with its time and how it ended.
+ */
+export const getLiveTurn = (id) => rpc('live_turn', { p_id: id });
 /** How many turns a service had at each hour of the day over the 4 weeks before today: { days, hours: [{ hour, turns }] }. */
 export const liveHours = (serviceId) => rpc('live_hours', { p_service_id: serviceId, p_since: startOfToday() });
 /**
@@ -1014,7 +1054,7 @@ export async function exportBackupJson(school) {
     all('absences'),
     all('absence_history'),
     all('comments'),
-    all('attachments', 'id, absence_id, uploaded_by, uploaded_by_name, original_name, mime, size, created_at'),
+    all('attachments', 'id, absence_id, uploaded_by, uploaded_by_name, original_name, mime, size, for_cover, created_at'),
     all('school_closures', 'id, start_date, end_date, name, kind, created_at'),
     // How the services work (the turns stay with each service).
     all('school_services', 'id, name, mode, arrive_minutes, roles, reasons, active, position, created_at'),
@@ -1129,11 +1169,11 @@ export function exportArchiveXlsx(school, data) {
       columns: [
         { header: 'Ausencia', width: 9 }, { header: 'Empleado', width: 26 }, { header: 'Archivo', width: 30 },
         { header: 'Tamaño (KB)', width: 12 }, { header: 'Subido por', width: 22 }, { header: 'Fecha', width: 17 },
-        { header: 'Carpeta en el ZIP', width: 60 },
+        { header: 'Para quien cubre', width: 16 }, { header: 'Carpeta en el ZIP', width: 60 },
       ],
       rows: data.attachments.map((f) => [
         f.absence_id, names.get(f.absence_id), f.original_name, Math.round((f.size || 0) / 1024), f.uploaded_by_name,
-        xDateTime(f.created_at), paths.get(f.id),
+        xDateTime(f.created_at), f.for_cover ? 'Sí' : 'No', paths.get(f.id),
       ]),
     },
   ]);

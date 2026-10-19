@@ -2653,6 +2653,27 @@ input[type='color'] {
   background: var(--ok);
 }
 
+/* En vivo › a turn: not getting there in time, and a cancelled turn. */
+.timeline.steps > li.is-late {
+  color: var(--danger);
+}
+
+.timeline.steps > li.is-late::before {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.timeline.steps > li.is-cancelled::before {
+  border-color: var(--muted);
+  background: var(--muted);
+}
+
+/* Links for whoever covers: as typed (docs.google.com, not Docs.google.com). */
+[data-links] .item-main strong::first-letter,
+[data-links] .item-sub::first-letter {
+  text-transform: none;
+}
+
 /* In-app alarm (urgent notice while the app is open). */
 .alarm {
   position: fixed;
