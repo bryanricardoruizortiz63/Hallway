@@ -5,8 +5,8 @@ import {
   advanceTurn,
   getTurn,
   listTurns,
-  listVisits,
   markAlertsRead,
+  myOpenMaintenance,
   noteTurnResolution,
   requestService,
   saveService,
@@ -19,7 +19,7 @@ import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
 import { confirmStudent, fact, keepFresh, studentFields, studentFrom } from './students.js';
-import { bindVisits, visitsSection } from './visits.js';
+import { requestItem } from './maintenance.js';
 
 export const SEVERITY = {
   1: { label: 'Baja', cls: '' },
@@ -397,7 +397,7 @@ export async function turnsView(ctx) {
   let showDone = false;
 
   const render = () => {
-    const { services, turns, visits } = data;
+    const { services, turns, maintenance } = data;
     const myServices = services.filter((s) => s.serves);
     const myIds = new Set(myServices.map((s) => s.id));
     const toRequest = services.filter((s) => s.active && !s.serves);
@@ -414,8 +414,6 @@ export async function turnsView(ctx) {
     el.innerHTML = String(html`
       <div class="stack">
         ${myServices.length ? statusCard(me, myServices) : ''}
-
-        ${visitsSection(visits, me)}
 
         ${myServices.map((service) => {
           const own = turns.filter((t) => t.service_id === service.id);
@@ -436,16 +434,28 @@ export async function turnsView(ctx) {
           </section>`;
         })}
 
-        ${toRequest.length
-          ? html`<section class="section">
+        <section class="section">
               <h3 class="section-title">Pedir turno</h3>
-              <div class="alert-actions">
+              <div class="alert-actions service-rows">
                 ${toRequest.map((s) => {
                   const a = availability(s);
-                  return html`<a class="alert-action" href="#/turns/new?service=${s.id}">${icon(s.mode === 'support' ? 'wrench' : 'pulse', 26)}<strong>${s.name}</strong>
-                    <small class="${a.ok ? '' : 'is-off'}">${availabilityText(s)}</small></a>`;
+                  return html`<a class="alert-action" href="#/turns/new?service=${s.id}">
+                    <span class="service-icon">${icon(s.mode === 'support' ? 'wrench' : 'pulse', 22)}</span>
+                    <span class="service-text"><strong>${s.name}</strong>
+                      <small class="${a.ok ? '' : 'is-off'}"><i class="service-dot" aria-hidden="true"></i>${availabilityText(s)}</small></span>
+                    ${icon('chevron', 18)}</a>`;
                 })}
+                <a class="alert-action" href="#/maintenance/new">
+                  <span class="service-icon">${icon('wrench', 22)}</span>
+                  <span class="service-text"><strong>Mantenimiento</strong><small>Derrame, limpieza, baño, basura</small></span>
+                  ${icon('chevron', 18)}</a>
               </div>
+            </section>
+
+        ${maintenance.length
+          ? html`<section class="section" data-my-maintenance>
+              <h3 class="section-title">Tus solicitudes de mantenimiento</h3>
+              <div class="list">${maintenance.map((m) => requestItem(m, me, { action: false }))}</div>
             </section>`
           : ''}
 
@@ -494,13 +504,12 @@ export async function turnsView(ctx) {
       render();
     });
     bindSteps(el, turns, load);
-    bindVisits(el, visits, load);
   };
 
   async function load() {
-    const [services, turns, visits] = await Promise.all([servicesOverview(), listTurns(), listVisits()]);
+    const [services, turns, maintenance] = await Promise.all([servicesOverview(), listTurns(), myOpenMaintenance(me.id)]);
     if (!isCurrent()) return;
-    data = { services, turns, visits };
+    data = { services, turns, maintenance };
     render();
   }
 

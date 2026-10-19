@@ -4,7 +4,7 @@ import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
 import { navItems } from './nav.js';
-import { showAlarm, unlockAudio } from './alarm.js';
+import { blinkTitle, showAlarm, unlockAudio } from './alarm.js';
 import { adoptSchoolFromUrl, changePasswordView, loginView, rememberSchool } from './views/auth.js';
 import { appIcon, applyBranding, restoreBranding } from './branding.js';
 import { absenceView, coverView, editAbsenceView, homeView, reportView } from './views/absences.js';
@@ -74,8 +74,10 @@ const ROUTES = [
   { re: /^\/turns$/, view: turnsView, title: 'Turnos' },
   { re: /^\/turns\/new$/, view: newTurnView, title: 'Pedir turno', back: true },
   { re: /^\/turns\/(\d+)$/, view: turnDetailView, title: 'Turno', back: true },
-  { re: /^\/turns\/visit\/new$/, view: newVisitView, title: 'Llegó una visita', allow: may('visitors'), back: true },
-  { re: /^\/turns\/visit\/(\d+)$/, view: visitDetailView, title: 'Visita', back: true },
+  { re: /^\/alerts\/visit\/new$/, view: newVisitView, title: 'Llegó una visita', allow: may('visitors'), back: true },
+  { re: /^\/alerts\/visit\/(\d+)$/, view: visitDetailView, title: 'Visita', back: true },
+  // Visits used to be in Turnos: the links of notices already sent still open them.
+  { re: /^\/turns\/visit\/(new|\d+)$/, view: ({ params }) => go(`/alerts/visit/${params[0]}`, { replace: true }), back: true },
   // Only whoever attends the service (checked in the view and by the database).
   { re: /^\/turns\/panel\/(\d+)$/, view: servicePanelView, title: 'Panel del servicio', back: true },
   { re: /^\/services$/, view: servicesView, title: 'Servicios', allow: may('services'), back: true },
@@ -158,6 +160,33 @@ function renderShell(route, path) {
   }
 }
 
+let lastPath = null;
+
+/** Where a new screen comes in from: deeper slides in from the right, back from the left, a tab fades up. */
+function enterFrom(from, to) {
+  if (!from) return 'enter-up';
+  if (to.startsWith(`${from}/`)) return 'enter-in';
+  if (from.startsWith(`${to}/`)) return 'enter-back';
+  return 'enter-up';
+}
+
+/** The figures of a screen that just opened count up to their value (not on each refresh, nor with less motion). */
+function countUp(root) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for (const n of root.querySelectorAll('.stat strong')) {
+    const end = Number(n.textContent.trim());
+    if (!Number.isInteger(end) || end < 2) continue;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / 600);
+      n.textContent = String(Math.round(end * (1 - (1 - t) ** 3)));
+      if (t < 1 && n.isConnected) requestAnimationFrame(step);
+    };
+    n.textContent = '0';
+    requestAnimationFrame(step);
+  }
+}
+
 async function router() {
   const [rawPath, queryString = ''] = location.hash.replace(/^#/, '').split('?');
   const path = rawPath || '/';
@@ -182,8 +211,10 @@ async function router() {
 
   const seq = ++navSeq;
   const el = document.createElement('div');
-  el.className = 'view-inner';
-  el.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+  el.className = `view-inner${path === lastPath ? '' : ` enter ${enterFrom(lastPath, path)}`}`;
+  lastPath = path;
+  // While it loads: the shape of a screen (grey blocks where the cards will be), not an empty page.
+  el.innerHTML = '<div class="loading skeleton" aria-busy="true" aria-label="Cargando"><i></i><i></i><i></i><i></i></div>';
 
   if (route.bare) {
     shellKey = null;
@@ -212,6 +243,7 @@ async function router() {
 
   try {
     await route.view(ctx);
+    if (seq === navSeq && el.classList.contains('enter')) countUp(el);
   } catch (err) {
     if (seq !== navSeq) return;
     el.innerHTML = String(html`
@@ -230,7 +262,11 @@ async function router() {
 function onPush(e) {
   refreshUnread();
   const notice = e.detail;
-  if (!notice?.urgent || !state.me || document.visibilityState !== 'visible') return;
+  if (!notice?.urgent || !state.me) return;
+  if (document.visibilityState !== 'visible') {
+    blinkTitle(/^#\/turns\/\d+$/.test(notice.link || '') ? 'Turno nuevo' : 'Aviso urgente');
+    return;
+  }
   if (notice.link && location.hash === notice.link) return;
   showAlarm(notice, {
     onOpen: () => {

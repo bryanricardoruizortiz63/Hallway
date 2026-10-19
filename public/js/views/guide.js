@@ -37,11 +37,11 @@ function tabText(path, user) {
         ? 'Quién falta hoy, quién lo cubre y lo que falta por confirmar. Aquí registras la ausencia de un empleado.'
         : 'Quién falta hoy, quién lo cubre y lo que falta por confirmar. Aquí también reportas las tuyas.';
     case '/alerts':
-      return 'Un estudiante que no ha llegado, salidas, relevos y mantenimiento (derrame, limpieza, baño, basura).';
-    case '/turns':
       return can(user, 'visitors')
-        ? 'Enfermería y Trabajo Social: pide turno para un estudiante. Aquí también avisas cuando llega un padre y ves la respuesta.'
-        : 'Enfermería y Trabajo Social: pide turno para un estudiante y te avisamos cuando lo llamen.';
+        ? 'Un estudiante que no ha llegado, salidas y relevos. Aquí también avisas cuando llega un padre y ves la respuesta.'
+        : 'Un estudiante que no ha llegado, salidas, relevos y los padres que te buscan.';
+    case '/turns':
+      return 'Enfermería, Trabajo Social y mantenimiento (derrame, limpieza, baño, basura): pide turno y te avisamos cuando lo llamen.';
     case '/maintenance':
       return 'Los pedidos de limpieza que te tocan.';
     case '/live':
@@ -121,12 +121,12 @@ function tasks(user) {
     ['#/rooms', 'room', 'Pedir el salón de conferencias', `${where('/rooms', 'Salón de conferencias')} › Reservar el salón`],
     ['#/rooms/history', 'list', 'Ver las reservas canceladas y su historial', `${where('/rooms', 'Salón de conferencias')} › Historial y canceladas`],
     ['#/turns', 'pulse', 'Mandar un estudiante a Enfermería o Trabajo Social', `${where('/turns', 'Turnos')} › Pedir turno`],
-    can(user, 'visitors') ? ['#/turns/visit/new', 'door', 'Avisar que llegó un padre', `${where('/turns', 'Turnos')} › Llegó una visita`] : null,
+    can(user, 'visitors') ? ['#/alerts/visit/new', 'door', 'Avisar que llegó un padre', 'Alertas › Llegó una visita'] : null,
     ['#/alerts/new/missing', 'alert', 'Avisar que un estudiante no ha llegado', 'Alertas › No ha llegado'],
     ['#/alerts/new/pickup', 'logout', 'Avisar que vienen a buscar a un estudiante', 'Alertas › Salida'],
     fixesOnly(user)
       ? ['#/maintenance', 'wrench', 'Ver los pedidos de limpieza', 'Pedidos']
-      : ['#/maintenance/new', 'wrench', 'Pedir limpieza', 'Alertas › Mantenimiento'],
+      : ['#/maintenance/new', 'wrench', 'Pedir limpieza', `${where('/turns', 'Turnos')} › Mantenimiento`],
     ['#/calendar', 'calendar', 'Ver el horario y los días sin clases', 'Más › Calendario escolar'],
     ['#/notifications', 'bell', 'Ver mis avisos', 'La campana de arriba'],
     ['#/profile', 'user', 'Activar notificaciones o cambiar mi contraseña', 'Más › Mi perfil'],

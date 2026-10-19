@@ -1,5 +1,5 @@
 // Visitas: a parent (or anyone from outside) arrives and asks for someone. Whoever receives visits (Seguridad,
-// Secretaría, the dirección… by the "visitors" permission) notes it in Turnos: who came, whether they have an
+// Secretaría, the dirección… by the "visitors" permission) notes it in Alertas: who came, whether they have an
 // appointment, whom they're looking for (a service or one person) and where they're waiting. That person answers
 // "Voy en camino", "Que pase a mi oficina", "Que espere" or something else, and whoever noted it hears the answer.
 import { answerVisit, closeVisit, createVisit, getVisit, markAlertsRead, visitTargets } from '../backend.js';
@@ -116,7 +116,7 @@ async function sendClose(v, status) {
   return true;
 }
 
-// ---- In Turnos -----------------------------------------------------------------------------
+// ---- In Alertas ----------------------------------------------------------------------------
 
 function visitItem(v, me) {
   const t = visitTag(v);
@@ -126,7 +126,7 @@ function visitItem(v, me) {
     ? [v.student, `espera en ${v.place}`, `avisó ${v.created_by_name}`]
     : [v.student, `busca a ${v.target_name}`, `en ${v.place}`];
   return html`<div class="item alert-item ${forMe && v.status === 'waiting' ? 'is-urgent' : ''} ${open ? '' : 'is-muted'}" data-visit="${v.id}">
-    <a class="item-link" href="#/turns/visit/${v.id}">
+    <a class="item-link" href="#/alerts/visit/${v.id}">
       <span class="item-icon">${icon('door')}</span>
       <span class="item-main">
         <strong>${v.visitor_name}</strong>
@@ -140,7 +140,7 @@ function visitItem(v, me) {
 }
 
 /**
- * Turnos: "Te buscan" (open visits for me or my services) and, for whoever receives visits, today's visits and
+ * Alertas: "Te buscan" (open visits for me or my services) and, for whoever receives visits, today's visits and
  * the button to note a new one. Nothing for the rest.
  */
 export function visitsSection(visits, me) {
@@ -161,7 +161,7 @@ export function visitsSection(visits, me) {
       ? html`<section class="section" data-visits>
           <h3 class="section-title">Visitas ${unanswered ? html`<span class="count warn">${unanswered} sin respuesta</span>` : ''}</h3>
           <div class="alert-actions">
-            <a class="alert-action" href="#/turns/visit/new">${icon('door', 26)}<strong>Llegó una visita</strong><small>Un padre busca a alguien</small></a>
+            <a class="alert-action" href="#/alerts/visit/new">${icon('door', 26)}<strong>Llegó una visita</strong><small>Un padre busca a alguien</small></a>
           </div>
           ${today.length ? html`<div class="list">${today.map((v) => visitItem(v, me))}</div>` : html`<p class="hint">Hoy no han llegado visitas.</p>`}
         </section>`
@@ -298,7 +298,7 @@ export async function newVisitView({ el }) {
       });
       rememberPlace(where);
       toast(`Avisado. Te llega aquí la respuesta de ${v.target_name}.`, 'ok');
-      go(`/turns/visit/${v.id}`, { replace: true });
+      go(`/alerts/visit/${v.id}`, { replace: true });
     });
   });
 }

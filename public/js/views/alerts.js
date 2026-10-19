@@ -10,8 +10,8 @@ import {
   getPickup,
   getRelief,
   listAlerts,
+  listVisits,
   markAlertsRead,
-  myOpenMaintenance,
   requestRelief,
   resolveStudentAlert,
   takeRelief,
@@ -21,7 +21,7 @@ import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
 import { confirmStudent, fact, keepFresh, studentFields, studentFrom } from './students.js';
-import { requestItem } from './maintenance.js';
+import { bindVisits, visitsSection } from './visits.js';
 
 // A relief request nobody answered in this time is shown as expired.
 const RELIEF_OPEN_MIN = 30;
@@ -160,7 +160,7 @@ export async function alertsView(ctx) {
     const order = { arrived: 0, on_the_way: 1, scheduled: 2 };
     pickups.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || String(a.expected_time || '99').localeCompare(String(b.expected_time || '99')));
     const reliefs = data.reliefs;
-    const quiet = !missingOpen.length && !pickups.length && !reliefs.length && !data.maintenance.length;
+    const quiet = !missingOpen.length && !pickups.length && !reliefs.length;
 
     el.innerHTML = String(html`
       <div class="stack">
@@ -170,8 +170,9 @@ export async function alertsView(ctx) {
           ${canAskRelief(me)
             ? html`<button type="button" class="alert-action" data-ask-relief>${icon('swap', 26)}<strong>Pedir relevo</strong><small>Salgo un momento</small></button>`
             : ''}
-          <a class="alert-action" href="#/maintenance/new">${icon('wrench', 26)}<strong>Mantenimiento</strong><small>Derrame, limpieza, baño, basura</small></a>
         </div>
+
+        ${visitsSection(data.visits, me)}
 
         ${missingOpen.length
           ? html`<section class="section">
@@ -191,13 +192,6 @@ export async function alertsView(ctx) {
           ? html`<section class="section">
               <h3 class="section-title">Salidas de hoy</h3>
               <div class="list">${pickups.map(pickupItem)}</div>
-            </section>`
-          : ''}
-
-        ${data.maintenance.length
-          ? html`<section class="section">
-              <h3 class="section-title">Tus solicitudes de mantenimiento</h3>
-              <div class="list">${data.maintenance.map((m) => requestItem(m, me, { action: false }))}</div>
             </section>`
           : ''}
 
@@ -225,18 +219,20 @@ export async function alertsView(ctx) {
       render();
     });
     bindReliefButtons(el, load);
+    bindVisits(el, data.visits, load);
   };
 
   async function load() {
-    const [next, maintenance] = await Promise.all([listAlerts(), myOpenMaintenance(me.id)]);
+    const [next, visits] = await Promise.all([listAlerts(), listVisits()]);
     if (!isCurrent()) return;
-    data = { ...next, maintenance };
+    data = { ...next, visits };
     render();
   }
 
   await load();
-  // Seen: stops the repeated pushes of these alerts for me.
+  // Seen: stops the repeated pushes of these alerts, and of the visits on screen, for me.
   markAlertsRead().catch(() => {});
+  for (const v of data.visits) markAlertsRead(`#/turns/visit/${v.id}`).catch(() => {});
   keepFresh(ctx, load);
 }
 
