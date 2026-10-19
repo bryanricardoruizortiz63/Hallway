@@ -447,7 +447,8 @@ export async function turnsView(ctx) {
                 })}
                 <a class="alert-action" href="#/maintenance/new">
                   <span class="service-icon">${icon('wrench', 22)}</span>
-                  <span class="service-text"><strong>Mantenimiento</strong><small>Derrame, limpieza, baño, basura</small></span>
+                  <span class="service-text"><strong>Mantenimiento</strong>
+                    <small>Derrame, limpieza, baño, basura</small></span>
                   ${icon('chevron', 18)}</a>
               </div>
             </section>
