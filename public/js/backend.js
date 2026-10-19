@@ -230,18 +230,31 @@ export async function dashboard(today = todayStr()) {
 }
 
 export async function getAbsence(id) {
-  const [absence, attachments, comments, history] = await Promise.all([
+  const [absence, attachments, comments, history, links] = await Promise.all([
     run(sb.from('absences_v').select('*').eq('id', id).maybeSingle()),
     run(sb.from('attachments').select('*').eq('absence_id', id).order('id')),
     run(sb.from('comments').select('*').eq('absence_id', id).order('id')),
     run(sb.from('absence_history').select('*').eq('absence_id', id).order('id')),
+    getCoverLinks(id).catch(() => []),
   ]);
   if (!absence) throw new ApiError('No se encontró la ausencia.', 404);
   await signFiles(attachments);
-  // The plan or material for whoever covers: the coverage form says they get it.
+  // The plan, material and links for whoever covers: the coverage form says they get them.
   absence.cover_files = attachments.filter((f) => f.for_cover).length;
-  return { absence, attachments, comments, history };
+  absence.cover_links = links.length;
+  return { absence, attachments, comments, history, links };
 }
+
+/** The links for whoever covers (a Google Doc, a presentation, a video…); whoever covers can read them too. */
+export const getCoverLinks = (absenceId) =>
+  run(
+    sb.from('cover_links').select('id, url, label, added_by, added_by_name, created_at')
+      .eq('absence_id', absenceId).is('removed_at', null).order('id'),
+  );
+/** links: [{ url, label }] (only http or https; up to 5 per absence). Whoever covers now gets a notice. */
+export const addCoverLinks = (absenceId, links) => rpc('add_cover_links', { p_absence_id: absenceId, p_links: links });
+/** Takes a link away: whoever left it, or whoever manages the staff. */
+export const removeCoverLink = (id) => rpc('remove_cover_link', { p_id: id });
 
 /** Links that open each file for an hour (url; null if it can't be read). */
 async function signFiles(files) {

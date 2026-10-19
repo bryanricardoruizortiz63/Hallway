@@ -2668,6 +2668,12 @@ input[type='color'] {
   background: var(--muted);
 }
 
+/* Links for whoever covers: as typed (docs.google.com, not Docs.google.com). */
+[data-links] .item-main strong::first-letter,
+[data-links] .item-sub::first-letter {
+  text-transform: none;
+}
+
 /* In-app alarm (urgent notice while the app is open). */
 .alarm {
   position: fixed;
