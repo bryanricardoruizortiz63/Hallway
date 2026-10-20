@@ -3771,17 +3771,17 @@ body.tv-mode {
   background: var(--bg);
 }
 
-/* Over the app while it appears, then it fades out. */
+/* Over the app while it appears (nothing behind it can be tapped yet), then it fades out. */
 .boot.is-leaving {
   position: fixed;
   inset: 0;
   z-index: 300;
-  pointer-events: none;
   transition: opacity 0.35s ease;
 }
 
 .boot.is-leaving.is-gone {
   opacity: 0;
+  pointer-events: none;
 }
 
 .hall {

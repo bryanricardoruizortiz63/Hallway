@@ -112,12 +112,32 @@ const appRoot = document.getElementById('app');
 // The hallway of index.html while the app starts: it stays over the first screen and then fades out.
 let bootScreen = appRoot.querySelector('.boot');
 
+// The first opening of the day shows the walk down the hall for at least this long; the rest only fade it out.
+const BOOT_FIRST_OF_DAY_MS = 1500;
+const BOOT_DAY_KEY = 'lah:boot-day';
+
+/** Whether this is the first time the app opens today on this device (and from now on, it isn't). */
+function firstOpenToday() {
+  const today = new Date().toDateString();
+  try {
+    if (localStorage.getItem(BOOT_DAY_KEY) === today) return false;
+    localStorage.setItem(BOOT_DAY_KEY, today);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 function leaveBoot() {
   if (!bootScreen) return;
   const el = bootScreen;
   bootScreen = null;
-  requestAnimationFrame(() => el.classList.add('is-gone'));
-  setTimeout(() => el.remove(), 400);
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait = !still && firstOpenToday() ? Math.max(0, BOOT_FIRST_OF_DAY_MS - performance.now()) : 0;
+  setTimeout(() => {
+    requestAnimationFrame(() => el.classList.add('is-gone'));
+    setTimeout(() => el.remove(), 400);
+  }, wait);
 }
 let shellKey = null;
 let navSeq = 0;
