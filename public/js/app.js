@@ -109,6 +109,36 @@ const ROUTES = [
 ];
 
 const appRoot = document.getElementById('app');
+// The hallway of index.html while the app starts: it stays over the first screen and then fades out.
+let bootScreen = appRoot.querySelector('.boot');
+
+// The first opening of the day shows the walk down the hall for at least this long; the rest only fade it out.
+const BOOT_FIRST_OF_DAY_MS = 1500;
+const BOOT_DAY_KEY = 'lah:boot-day';
+
+/** Whether this is the first time the app opens today on this device (and from now on, it isn't). */
+function firstOpenToday() {
+  const today = new Date().toDateString();
+  try {
+    if (localStorage.getItem(BOOT_DAY_KEY) === today) return false;
+    localStorage.setItem(BOOT_DAY_KEY, today);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+function leaveBoot() {
+  if (!bootScreen) return;
+  const el = bootScreen;
+  bootScreen = null;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait = !still && firstOpenToday() ? Math.max(0, BOOT_FIRST_OF_DAY_MS - performance.now()) : 0;
+  setTimeout(() => {
+    requestAnimationFrame(() => el.classList.add('is-gone'));
+    setTimeout(() => el.remove(), 400);
+  }, wait);
+}
 let shellKey = null;
 let navSeq = 0;
 let cleanups = [];
@@ -209,6 +239,11 @@ async function router() {
   if (path === '/login' && user) return go(homePath(), { replace: true });
   if (route.allow && !route.allow(user)) return go(homePath(), { replace: true });
 
+  if (bootScreen && !bootScreen.classList.contains('is-leaving')) {
+    bootScreen.classList.add('is-leaving');
+    document.body.append(bootScreen);
+  }
+
   const seq = ++navSeq;
   const el = document.createElement('div');
   el.className = `view-inner${path === lastPath ? '' : ` enter ${enterFrom(lastPath, path)}`}`;
@@ -244,8 +279,10 @@ async function router() {
   try {
     await route.view(ctx);
     if (seq === navSeq && el.classList.contains('enter')) countUp(el);
+    if (seq === navSeq) leaveBoot();
   } catch (err) {
     if (seq !== navSeq) return;
+    leaveBoot();
     el.innerHTML = String(html`
       <div class="empty">
         ${icon('alert', 40)}
