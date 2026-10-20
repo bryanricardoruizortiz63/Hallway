@@ -84,8 +84,8 @@ export function showAlarm({ title, body, link }, { onOpen, onClose } = {}) {
   overlay.innerHTML = String(html`
     <div class="alarm-card">
       <span class="alarm-icon">${icon(turn ? 'pulse' : 'alert', 34)}</span>
-      ${turn ? html`<p class="alarm-kicker">Turno nuevo</p>` : ''}
-      <h2 id="alarm-title">${(turn ? (title || '').replace(/^📋\s*/, '') : title) || 'Aviso urgente'}</h2>
+      ${turn ? html`<p class="alarm-kicker">${/^❓/.test(title || '') ? '¿Ya llegó?' : 'Turno nuevo'}</p>` : ''}
+      <h2 id="alarm-title">${(turn ? (title || '').replace(/^(📋|❓)\s*/u, '') : title) || 'Aviso urgente'}</h2>
       ${body ? html`<p>${body}</p>` : ''}
       <button type="button" class="btn btn-primary btn-lg btn-block" data-alarm-open>${turn ? 'Ver turno' : 'Ver'}</button>
       <button type="button" class="btn btn-ghost btn-block" data-alarm-close>Cerrar</button>

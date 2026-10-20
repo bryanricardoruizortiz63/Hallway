@@ -9,6 +9,7 @@ import {
   myOpenMaintenance,
   noteTurnResolution,
   requestService,
+  returningStudents,
   saveService,
   servicesOverview,
   setMyServiceStatus,
@@ -61,14 +62,21 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export const TIMED = ['sent', 'returning'];
 const pastDue = (t) => !!t.due_at && Date.now() > new Date(t.due_at);
 
-/** Past the time to get to the service, or back to class. */
+/**
+ * Past the time to get to the service, or back to class. On the way back, only once it's confirmed: when the time
+ * is up the teachers are asked «¿Ya llegó?» first (askedBack), since the student may be in another class.
+ */
 export const isLate = (t) =>
-  (['called', 'sent'].includes(t.status) && (!!t.late_at || pastDue(t))) || (t.status === 'returning' && (!!t.return_late_at || pastDue(t)));
+  (['called', 'sent'].includes(t.status) && (!!t.late_at || pastDue(t))) || (t.status === 'returning' && !!t.return_late_at);
+
+/** Time's up on the way back and nobody confirmed yet: «¿Ya llegó?». */
+export const askedBack = (t) => t.status === 'returning' && !t.return_late_at && (!!t.return_check_at || pastDue(t));
 
 /** The teacher who asked, has the student now, or teaches the group. */
 const teacherSide = (t, me) => t.created_by === me.id || t.teacher_id === me.id || (me.groups || []).includes(t.group_name);
 
 export function statusTag(t) {
+  if (askedBack(t)) return { label: '¿Ya llegó?', cls: 'tag-warn' };
   if (isLate(t)) return { label: t.status === 'returning' ? 'No ha llegado al salón' : `No ha llegado a ${t.service_name}`, cls: 'tag-danger' };
   const open = {
     waiting: { label: t.position ? `En fila · turno ${t.position}` : 'En fila', cls: '' },
@@ -133,7 +141,8 @@ const STEP_DONE = {
   sent: 'Listo. Corre el tiempo para que llegue.',
   arrived: 'Llegada anotada.',
   return: 'Le avisamos al maestro que regresa.',
-  back: 'Turno terminado.',
+  back: 'Listo. Le avisamos a quien lo envió.',
+  missing: 'Se avisó a Seguridad, al servicio y a los maestros de su grupo.',
   finish: 'Turno terminado.',
   cancel: 'Turno cancelado.',
   take: 'Ahora los avisos de este turno te llegan a ti.',
@@ -199,6 +208,16 @@ async function doStep(t, step, value) {
     const ok = await dialog({ title: `¿Cancelar este ${what}?`, message: who(t), confirmText: `Cancelar ${what}`, cancelText: 'Volver', danger: true });
     if (!ok) return false;
   }
+  if (step === 'missing') {
+    const ok = await dialog({
+      title: `¿${t.student_name} no ha llegado?`,
+      message: 'Se avisa ahora a Seguridad, al servicio y a los maestros de su grupo. Si después llega, toca «Está en mi clase».',
+      confirmText: 'No ha llegado',
+      cancelText: 'Volver',
+      danger: true,
+    });
+    if (!ok) return false;
+  }
   if (step === 'take') {
     const v = await dialog({
       title: `¿${t.student_name} está contigo?`,
@@ -250,7 +269,10 @@ function turnActions(t, service, me) {
   }
   if (teacher && !isSupport(t)) {
     if (t.status === 'called') add('sent', 'Ya salió', 'primary');
-    if (t.status === 'returning') add('back', 'Llegó al salón', 'primary');
+    if (askedBack(t)) {
+      add('back', 'Está en mi clase', 'primary');
+      add('missing', 'No ha llegado', 'ghost-danger');
+    } else if (t.status === 'returning') add('back', 'Llegó al salón', 'primary');
     if (['waiting', 'called', 'on_the_way', 'returning'].includes(t.status) && t.teacher_id !== me.id && !service.serves) add('take', 'Está conmigo');
   }
   if (service.serves && t.status === 'returning') add('back', 'Llegó al salón');
@@ -259,7 +281,7 @@ function turnActions(t, service, me) {
   return out;
 }
 
-const ICONS = { call: 'bell', go: 'send', sent: 'send', arrived: 'check', return: 'back', back: 'check', finish: 'check', take: 'user' };
+const ICONS = { call: 'bell', go: 'send', sent: 'send', arrived: 'check', return: 'back', back: 'check', missing: 'alert', finish: 'check', take: 'user' };
 // In the lists the button sits next to the student, so it says less.
 const SHORT = { go: 'Voy', return: 'Regresa', back: 'Llegó' };
 
@@ -341,6 +363,48 @@ function studentTurnItem(t, me) {
   </div>`;
 }
 
+/**
+ * «Regresando a clase»: the students coming back from a service right now that aren't in my lists. The class may
+ * have changed meanwhile, so any teacher who has one can say so. Only the name and the group, never the service.
+ */
+function returningSection(list) {
+  if (!list.length) return '';
+  return html`<section class="section" data-returning>
+    <h3 class="section-title">Regresando a clase <span class="count">${list.length}</span></h3>
+    <div class="list">${list.map((x) => html`<div class="item" data-back-id="${x.id}">
+      <span class="item-icon">${icon('back')}</span>
+      <span class="item-main">
+        <strong>${x.student_name} (${x.group_name})</strong>
+        <span class="item-tags">${x.asked
+          ? html`<span class="tag tag-warn">¿Ya llegó?</span>`
+          : html`<span class="tag">${icon('clock', 14)} salió ${timeAgo(x.returning_at)}</span>`}</span>
+      </span>
+      <button type="button" class="btn btn-primary btn-sm" data-in-class>${icon('check', 16)} Está en mi clase</button>
+    </div>`)}</div>
+    <p class="hint">Si uno de ellos llega a tu clase, toca «Está en mi clase» y le avisamos a quien lo envió. Así no se avisa a Seguridad por error.</p>
+  </section>`;
+}
+
+function bindReturning(root, list, reload) {
+  for (const btn of root.querySelectorAll('[data-in-class]')) {
+    btn.addEventListener('click', () => {
+      const x = list.find((r) => r.id === Number(btn.closest('[data-back-id]').dataset.backId));
+      busy(btn, async () => {
+        const ok = await dialog({
+          title: `¿${x.student_name} está en tu clase?`,
+          message: `${x.student_name} (${x.group_name}) regresaba a clase. Le avisamos a quien lo envió que ya llegó.`,
+          confirmText: 'Está en mi clase',
+          cancelText: 'Volver',
+        });
+        if (!ok) return;
+        await advanceTurn(x.id, 'back');
+        toast(STEP_DONE.back, 'ok');
+        await reload();
+      });
+    });
+  }
+}
+
 /** A support request (Soporte IT): what, where and how it's going; for whoever asked, or in the service's list. */
 function supportItem(t, { serving = false } = {}) {
   const s = statusTag(t);
@@ -397,7 +461,7 @@ export async function turnsView(ctx) {
   let showDone = false;
 
   const render = () => {
-    const { services, turns, maintenance } = data;
+    const { services, turns, maintenance, returning } = data;
     const myServices = services.filter((s) => s.serves);
     const myIds = new Set(myServices.map((s) => s.id));
     const toRequest = services.filter((s) => s.active && !s.serves);
@@ -433,6 +497,8 @@ export async function turnsView(ctx) {
             </div>
           </section>`;
         })}
+
+        ${returningSection(returning.filter((x) => !turns.some((t) => t.id === x.id)))}
 
         <section class="section">
               <h3 class="section-title">Pedir turno</h3>
@@ -505,12 +571,15 @@ export async function turnsView(ctx) {
       render();
     });
     bindSteps(el, turns, load);
+    bindReturning(el, returning, load);
   };
 
   async function load() {
-    const [services, turns, maintenance] = await Promise.all([servicesOverview(), listTurns(), myOpenMaintenance(me.id)]);
+    const [services, turns, maintenance, returning] = await Promise.all([
+      servicesOverview(), listTurns(), myOpenMaintenance(me.id), returningStudents().then((x) => x || [], () => []),
+    ]);
     if (!isCurrent()) return;
-    data = { services, turns, maintenance };
+    data = { services, turns, maintenance, returning };
     render();
   }
 
@@ -678,7 +747,10 @@ function teacherHint(t) {
   if (t.status === 'called') {
     return 'Le toca ahora: envíalo y toca «Ya salió». El tiempo para llegar empieza entonces. Hasta que alguien lo toque, te lo recordamos cada 3 minutos, a ti y a los maestros de su grupo.';
   }
-  if (t.status === 'returning') return 'Toca «Llegó al salón» cuando llegue. Si no llega a tiempo, se avisa a Seguridad.';
+  if (askedBack(t)) return 'Se acabó el tiempo para llegar. Si está en tu clase, toca «Está en mi clase»; si no, «No ha llegado». Si nadie responde en 3 minutos, se avisa a Seguridad.';
+  if (t.status === 'returning') {
+    return 'Toca «Llegó al salón» cuando llegue. Puede llegar a otra clase: cualquier maestro lo puede marcar. Si se acaba el tiempo, primero te preguntamos a ti y a los maestros de su grupo; si nadie responde en 3 minutos, se avisa a Seguridad.';
+  }
   return '';
 }
 

@@ -710,6 +710,8 @@ export const requestService = ({ serviceId, student, room, severity, reason, not
 
 /** step: call · go · sent · arrived · return · back · finish (value: the outcome) · cancel · take (value: the room). */
 export const advanceTurn = (id, step, value) => rpc('advance_turn', { p_id: id, p_step: step, p_value: value || null });
+/** The students on their way back to class (any teacher may have them): name, group and since when only. */
+export const returningStudents = () => rpc('returning_students');
 /** What the service did (Soporte IT), for the panel and the Excel. */
 export const noteTurnResolution = (id, text) => rpc('note_turn_resolution', { p_id: id, p_text: text || null });
 
