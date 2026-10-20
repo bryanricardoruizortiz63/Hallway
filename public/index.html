@@ -23,7 +23,13 @@
   </head>
   <body>
     <div id="app">
-      <div class="loading"><span class="spinner"></span></div>
+      <!-- While the app starts: walking down a school hallway. -->
+      <div class="boot" role="status" aria-label="Cargando Hallway">
+        <div class="hall" aria-hidden="true">
+          <i class="hall-ceiling"></i><i class="hall-floor"></i><i class="hall-wall left"></i><i class="hall-wall right"></i><i class="hall-end"></i>
+        </div>
+        <p class="boot-name">Hallway</p>
+      </div>
     </div>
     <noscript>Hallway necesita JavaScript para funcionar.</noscript>
   </body>

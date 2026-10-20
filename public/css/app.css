@@ -3755,3 +3755,143 @@ body.tv-mode {
 .item[data-turn] > .btn {
   align-self: center;
 }
+
+/* ---- Startup -------------------------------------------------------------- */
+/* While the app starts, walking down a school hallway: the floor comes toward you, the classroom doors pass by,
+   light at the end. Plain CSS in 3D; it stands still with «reducir movimiento». */
+
+.boot {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.hall {
+  --tile: 46px;
+  --door: var(--primary);
+  --wall: color-mix(in srgb, var(--primary-soft) 70%, var(--surface));
+  --floor-a: color-mix(in srgb, var(--primary) 16%, var(--surface));
+  --floor-b: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  position: relative;
+  width: 200px;
+  height: 200px;
+  overflow: hidden;
+  border-radius: 28px;
+  background: var(--surface);
+  perspective: 120px;
+  perspective-origin: 50% 46%;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.hall i {
+  position: absolute;
+  display: block;
+  backface-visibility: hidden;
+}
+
+/* Floor and ceiling: long planes laid back toward the end of the hall. */
+.hall-floor,
+.hall-ceiling {
+  left: 0;
+  width: 100%;
+  height: 900px;
+}
+
+.hall-floor {
+  bottom: 0;
+  transform-origin: 50% 100%;
+  transform: rotateX(90deg);
+  background: repeating-linear-gradient(to top, var(--floor-a) 0 calc(var(--tile) / 2), var(--floor-b) 0 var(--tile));
+}
+
+.hall-ceiling {
+  top: 0;
+  transform-origin: 50% 0;
+  transform: rotateX(-90deg);
+  /* The lights, one every two tiles. */
+  background: repeating-linear-gradient(to bottom, transparent 0 calc(var(--tile) * 1.6), color-mix(in srgb, #fff 80%, var(--primary)) 0 calc(var(--tile) * 2)) var(--surface-2);
+}
+
+/* The walls, with a classroom door every few steps. */
+.hall-wall {
+  top: 0;
+  width: 900px;
+  height: 100%;
+  background:
+    repeating-linear-gradient(to var(--dir), transparent 0 calc(var(--tile) * 2.2), var(--door) 0 calc(var(--tile) * 3)) 0 0 / 100% 78% no-repeat,
+    var(--wall);
+}
+
+.hall-wall.left {
+  --dir: right;
+  left: 0;
+  transform-origin: 0 50%;
+  transform: rotateY(90deg);
+}
+
+.hall-wall.right {
+  --dir: left;
+  right: 0;
+  transform-origin: 100% 50%;
+  transform: rotateY(-90deg);
+}
+
+/* The light at the end. */
+.hall-end {
+  left: 50%;
+  top: 46%;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #fff 0 18%, color-mix(in srgb, #fff 60%, transparent) 40%, transparent 70%);
+}
+
+.boot-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hall-floor,
+  .hall-ceiling {
+    animation: hall-walk 0.9s linear infinite;
+  }
+
+  .hall-wall {
+    animation: hall-pass 0.9s linear infinite;
+  }
+
+  .hall-end {
+    animation: hall-glow 1.8s ease-in-out infinite alternate;
+  }
+
+  @keyframes hall-walk {
+    to {
+      background-position-y: calc(var(--tile) * 2);
+    }
+  }
+
+  @keyframes hall-pass {
+    to {
+      background-position-x: calc(var(--tile) * 3 * var(--sign, 1));
+    }
+  }
+
+  .hall-wall.left {
+    --sign: -1;
+  }
+
+  @keyframes hall-glow {
+    to {
+      transform: translate(-50%, -50%) scale(1.25);
+      opacity: 0.8;
+    }
+  }
+}
