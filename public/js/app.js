@@ -109,6 +109,16 @@ const ROUTES = [
 ];
 
 const appRoot = document.getElementById('app');
+// The hallway of index.html while the app starts: it stays over the first screen and then fades out.
+let bootScreen = appRoot.querySelector('.boot');
+
+function leaveBoot() {
+  if (!bootScreen) return;
+  const el = bootScreen;
+  bootScreen = null;
+  requestAnimationFrame(() => el.classList.add('is-gone'));
+  setTimeout(() => el.remove(), 400);
+}
 let shellKey = null;
 let navSeq = 0;
 let cleanups = [];
@@ -209,6 +219,11 @@ async function router() {
   if (path === '/login' && user) return go(homePath(), { replace: true });
   if (route.allow && !route.allow(user)) return go(homePath(), { replace: true });
 
+  if (bootScreen && !bootScreen.classList.contains('is-leaving')) {
+    bootScreen.classList.add('is-leaving');
+    document.body.append(bootScreen);
+  }
+
   const seq = ++navSeq;
   const el = document.createElement('div');
   el.className = `view-inner${path === lastPath ? '' : ` enter ${enterFrom(lastPath, path)}`}`;
@@ -244,8 +259,10 @@ async function router() {
   try {
     await route.view(ctx);
     if (seq === navSeq && el.classList.contains('enter')) countUp(el);
+    if (seq === navSeq) leaveBoot();
   } catch (err) {
     if (seq !== navSeq) return;
+    leaveBoot();
     el.innerHTML = String(html`
       <div class="empty">
         ${icon('alert', 40)}

@@ -3757,8 +3757,9 @@ body.tv-mode {
 }
 
 /* ---- Startup -------------------------------------------------------------- */
-/* While the app starts, walking down a school hallway: the floor comes toward you, the classroom doors pass by,
-   light at the end. Plain CSS in 3D; it stands still with «reducir movimiento». */
+/* While the app starts, walking down a school hallway: the floor seams, the ceiling lights and the classroom doors
+   come toward you from the light at the end. Flat shapes and scaling only (no 3D), so every phone draws it the same;
+   it stands still with «reducir movimiento». */
 
 .boot {
   display: grid;
@@ -3767,87 +3768,111 @@ body.tv-mode {
   gap: 18px;
   min-height: 100dvh;
   padding: 24px;
+  background: var(--bg);
+}
+
+/* Over the app while it appears, then it fades out. */
+.boot.is-leaving {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.boot.is-leaving.is-gone {
+  opacity: 0;
 }
 
 .hall {
-  --tile: 46px;
   --door: var(--primary);
   --wall: color-mix(in srgb, var(--primary-soft) 70%, var(--surface));
-  --floor-a: color-mix(in srgb, var(--primary) 16%, var(--surface));
-  --floor-b: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  --floor: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  --seam: color-mix(in srgb, var(--primary) 26%, var(--surface));
+  --ceiling: var(--surface-2);
+  --lamp: color-mix(in srgb, #fff 75%, var(--primary));
   position: relative;
   width: 200px;
   height: 200px;
   overflow: hidden;
   border-radius: 28px;
-  background: var(--surface);
-  perspective: 120px;
-  perspective-origin: 50% 46%;
+  background: var(--wall);
   box-shadow: 0 0 0 1px var(--border);
 }
 
-.hall i {
+.hall i,
+.hall span,
+.hall b {
   position: absolute;
   display: block;
-  backface-visibility: hidden;
 }
 
-/* Floor and ceiling: long planes laid back toward the end of the hall. */
+/* The hall itself, in perspective toward a point a little above the middle (50% 46%). */
+.hall-ceiling,
 .hall-floor,
+.hall-end {
+  inset: 0;
+}
+
 .hall-ceiling {
-  left: 0;
-  width: 100%;
-  height: 900px;
+  background: var(--ceiling);
+  clip-path: polygon(0 0, 100% 0, 60% 36.8%, 40% 36.8%);
 }
 
 .hall-floor {
-  bottom: 0;
-  transform-origin: 50% 100%;
-  transform: rotateX(90deg);
-  background: repeating-linear-gradient(to top, var(--floor-a) 0 calc(var(--tile) / 2), var(--floor-b) 0 var(--tile));
-}
-
-.hall-ceiling {
-  top: 0;
-  transform-origin: 50% 0;
-  transform: rotateX(-90deg);
-  /* The lights, one every two tiles. */
-  background: repeating-linear-gradient(to bottom, transparent 0 calc(var(--tile) * 1.6), color-mix(in srgb, #fff 80%, var(--primary)) 0 calc(var(--tile) * 2)) var(--surface-2);
-}
-
-/* The walls, with a classroom door every few steps. */
-.hall-wall {
-  top: 0;
-  width: 900px;
-  height: 100%;
-  background:
-    repeating-linear-gradient(to var(--dir), transparent 0 calc(var(--tile) * 2.2), var(--door) 0 calc(var(--tile) * 3)) 0 0 / 100% 78% no-repeat,
-    var(--wall);
-}
-
-.hall-wall.left {
-  --dir: right;
-  left: 0;
-  transform-origin: 0 50%;
-  transform: rotateY(90deg);
-}
-
-.hall-wall.right {
-  --dir: left;
-  right: 0;
-  transform-origin: 100% 50%;
-  transform: rotateY(-90deg);
+  background: var(--floor);
+  clip-path: polygon(0 100%, 100% 100%, 60% 56.8%, 40% 56.8%);
 }
 
 /* The light at the end. */
 .hall-end {
-  left: 50%;
-  top: 46%;
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, #fff 0 18%, color-mix(in srgb, #fff 60%, transparent) 40%, transparent 70%);
+  background: radial-gradient(circle at 50% 46%, #fff 0 7%, color-mix(in srgb, #fff 55%, transparent) 14%, transparent 30%);
+}
+
+/* A slice of the hall (a floor seam, a ceiling light and, every other one, a door on each side), drawn at the front
+   and scaled from the end toward you. */
+.hall-step {
+  inset: 0;
+  transform-origin: 50% 46%;
+  transform: scale(0.2);
+  opacity: 0;
+}
+
+.hall-step .seam {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3%;
+  background: var(--seam);
+}
+
+.hall-step .lamp {
+  left: 38%;
+  right: 38%;
+  top: 0;
+  height: 3%;
+  border-radius: 2px;
+  background: var(--lamp);
+}
+
+.hall-step .door {
+  bottom: 0;
+  width: 8%;
+  height: 62%;
+  border-radius: 2px 2px 0 0;
+  background: var(--door);
+}
+
+.hall-step .door.l {
+  left: 0;
+}
+
+.hall-step .door.r {
+  right: 0;
+}
+
+.hall-step:nth-of-type(even) .door {
+  display: none;
 }
 
 .boot-name {
@@ -3859,39 +3884,51 @@ body.tv-mode {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .hall-floor,
-  .hall-ceiling {
-    animation: hall-walk 0.9s linear infinite;
+  .hall-step {
+    animation: hall-step 2.4s cubic-bezier(0.6, 0, 1, 0.6) infinite;
   }
 
-  .hall-wall {
-    animation: hall-pass 0.9s linear infinite;
+  .hall-step:nth-of-type(2) { animation-delay: -0.4s; }
+  .hall-step:nth-of-type(3) { animation-delay: -0.8s; }
+  .hall-step:nth-of-type(4) { animation-delay: -1.2s; }
+  .hall-step:nth-of-type(5) { animation-delay: -1.6s; }
+  .hall-step:nth-of-type(6) { animation-delay: -2s; }
+
+  @keyframes hall-step {
+    from {
+      transform: scale(0.2);
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    to {
+      transform: scale(2.6);
+      opacity: 1;
+    }
   }
 
   .hall-end {
     animation: hall-glow 1.8s ease-in-out infinite alternate;
   }
 
-  @keyframes hall-walk {
-    to {
-      background-position-y: calc(var(--tile) * 2);
-    }
-  }
-
-  @keyframes hall-pass {
-    to {
-      background-position-x: calc(var(--tile) * 3 * var(--sign, 1));
-    }
-  }
-
-  .hall-wall.left {
-    --sign: -1;
-  }
-
   @keyframes hall-glow {
     to {
-      transform: translate(-50%, -50%) scale(1.25);
-      opacity: 0.8;
+      opacity: 0.7;
     }
   }
+}
+
+/* With less motion: the slices stand still along the hall. */
+@media (prefers-reduced-motion: reduce) {
+  .hall-step {
+    opacity: 1;
+  }
+
+  .hall-step:nth-of-type(1) { transform: scale(0.28); }
+  .hall-step:nth-of-type(2) { transform: scale(0.38); }
+  .hall-step:nth-of-type(3) { transform: scale(0.52); }
+  .hall-step:nth-of-type(4) { transform: scale(0.72); }
+  .hall-step:nth-of-type(5) { transform: scale(1); }
+  .hall-step:nth-of-type(6) { transform: scale(1.4); }
 }
