@@ -1139,7 +1139,7 @@ export async function liveServiceView(ctx) {
     const rings = () => alarmKeys(forFilter(board, liveFilter()));
     el.innerHTML = String(html`<div class="stack">
       ${serviceChips(board.services, id)}
-      <p class="hint live-stamp">${icon('refresh', 14)} Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
+      <p class="hint live-stamp"><span class="live-dot" aria-hidden="true"></span> Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
       <div class="stack-sm" data-live-tools>
         ${support ? '' : filterField(f)}
         <div class="quick">${soundButton()}</div>
@@ -1204,7 +1204,7 @@ export async function liveView(ctx) {
     const late = active.filter((t) => t.late).length + b.alerts.length;
     const quiet = !active.length && !b.alerts.length && !b.pickups.length && !b.relief.length && !b.maintenance.length && !b.rooms.length;
     el.innerHTML = String(html`<div class="stack">
-      <p class="hint live-stamp">${icon('refresh', 14)} Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
+      <p class="hint live-stamp"><span class="live-dot" aria-hidden="true"></span> Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
       <div class="stack-sm" data-live-tools>
         ${filterField(f)}
         <div class="quick">${soundButton()}<a class="chip-btn" href="#/live/tv" data-live-tv>${icon('live', 16)} Pantalla grande</a></div>
@@ -1400,7 +1400,7 @@ export async function liveTurnView(ctx) {
       </section>
       <a class="btn btn-secondary btn-block" href="#/live/service/${t.service_id}">${icon('list', 18)} Todos los turnos de hoy de ${t.service_name}</a>
       <a class="btn btn-ghost btn-block" href="#/live">${icon('back', 18)} Todo En vivo</a>
-      <p class="hint live-stamp">${icon('refresh', 14)} Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
+      <p class="hint live-stamp"><span class="live-dot" aria-hidden="true"></span> Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
     </div>`);
   }
 

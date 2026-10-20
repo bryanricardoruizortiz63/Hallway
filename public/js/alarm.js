@@ -72,19 +72,22 @@ function stop() {
  * Shows the alarm (replacing one already on screen). onOpen runs when the person taps "Ver", onClose when
  * they close it; both after the alarm stops.
  */
-export function showAlarm({ title, body }, { onOpen, onClose } = {}) {
+export function showAlarm({ title, body, link }, { onOpen, onClose } = {}) {
   stop();
+  // A turn for the service (Enfermería, Trabajo Social…): its own look, «Turno nuevo» and «Ver turno».
+  const turn = /^#\/turns\/\d+$/.test(link || '');
   overlay = document.createElement('div');
-  overlay.className = 'alarm';
+  overlay.className = turn ? 'alarm alarm-turn' : 'alarm';
   overlay.setAttribute('role', 'alertdialog');
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-labelledby', 'alarm-title');
   overlay.innerHTML = String(html`
     <div class="alarm-card">
-      <span class="alarm-icon">${icon('alert', 34)}</span>
-      <h2 id="alarm-title">${title || 'Aviso urgente'}</h2>
+      <span class="alarm-icon">${icon(turn ? 'pulse' : 'alert', 34)}</span>
+      ${turn ? html`<p class="alarm-kicker">Turno nuevo</p>` : ''}
+      <h2 id="alarm-title">${(turn ? (title || '').replace(/^📋\s*/, '') : title) || 'Aviso urgente'}</h2>
       ${body ? html`<p>${body}</p>` : ''}
-      <button type="button" class="btn btn-primary btn-lg btn-block" data-alarm-open>Ver</button>
+      <button type="button" class="btn btn-primary btn-lg btn-block" data-alarm-open>${turn ? 'Ver turno' : 'Ver'}</button>
       <button type="button" class="btn btn-ghost btn-block" data-alarm-close>Cerrar</button>
     </div>`);
   document.body.append(overlay);
@@ -100,4 +103,29 @@ export function showAlarm({ title, body }, { onOpen, onClose } = {}) {
   ring();
   const until = Date.now() + RING_FOR_MS;
   timer = setInterval(() => (Date.now() > until ? clearInterval(timer) : ring()), RING_EVERY_MS);
+}
+
+let blink = null;
+
+/**
+ * While the app is in the background (another tab, the phone's screen on another app), the tab's title blinks
+ * with the notice, so a computer left on the service panel shows it from the taskbar. It stops on coming back.
+ */
+export function blinkTitle(text) {
+  if (blink || document.visibilityState === 'visible') return;
+  const original = document.title;
+  let on = false;
+  const timer = setInterval(() => {
+    on = !on;
+    document.title = on ? `🔔 ${text}` : original;
+  }, 1000);
+  const back = () => {
+    if (document.visibilityState !== 'visible') return;
+    clearInterval(timer);
+    document.title = original;
+    document.removeEventListener('visibilitychange', back);
+    blink = null;
+  };
+  document.addEventListener('visibilitychange', back);
+  blink = timer;
 }

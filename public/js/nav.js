@@ -13,9 +13,9 @@ export function navItems(user) {
     ? { path: '/dashboard', icon: 'calendar', label: 'Ausencias', match: ['/dashboard', '/absences', '/absence', '/report', '/cover'] }
     : { path: '/home', icon: 'calendar', label: 'Ausencias', match: ['/home', '/absence', '/report', '/cover'] };
   const fixes = fixesOnly(user);
-  // The rest ask for maintenance from Alertas.
-  const alerts = { path: '/alerts', icon: 'alert', label: 'Alertas', match: fixes ? ['/alerts'] : ['/alerts', '/maintenance'] };
-  const turns = { path: '/turns', icon: 'pulse', label: 'Turnos', match: ['/turns'] };
+  const alerts = { path: '/alerts', icon: 'alert', label: 'Alertas', match: ['/alerts'] };
+  // The rest ask for maintenance from Turnos, like the other services.
+  const turns = { path: '/turns', icon: 'pulse', label: 'Turnos', match: ['/turns', '/maintenance'] };
   // "Mantenimiento" doesn't fit in the bar.
   const maintenance = { path: '/maintenance', icon: 'wrench', label: 'Pedidos', match: ['/maintenance'] };
   // The conference room ("Salón" alone reads as the classroom).
