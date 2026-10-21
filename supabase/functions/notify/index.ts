@@ -255,6 +255,9 @@ async function purge(): Promise<string> {
 }
 
 serve(async (req) => {
+  // Only the database calls this function (private.dispatch_outbox), with the secret from app_settings.
+  const secret = await setting<{ value: string }>('notify_secret');
+  if (!secret?.value || req.headers.get('x-notify-secret') !== secret.value) return json({ error: 'No autorizado.' }, 401);
   let id: unknown;
   try {
     ({ id } = await req.json());

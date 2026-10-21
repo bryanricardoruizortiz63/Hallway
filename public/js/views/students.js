@@ -1,21 +1,24 @@
 // Shared by Alertas and Turnos: the student's name and group (only noted students are kept, for 24 hours),
 // and screens that keep themselves up to date.
 import { similarStudents } from '../backend.js';
-import { dialog, html, schoolCalendar } from '../lib.js';
+import { dialog, html, poll, schoolCalendar } from '../lib.js';
 import { state } from '../store.js';
 
 const REFRESH_MS = 15000;
 
-/** Refreshes while the screen is open: every few seconds and whenever a notice arrives. */
+/**
+ * Refreshes while the screen is open: every few seconds (waiting longer after each failure, up to 2 minutes) and
+ * whenever a notice arrives.
+ */
 export function keepFresh({ onLeave, isCurrent }, load) {
   const tick = () => {
     if (isCurrent() && document.visibilityState === 'visible') load().catch(() => {});
   };
-  const timer = setInterval(tick, REFRESH_MS);
+  const stop = poll(() => (isCurrent() && document.visibilityState === 'visible' ? load() : true), REFRESH_MS);
   window.addEventListener('lah:push', tick);
   document.addEventListener('visibilitychange', tick);
   onLeave(() => {
-    clearInterval(timer);
+    stop();
     window.removeEventListener('lah:push', tick);
     document.removeEventListener('visibilitychange', tick);
   });

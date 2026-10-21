@@ -299,6 +299,36 @@ export async function copyText(text) {
   }
 }
 
+// ---- Polling -----------------------------------------------------------------
+
+/**
+ * Runs fn every `everyMs`. When it fails (rejects or returns false) the next try waits twice as long, up to
+ * `maxMs`, and the first success goes back to the normal pace: a server in trouble isn't hit by every phone at
+ * full speed. Without internet it doesn't try. Returns stop().
+ */
+export function poll(fn, everyMs, maxMs = everyMs * 8) {
+  let wait = everyMs;
+  let timer;
+  let stopped = false;
+  const run = async () => {
+    if (navigator.onLine !== false) {
+      let ok;
+      try {
+        ok = (await fn()) !== false;
+      } catch {
+        ok = false;
+      }
+      wait = ok ? everyMs : Math.min(wait * 2, maxMs);
+    }
+    if (!stopped) timer = setTimeout(run, wait);
+  };
+  timer = setTimeout(run, wait);
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
+}
+
 // ---- Toasts & dialogs -------------------------------------------------------
 
 export function toast(message, type = 'info') {

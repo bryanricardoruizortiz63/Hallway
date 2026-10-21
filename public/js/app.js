@@ -1,5 +1,5 @@
 import { getMe, markAlertsRead } from './backend.js';
-import { can, html, isStaff, raw, toast } from './lib.js';
+import { can, html, isStaff, poll, raw, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -344,7 +344,7 @@ async function boot() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshUnread();
   });
-  setInterval(refreshUnread, 60000);
+  poll(refreshUnread, 60000);
 
   if (state.me) syncPush();
   if (!location.hash || location.hash === '#' || location.hash === '#/') go(homePath(), { replace: true });
