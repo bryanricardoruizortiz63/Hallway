@@ -4,6 +4,7 @@ import {
   authEmail,
   HttpError,
   json,
+  limitIp,
   readJson,
   reqText,
   serve,
@@ -140,9 +141,10 @@ const actions: Record<string, (b: Record<string, unknown>) => Promise<Response>>
     const images = ICON_FILES.map((name) => [name, decodePng(files[name], name)] as const);
     for (const id of ids) {
       for (const [name, bytes] of images) {
+        // Links carry ?v=icon_version, so browsers may keep each file for a year.
         const { error } = await db.storage
           .from('branding')
-          .upload(`${id}/${name}`, bytes, { contentType: 'image/png', upsert: true, cacheControl: '3600' });
+          .upload(`${id}/${name}`, bytes, { contentType: 'image/png', upsert: true, cacheControl: '31536000' });
         if (error) {
           console.error(error);
           throw new HttpError(500, 'No se pudo guardar el ícono. Inténtalo de nuevo.');
@@ -175,6 +177,8 @@ const actions: Record<string, (b: Record<string, unknown>) => Promise<Response>>
 };
 
 serve(async (req) => {
+  // The platform password is the only key: few tries a minute.
+  await limitIp(db, req, 'platform', 10);
   const body = await readJson(req);
   const { data: ok } = await db.rpc('platform_check_password', { p_password: String(body.password || '') });
   if (!ok) {

@@ -9,6 +9,23 @@ export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 const BUCKET = 'excuses';
+/** Links to private files last 10 minutes; the app reuses one while it has at least 2 minutes left. */
+const SIGNED_URL_SECONDS = 600;
+const signedCache = new Map();
+
+/** path -> signed URL (or null), reusing recent links so a screen that refreshes doesn't download the file again. */
+async function signedUrls(bucket, paths) {
+  const now = Date.now();
+  const fresh = (p) => signedCache.get(`${bucket}/${p}`)?.until > now + 120000;
+  const missing = paths.filter((p) => !fresh(p));
+  if (missing.length) {
+    const { data } = await sb.storage.from(bucket).createSignedUrls(missing, SIGNED_URL_SECONDS);
+    for (const d of data || []) {
+      if (d.signedUrl) signedCache.set(`${bucket}/${d.path}`, { url: d.signedUrl, until: now + SIGNED_URL_SECONDS * 1000 });
+    }
+  }
+  return new Map(paths.map((p) => [p, signedCache.get(`${bucket}/${p}`)?.url || null]));
+}
 
 export class ApiError extends Error {
   constructor(message, status = 0) {
@@ -211,8 +228,8 @@ export async function dashboard(today = todayStr()) {
   const horizon = addDays(today, 14);
   const active = () => sb.from('absences_v').select('*').neq('status', 'cancelled');
   const [todayList, upcoming, pending] = await Promise.all([
-    run(active().lte('start_date', today).gte('end_date', today).order('partial').order('employee_name')),
-    run(active().gt('start_date', today).lte('start_date', horizon).order('start_date').order('employee_name')),
+    run(active().lte('start_date', today).gte('end_date', today).order('partial').order('employee_name').limit(300)),
+    run(active().gt('start_date', today).lte('start_date', horizon).order('start_date').order('employee_name').limit(300)),
     run(sb.from('absences_v').select('*').eq('status', 'pending').order('created_at', { ascending: false }).limit(50)),
   ]);
   return {
@@ -256,12 +273,11 @@ export const addCoverLinks = (absenceId, links) => rpc('add_cover_links', { p_ab
 /** Takes a link away: whoever left it, or whoever manages the staff. */
 export const removeCoverLink = (id) => rpc('remove_cover_link', { p_id: id });
 
-/** Links that open each file for an hour (url; null if it can't be read). */
+/** Links that open each file for a few minutes (url; null if it can't be read). */
 async function signFiles(files) {
   if (files.length) {
-    const { data } = await sb.storage.from(BUCKET).createSignedUrls(files.map((f) => f.path), 3600);
-    const urls = new Map((data || []).map((d) => [d.path, d.signedUrl]));
-    for (const f of files) f.url = urls.get(f.path) || null;
+    const urls = await signedUrls(BUCKET, files.map((f) => f.path));
+    for (const f of files) f.url = urls.get(f.path);
   }
   return files;
 }
@@ -820,13 +836,10 @@ export const myOpenMaintenance = (userId) =>
       .limit(50),
   );
 
-/** One request, with a link to its photo (valid for an hour). */
+/** One request, with a link to its photo (valid for a few minutes). */
 export async function getMaintenance(id) {
   const m = await one('maintenance_requests_v', id, 'No se encontró la solicitud.');
-  if (m.photo_path) {
-    const { data } = await sb.storage.from(MAINTENANCE_BUCKET).createSignedUrls([m.photo_path], 3600);
-    m.photo_url = data?.[0]?.signedUrl || null;
-  }
+  if (m.photo_path) m.photo_url = (await signedUrls(MAINTENANCE_BUCKET, [m.photo_path])).get(m.photo_path);
   return m;
 }
 
@@ -1190,7 +1203,7 @@ export async function exportArchiveZip(school, data, onProgress = () => {}) {
   let done = 0;
   for (let i = 0; i < data.attachments.length; i += 100) {
     const batch = data.attachments.slice(i, i + 100);
-    const { data: signed, error } = await sb.storage.from(BUCKET).createSignedUrls(batch.map((f) => f.path), 600);
+    const { data: signed, error } = await sb.storage.from(BUCKET).createSignedUrls(batch.map((f) => f.path), SIGNED_URL_SECONDS);
     if (error) throw toApiError(error);
     const urls = new Map((signed || []).map((d) => [d.path, d.signedUrl]));
     // A few downloads at a time.

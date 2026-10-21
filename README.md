@@ -241,7 +241,20 @@ index.html                Redirige de la raíz del sitio a public/ (conservando 
 
 **Paneles:** los paneles de mantenimiento y salón leen en el teléfono las filas que cada persona ya puede ver; el de cada servicio usa `service_turns(p_service_id, p_from, p_to)` (quien atiende el servicio o el permiso `reports`; con el motivo, dónde y qué se hizo, nunca la nota), y `me()` dice qué servicios atiende cada persona (`serves`) para mostrarle su panel. El Excel se arma con `public/js/xlsx.js`. El tablero en vivo usa `live_board(p_since, p_today)`, que exige el permiso `live` y devuelve el movimiento de hoy con el motivo de cada turno, nunca la nota; el teléfono le dice cuándo empezó su día, porque la base de datos no conoce la zona horaria de la escuela. «Cerrar el año» de un servicio es la acción `close_service_year` de la función `admin`: solo quien atiende ese servicio (o Administración) borra los turnos terminados del período; los abiertos se quedan.
 
-**Avisos:** al crear una notificación, un *trigger* la pone en la tabla `outbox` y `pg_net` llama a la función `notify`, que envía el push y/o el mensaje de Teams. Cada aviso se procesa una sola vez.
+**Avisos:** al crear una notificación, un *trigger* la pone en la tabla `outbox` y `pg_net` llama a la función `notify`, que envía el push y/o el mensaje de Teams. Cada aviso se procesa una sola vez. La llamada lleva la cabecera `x-notify-secret` con la clave de `app_settings.notify_secret`, que se genera sola en la migración; sin ella, `notify` responde 401.
+
+**Límites contra gastos:**
+- Lo que se puede llamar sin iniciar sesión acepta 60 llamadas por minuto desde la misma IP: `current_school_code`, `school_branding` y `request_password_help`. La función `platform` acepta 10, porque su contraseña es la única llave.
+  - Los cuenta `private.rate_limit` en `private.rate_hits`: una fila por IP y acción, que se olvida tras un día sin uso.
+  - La IP es la primera de `x-forwarded-for`.
+  - Las funciones del servidor usan `limitIp` (en `_shared/http.ts`), que llama a `edge_rate_limit`.
+- Las listas que se ven en pantalla siempre llevan `limit`. Todo completo solo se baja al exportar a Excel, en páginas de 1,000.
+- Las pantallas en vivo se refrescan cada 15 s; la campanita y el inicio del personal, cada 60 s. Lo hace `poll` (en `lib.js`):
+  - Tras cada fallo espera el doble, hasta 8 veces el intervalo (2 minutos en las pantallas en vivo).
+  - Vuelve al ritmo normal en cuanto responde, y no intenta mientras el teléfono no tiene internet.
+- Los enlaces a archivos privados (justificantes, fotos de mantenimiento) duran 10 minutos.
+  - La app reutiliza el mismo enlace mientras le queden al menos 2, así una pantalla que se refresca no vuelve a descargar la foto.
+  - Los íconos de las escuelas se guardan con caché de un año: el enlace cambia con `icon_version`.
 
 **Mantenimiento diario:** `pg_cron` (7:23 UTC) pone una tarea en `outbox` y `notify` borra las ausencias canceladas hace más de 15 días (con sus archivos), los registros de envío de más de 30 días, los avisos de más de 180 días, las fotos de mantenimiento 30 días después de cerrarse la solicitud (y las que se subieron sin llegar a usarse), y los mensajes, turnos, visitas, solicitudes de mantenimiento y reservas del salón de más de un año.
 
@@ -253,6 +266,7 @@ index.html                Redirige de la raíz del sitio a public/ (conservando 
 
 - Pausa el proyecto tras **una semana sin uso**. El workflow “Mantener Supabase activo” lo visita a diario. Si aun así se pausa (por ejemplo, si GitHub desactiva las tareas programadas de un repositorio sin cambios en 60 días), se reactiva con un botón en el panel de Supabase; los datos no se pierden.
 - Límites actuales aproximados: 500 MB de base de datos y 1 GB de archivos, suficiente para varias escuelas.
+- En el plan gratis no hay factura sorpresa: si se pasa de la cuota, Supabase limita el proyecto en vez de cobrar. Si se cambia a Pro, hay que dejar **encendido el *Spend cap***. Ese es el límite que corta el gasto; una alerta por correo solo avisa.
 
 ### Montar un proyecto de Supabase nuevo
 

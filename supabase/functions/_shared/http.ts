@@ -32,6 +32,16 @@ export function serve(fn: (req: Request) => Promise<Response>) {
   });
 }
 
+/**
+ * At most `max` calls a minute from the caller's IP (the first address of x-forwarded-for). If the counter can't
+ * be read the call goes through: the limit is against bots, not a reason to break the app.
+ */
+export async function limitIp(db: SupabaseClient, req: Request, what: string, max = 60): Promise<void> {
+  const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
+  const { data, error } = await db.rpc('edge_rate_limit', { p_key: `${what}:${ip}`, p_max: max });
+  if (!error && data === false) throw new HttpError(429, 'Demasiados intentos. Espera un minuto e inténtalo de nuevo.');
+}
+
 function secretKey(): string {
   const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (legacy) return legacy;

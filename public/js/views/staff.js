@@ -1,5 +1,5 @@
 import { dashboard, exportAbsencesXlsx, listEmployees, myCoverages, pendingBookings, schoolAbsences } from '../backend.js';
-import { $, addDays, busy, can, fmtLongDate, html, todayStr } from '../lib.js';
+import { $, addDays, busy, can, fmtLongDate, html, poll, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
 import { absenceList, empty, installHint } from './common.js';
@@ -74,11 +74,11 @@ export async function dashboardView({ el, onLeave, isCurrent }) {
   };
 
   await load();
-  const timer = setInterval(() => document.visibilityState === 'visible' && load().catch(() => {}), 60000);
+  const stop = poll(() => document.visibilityState !== 'visible' || load(), 60000);
   const onPush = () => load().catch(() => {});
   window.addEventListener('lah:push', onPush);
   onLeave(() => {
-    clearInterval(timer);
+    stop();
     window.removeEventListener('lah:push', onPush);
   });
 }

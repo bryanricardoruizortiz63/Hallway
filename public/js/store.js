@@ -32,12 +32,14 @@ export function setUnread(n) {
   }
 }
 
+/** False when it couldn't ask (the caller may wait longer before trying again). */
 export async function refreshUnread() {
-  if (!state.me || state.me.user.must_change_password) return;
+  if (!state.me || state.me.user.must_change_password) return true;
   try {
     setUnread(await unreadCount());
+    return true;
   } catch {
-    /* ignore */
+    return false;
   }
 }
 
