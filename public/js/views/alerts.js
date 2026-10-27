@@ -16,7 +16,7 @@ import {
   resolveStudentAlert,
   takeRelief,
 } from '../backend.js';
-import { $, busy, can, dialog, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, fmtDateTime, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -53,17 +53,24 @@ const isSecurity = (u) => can(u, 'security');
 
 // ---- List --------------------------------------------------------------------------------
 
+/** Open, found, or closed at the end of the school day without anyone confirming where the student was. */
+const missingState = (a) => (!a.resolved_at ? 'open' : a.unconfirmed ? 'unconfirmed' : 'found');
+const MISSING_TITLE = { open: 'No ha llegado', found: 'Apareció', unconfirmed: 'Sin confirmar' };
+
 function missingItem(a) {
-  const open = !a.resolved_at;
+  const st = missingState(a);
+  const open = st === 'open';
   return html`<a class="item alert-item ${open ? 'is-urgent' : 'is-muted'}" href="#/alerts/missing/${a.id}">
-    <span class="item-icon ${open ? 'is-danger' : 'is-ok'}">${icon(open ? 'alert' : 'check')}</span>
+    <span class="item-icon ${open ? 'is-danger' : st === 'found' ? 'is-ok' : ''}">${icon(st === 'found' ? 'check' : 'alert')}</span>
     <span class="item-main">
-      <strong>${open ? 'No ha llegado' : 'Apareció'}: ${studentLabel(a)}</strong>
+      <strong>${MISSING_TITLE[st]}: ${studentLabel(a)}</strong>
       <span class="item-sub">${[a.place, a.room ? `Salón ${a.room}` : null, `avisó ${a.created_by_name}`].filter(Boolean).join(' · ')}</span>
       <span class="item-tags">
         ${open
           ? html`<span class="tag tag-danger">${icon('clock', 14)} ${timeAgo(a.created_at)}</span>`
-          : html`<span class="tag tag-ok">${a.resolved_by_name}${a.found_place ? ` · ${a.found_place}` : ''}</span>`}
+          : st === 'unconfirmed'
+            ? html`<span class="tag tag-warn">Se cerró al terminar el día</span>`
+            : html`<span class="tag tag-ok">${a.resolved_by_name}${a.found_place ? ` · ${a.found_place}` : ''}</span>`}
         <span class="tag">${a.audience === 'all' ? 'Todo el personal' : 'Seguridad'}</span>
       </span>
     </span>
@@ -198,7 +205,7 @@ export async function alertsView(ctx) {
         ${quiet ? html`<div class="card">${empty('check', 'Todo tranquilo', 'No hay alertas, salidas ni relevos por ahora.')}</div>` : ''}
 
         ${missingDone.length
-          ? html`<button type="button" class="btn btn-ghost btn-sm" data-resolved>${showResolved ? 'Ocultar' : 'Ver'} las que aparecieron hoy (${missingDone.length})</button>
+          ? html`<button type="button" class="btn btn-ghost btn-sm" data-resolved>${showResolved ? 'Ocultar' : 'Ver'} las cerradas hoy (${missingDone.length})</button>
             ${showResolved ? html`<div class="list">${missingDone.map(missingItem)}</div>` : ''}`
           : ''}
 
@@ -347,13 +354,14 @@ export async function missingDetailView(ctx) {
   async function load() {
     const a = await getMissingAlert(id);
     if (!isCurrent()) return;
-    const open = !a.resolved_at;
+    const st = missingState(a);
+    const open = st === 'open';
     // A turn's alert (the student didn't get to Enfermería in time) has no "Ya llegó al salón".
     const mine = a.created_by === me.id && !a.turn_id;
     el.innerHTML = String(html`
       <div class="stack">
-        <section class="card stack alert-head ${open ? 'is-urgent' : 'is-ok'}">
-          <p class="alert-kind">${icon(open ? 'alert' : 'check', 18)} ${open ? 'No ha llegado' : 'Apareció'}</p>
+        <section class="card stack alert-head ${open ? 'is-urgent' : st === 'found' ? 'is-ok' : ''}">
+          <p class="alert-kind">${icon(st === 'found' ? 'check' : 'alert', 18)} ${MISSING_TITLE[st]}</p>
           <h2>${a.student_name || 'Estudiante'} <span class="muted">· ${a.group_name}</span></h2>
           ${a.student_name ? '' : html`<p class="hint">El nombre se borró: los estudiantes se guardan solo 24 horas.</p>`}
           <div class="facts">
@@ -362,8 +370,9 @@ export async function missingDetailView(ctx) {
             ${fact('Avisó', `${a.created_by_name} · ${timeAgo(a.created_at)}`)}
             ${fact('Se avisó a', a.audience === 'all' ? 'Todo el personal' : 'Seguridad, dirección y secretaría')}
             ${fact('Nota', a.note)}
-            ${open ? '' : fact('Lo confirmó', `${a.resolved_by_name} · tardó ${minutesBetween(a.created_at, a.resolved_at)} min`)}
-            ${open ? '' : fact('Dónde estaba', a.found_place)}
+            ${st === 'found' ? fact('Lo confirmó', `${a.resolved_by_name} · tardó ${minutesBetween(a.created_at, a.resolved_at)} min`) : ''}
+            ${st === 'found' ? fact('Dónde estaba', a.found_place) : ''}
+            ${st === 'unconfirmed' ? fact('Se cerró', `Al terminar el día escolar, ${fmtDateTime(a.resolved_at)}. Nadie confirmó dónde estaba.`) : ''}
           </div>
         </section>
         ${open

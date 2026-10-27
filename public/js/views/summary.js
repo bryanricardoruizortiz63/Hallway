@@ -103,7 +103,7 @@ export async function summaryView({ el, params }) {
     <section class="section" data-summary-security>
       <h3 class="section-title">Alertas y visitas</h3>
       <div class="list">
-        ${countRow('alert', 'No ha llegado', s.alerts.missing, s.alerts.unresolved ? `${s.alerts.unresolved} sin resolver` : '')}
+        ${countRow('alert', 'No ha llegado', s.alerts.missing, s.alerts.unresolved ? `${s.alerts.unresolved} sin confirmar` : '')}
         ${countRow('user', 'Salidas entregadas', s.pickups)}
         ${countRow('users', 'Relevos pedidos', s.relief)}
         ${countRow('door', 'Visitas', s.visits)}
