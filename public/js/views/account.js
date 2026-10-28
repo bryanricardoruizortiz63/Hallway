@@ -441,7 +441,7 @@ export async function verifyCodeView({ el }) {
       <div class="otp-card">
         <div class="otp-head">
           <span class="otp-lock">${icon('shield', 26)}</span>
-          <h1>Código del día</h1>
+          <h1>Verificación en dos pasos</h1>
           <p>${me.user.full_name} · ${me.school.name}</p>
         </div>
         ${setup

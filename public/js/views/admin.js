@@ -184,7 +184,7 @@ export async function employeesView({ el }) {
     </div>
     <div data-pending></div>
     <a class="card link-card room-link" href="#/employees/codigo">${icon('shield')}<span>
-      <strong>Código del día</strong>
+      <strong>Verificación en dos pasos</strong>
       <small>Actívalo o quítalo a una persona, por rol o a varias a la vez</small></span>${icon('chevron', 18)}</a>
     <div class="list-head">
       <p class="muted" data-total></p>
@@ -878,7 +878,7 @@ export async function dataView({ el, isCurrent }) {
   await load();
 }
 
-// ---- Código del día (two-step verification) by person ------------------------------------------
+// ---- Verificación en dos pasos (the authenticator code) by person ------------------------------------------
 
 /**
  * Who has to give the code of their authenticator app once a day. Pick people one by one, all of a role, or mark
@@ -901,7 +901,7 @@ export async function mfaAdminView({ el }) {
     el.innerHTML = String(html`
       <div class="stack">
         <section class="card stack">
-          <h2 class="card-title">${icon('shield')} Código del día</h2>
+          <h2 class="card-title">${icon('shield')} Verificación en dos pasos</h2>
           <p class="hint">Marca a alguien y toca <strong>Reiniciar</strong> si cambió de teléfono o el código no le funciona: la próxima vez configura la app de nuevo con el QR.</p>
           <p class="hint">A quien se lo actives, Hallway le pide una vez al día el código de 6 números de su app de autenticación
             (Google o Microsoft Authenticator), en cualquier teléfono. La primera vez le muestra cómo configurarla. Lo tienen

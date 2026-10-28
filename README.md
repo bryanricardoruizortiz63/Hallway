@@ -128,7 +128,7 @@ Funciona con servicios gratuitos:
   - **Tu foto arriba** (donde estaba el logo; en computadora, tu nombre en la barra de la izquierda) abre el menú de tu cuenta, como el de Google. Ahí están quién eres, *Mi perfil*, las otras cuentas del teléfono (un toque para cambiar), *Agregar otra cuenta* y *Cerrar sesión*.
   - Se agrega la otra cuenta en *Más → Agregar otra cuenta*, con su usuario y contraseña.
   - Desde entonces se cambia en *Más → Cambiar de cuenta* con un toque, sin salir.
-  - **La dirección también puede activarlo a quien quiera**, en *Personal → Código del día*:
+  - **La dirección también puede activarlo a quien quiera**, en *Personal → Verificación en dos pasos*:
     - Por rol («Activar» o «Quitar» para todo el rol), o marcando a una o varias personas.
     - A quien se lo active le llega un aviso, y Hallway le pide el código una vez al día en cualquier teléfono.
     - Al quitarlo se puede borrar también su app configurada, por si perdió el teléfono.
