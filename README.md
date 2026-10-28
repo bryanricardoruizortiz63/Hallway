@@ -128,13 +128,15 @@ Funciona con servicios gratuitos:
   - **Tu foto arriba** (donde estaba el logo; en computadora, tu nombre en la barra de la izquierda) abre el menú de tu cuenta, como el de Google. Ahí están quién eres, *Mi perfil*, las otras cuentas del teléfono (un toque para cambiar), *Agregar otra cuenta* y *Cerrar sesión*.
   - Se agrega la otra cuenta en *Más → Agregar otra cuenta*, con su usuario y contraseña.
   - Desde entonces se cambia en *Más → Cambiar de cuenta* con un toque, sin salir.
-  - **La dirección también puede activarlo a quien quiera**, en *Personal → Código del día*:
+  - **La dirección también puede activarlo a quien quiera**, en *Personal → Verificación en dos pasos*:
     - Por rol («Activar» o «Quitar» para todo el rol), o marcando a una o varias personas.
     - A quien se lo active le llega un aviso, y Hallway le pide el código una vez al día en cualquier teléfono.
     - Al quitarlo se puede borrar también su app configurada, por si perdió el teléfono.
+    - **Reiniciar**: si a alguien le da problemas (cambió de teléfono, el código no le funciona), se le borra la app configurada sin quitarle el código. La próxima vez Hallway le muestra el QR para configurarla desde el principio.
     - En *Personal* se ve quién lo tiene y si ya lo configuró.
   - Con más de una cuenta en el teléfono, **cada cuenta pide una vez al día el código** de una app de autenticación (Google Authenticator o Microsoft Authenticator). Es la verificación en dos pasos de Supabase.
   - La primera vez, la app muestra el código QR para configurarla. En la app de autenticación cada cuenta sale con su rol, su nombre y la escuela (p. ej. «Hallway · Administración»), para no confundir los códigos.
+  - En la pantalla del código solo se escribe el código o se toca **Cancelar**, que vuelve a la cuenta de antes. Si la cuenta se acababa de agregar, Cancelar también la quita del teléfono.
   - Al cerrar sesión de una cuenta, se abre la otra.
   - Los avisos push llegan a la cuenta que está abierta en ese teléfono.
 - **Push al teléfono**: se activan en *Más → Mi perfil*. Funcionan en Android, computadoras e iPhone (iOS 16.4+ con la app añadida a la pantalla de inicio).

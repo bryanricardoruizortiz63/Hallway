@@ -55,6 +55,42 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
+// Where we came from before switching or adding: «Cancelar» on the code screen goes back there.
+const BACK = 'lah:came-from';
+
+function cameFrom(value) {
+  try {
+    if (value === undefined) return JSON.parse(sessionStorage.getItem(BACK) || 'null');
+    if (value === null) sessionStorage.removeItem(BACK);
+    else sessionStorage.setItem(BACK, JSON.stringify(value));
+  } catch {
+    /* private mode */
+  }
+  return null;
+}
+
+/** The code was given: nothing to go back to. */
+export const codeGiven = () => cameFrom(null);
+
+/**
+ * «Cancelar» on the code screen: back to the account we came from (an account just added is forgotten again).
+ * False when there is nowhere to go back to (the caller signs out).
+ */
+export async function cancelCode(me) {
+  const back = cameFrom();
+  cameFrom(null);
+  const previous = back && read().find((a) => a.id === back.from && a.id !== me.user.id);
+  if (!previous) return false;
+  if (back.added === me.user.id) forgetAccount(me.user.id);
+  const { error } = await sb.auth.refreshSession({ refresh_token: previous.refresh });
+  if (error) {
+    forgetAccount(previous.id);
+    return false;
+  }
+  restart();
+  return true;
+}
+
 /** Opens the app again (at link, or from the start) as whichever account is signed in now. */
 function restart(link = '#/') {
   location.hash = link;
@@ -67,6 +103,7 @@ export async function switchAccount(id, me, link) {
   const target = read().find((a) => a.id === id);
   if (!target) throw new Error('No se encontró esa cuenta en este teléfono.');
   const previous = read().find((a) => a.id === me?.user.id);
+  cameFrom({ from: me?.user.id });
   const { data, error } = await sb.auth.refreshSession({ refresh_token: target.refresh });
   if (error || !data.session) {
     forgetAccount(id);
@@ -118,6 +155,7 @@ export async function addAccount(me, schoolCode, username, password) {
   }
   if (added.user.id === me.user.id) throw new Error('Esa es la cuenta que ya tienes abierta.');
   await remember(added);
+  cameFrom({ from: me.user.id, added: added.user.id });
   restart();
 }
 

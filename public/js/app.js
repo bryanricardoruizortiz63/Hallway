@@ -63,7 +63,7 @@ const ROUTES = [
   { re: /^\/absences$/, view: absencesListView, title: 'Todas las ausencias', allow: STAFF, back: true },
   { re: /^\/employees$/, view: employeesView, title: 'Personal', allow: may('staff') },
   { re: /^\/employees\/accesos$/, view: accessCardsView, title: 'Accesos para repartir', allow: may('staff'), back: true },
-  { re: /^\/employees\/codigo$/, view: mfaAdminView, title: 'Código del día', allow: may('staff'), back: true },
+  { re: /^\/employees\/codigo$/, view: mfaAdminView, title: 'Verificación en dos pasos', allow: may('staff'), back: true },
   // Employee ids are Supabase Auth UUIDs.
   { re: /^\/employees\/(new|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, view: employeeFormView, title: 'Empleado', allow: may('staff'), back: true },
   { re: /^\/settings$/, view: settingsView, title: 'Escuela y Teams', allow: may('settings'), back: true },
