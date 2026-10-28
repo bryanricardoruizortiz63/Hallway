@@ -28,6 +28,7 @@ import {
   changeSchoolCode,
   listEmployees,
   previewEmail,
+  setRequireMfa,
   removeEmailAccount,
   resetEmployeePassword,
   saveEmailAccount,
@@ -152,6 +153,7 @@ export async function employeesView({ el }) {
                   ${e.absence_count ? html`<span class="tag">${icon('calendar', 14)} ${e.absence_count}</span>` : ''}
                   ${e.active ? '' : html`<span class="tag tag-warn">Inactivo</span>`}
                   ${e.active && !e.last_login_at ? html`<span class="tag">Nunca ha entrado</span>` : ''}
+                  ${e.require_mfa ? html`<span class="tag ${e.mfa_ready ? 'tag-ok' : 'tag-warn'}">${icon('shield', 14)} ${e.mfa_ready ? 'Código' : 'Código sin configurar'}</span>` : ''}
                   ${recentHelp(e) ? html`<span class="tag tag-warn">${icon('key', 14)} Pidió contraseña</span>` : ''}
                 </span>
               </span>
@@ -180,6 +182,9 @@ export async function employeesView({ el }) {
       <a class="btn btn-primary" href="#/employees/new">${icon('plus', 18)} Nuevo</a>
     </div>
     <div data-pending></div>
+    <a class="card link-card room-link" href="#/employees/codigo">${icon('shield')}<span>
+      <strong>Código del día</strong>
+      <small>Actívalo o quítalo a una persona, por rol o a varias a la vez</small></span>${icon('chevron', 18)}</a>
     <div class="list-head">
       <p class="muted" data-total></p>
       <label class="switch-inline"><input type="checkbox" data-inactive> Mostrar inactivos</label>
@@ -870,4 +875,119 @@ export async function dataView({ el, isCurrent }) {
   }
   archiveSection($('[data-archive-slot]', el)).catch((err) => toast(err.message, 'error'));
   await load();
+}
+
+// ---- Código del día (two-step verification) by person ------------------------------------------
+
+/**
+ * Who has to give the code of their authenticator app once a day. Pick people one by one, all of a role, or mark
+ * several; then turn it on or off. Turning it off can also remove their configured app (a lost phone).
+ */
+export async function mfaAdminView({ el }) {
+  let employees = [];
+  let q = '';
+  const picked = new Set();
+  const roles = getSchoolRoles();
+
+  const render = () => {
+    const active = employees.filter((e) => e.active);
+    const needle = q.toLowerCase();
+    const rows = active.filter((e) => !needle || `${e.full_name} ${e.role_label} ${e.username}`.toLowerCase().includes(needle));
+    const on = active.filter((e) => e.require_mfa).length;
+    const byRole = roles
+      .map((r) => ({ ...r, people: active.filter((e) => e.role === r.key) }))
+      .filter((r) => r.people.length);
+    el.innerHTML = String(html`
+      <div class="stack">
+        <section class="card stack">
+          <h2 class="card-title">${icon('shield')} Código del día</h2>
+          <p class="hint">A quien se lo actives, Hallway le pide una vez al día el código de 6 números de su app de autenticación
+            (Google o Microsoft Authenticator), en cualquier teléfono. La primera vez le muestra cómo configurarla. Lo tienen
+            <strong>${on}</strong> de ${active.length} personas.</p>
+        </section>
+
+        <section class="section">
+          <h3 class="section-title">Por rol</h3>
+          <div class="list">${byRole.map((r) => {
+            const n = r.people.filter((e) => e.require_mfa).length;
+            return html`<div class="item">
+              <span class="item-main"><strong>${r.name}</strong>
+                <span class="item-sub">${n ? `${n} de ${r.people.length} con código` : `${r.people.length} ${r.people.length === 1 ? 'persona' : 'personas'}, sin código`}</span></span>
+              <span class="button-row">
+                ${n < r.people.length ? html`<button type="button" class="btn btn-secondary btn-sm" data-role-on="${r.key}">Activar</button>` : ''}
+                ${n ? html`<button type="button" class="btn btn-ghost btn-sm" data-role-off="${r.key}">Quitar</button>` : ''}
+              </span>
+            </div>`;
+          })}</div>
+        </section>
+
+        <section class="section">
+          <h3 class="section-title">Por persona</h3>
+          <label class="search">${icon('search', 18)}<input type="search" placeholder="Buscar por nombre o rol…" value="${q}" data-q></label>
+          <div class="list" data-people>${rows.map((e) => html`<label class="item mfa-pick">
+            <input type="checkbox" value="${e.id}" ${picked.has(e.id) ? 'checked' : ''} data-pick>
+            ${avatar(e.full_name)}
+            <span class="item-main"><strong>${e.full_name}</strong>
+              <span class="item-sub">${e.role_label}</span>
+              <span class="item-tags">${e.require_mfa
+                ? html`<span class="tag ${e.mfa_ready ? 'tag-ok' : 'tag-warn'}">${icon('shield', 14)} ${e.mfa_ready ? 'Con código' : 'Activado, sin configurar'}</span>`
+                : html`<span class="tag">Sin código</span>`}</span></span>
+          </label>`)}</div>
+        </section>
+        ${picked.size
+          ? html`<div class="action-bar mfa-bar">
+              <span class="mfa-count">${picked.size} ${picked.size === 1 ? 'persona' : 'personas'}</span>
+              <button type="button" class="btn btn-primary" data-pick-on>${icon('shield', 18)} Activar</button>
+              <button type="button" class="btn btn-secondary" data-pick-off>Quitar</button>
+            </div>`
+          : ''}
+      </div>`);
+
+    $('[data-q]', el).addEventListener('input', (e) => {
+      q = e.target.value.trim();
+      const pos = e.target.selectionStart;
+      render();
+      const input = $('[data-q]', el);
+      input.focus();
+      input.setSelectionRange(pos, pos);
+    });
+    for (const box of el.querySelectorAll('[data-pick]')) {
+      box.addEventListener('change', () => {
+        if (box.checked) picked.add(box.value);
+        else picked.delete(box.value);
+        render();
+      });
+    }
+    const people = (key) => active.filter((e) => e.role === key).map((e) => e.id);
+    for (const b of el.querySelectorAll('[data-role-on]')) b.addEventListener('click', () => change(b, people(b.dataset.roleOn), true));
+    for (const b of el.querySelectorAll('[data-role-off]')) b.addEventListener('click', () => change(b, people(b.dataset.roleOff), false));
+    $('[data-pick-on]', el)?.addEventListener('click', (e) => change(e.currentTarget, [...picked], true));
+    $('[data-pick-off]', el)?.addEventListener('click', (e) => change(e.currentTarget, [...picked], false));
+  };
+
+  const change = (btn, ids, on) =>
+    busy(btn, async () => {
+      if (!ids.length) return;
+      let reset = false;
+      if (!on) {
+        const v = await dialog({
+          title: `¿Quitar el código a ${ids.length === 1 ? 'esta persona' : `${ids.length} personas`}?`,
+          message: 'Ya no se lo pedirá (salvo a quien tenga dos cuentas en un mismo teléfono).',
+          body: html`<label class="switch-inline mfa-reset"><input type="checkbox" name="reset"> Borrar también su app de autenticación configurada
+            (por si perdió el teléfono; si se lo vuelves a activar, la configura de nuevo)</label>`,
+          confirmText: 'Quitar el código',
+          collect: true,
+        });
+        if (!v) return;
+        reset = !!v.reset;
+      }
+      const n = await setRequireMfa(ids, on, reset);
+      toast(on ? `Código activado a ${n} ${n === 1 ? 'persona' : 'personas'}. Les avisamos.` : `Código quitado a ${n} ${n === 1 ? 'persona' : 'personas'}.`, 'ok');
+      picked.clear();
+      employees = await listEmployees();
+      render();
+    });
+
+  employees = await listEmployees();
+  render();
 }

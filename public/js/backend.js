@@ -466,9 +466,10 @@ export async function unreadCount() {
 export const markNotificationRead = (id) => rpc('mark_notification_read', { p_id: id });
 export const markAllNotificationsRead = () => rpc('mark_all_notifications_read');
 
-export function savePushSubscription(sub) {
+/** keep: the other accounts saved on this phone, which go on getting their notices here too. */
+export function savePushSubscription(sub, keep = []) {
   const json = sub.toJSON();
-  return rpc('save_push_subscription', { p_endpoint: json.endpoint, p_p256dh: json.keys.p256dh, p_auth: json.keys.auth });
+  return rpc('save_push_subscription', { p_endpoint: json.endpoint, p_p256dh: json.keys.p256dh, p_auth: json.keys.auth, p_keep: keep });
 }
 export const deletePushSubscription = (endpoint) => rpc('delete_push_subscription', { p_endpoint: endpoint });
 export const testPush = () => rpc('test_push');
@@ -485,6 +486,9 @@ export async function listEmployees() {
   );
   return rows.map(withRoleLabel);
 }
+
+/** Turns the daily code on or off for these people (reset: also removes their configured authenticator). */
+export const setRequireMfa = (ids, on, reset = false) => rpc('set_require_mfa', { p_ids: ids, p_on: on, p_reset: reset });
 
 export async function getEmployee(id) {
   const row = await run(sb.from('employees_v').select('*').eq('id', id).maybeSingle());
@@ -640,6 +644,11 @@ export const createStudentAlert = ({ student, place, room, note, audience }) =>
     p_audience: audience,
   });
 export const resolveStudentAlert = (id, foundPlace) => rpc('resolve_student_alert', { p_id: id, p_found_place: foundPlace || null });
+/** The dirección: found | unconfirmed | reopen | edit ({ place, room, note }) | delete. */
+export const manageStudentAlert = (id, action, { found, place, room, note } = {}) =>
+  rpc('manage_student_alert', {
+    p_id: id, p_action: action, p_found_place: found || null, p_place: place || null, p_room: room || null, p_note: note || null,
+  });
 
 export const createPickup = ({ student, time, room, note }) =>
   rpc('create_pickup', {

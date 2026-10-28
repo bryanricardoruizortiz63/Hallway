@@ -13,10 +13,11 @@ import {
   listVisits,
   markAlertsRead,
   requestRelief,
+  manageStudentAlert,
   resolveStudentAlert,
   takeRelief,
 } from '../backend.js';
-import { $, busy, can, dialog, fmtDateTime, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, schoolIcon, fmtDateTime, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -61,7 +62,7 @@ function missingItem(a) {
   const st = missingState(a);
   const open = st === 'open';
   return html`<a class="item alert-item ${open ? 'is-urgent' : 'is-muted'}" href="#/alerts/missing/${a.id}">
-    <span class="item-icon ${open ? 'is-danger' : st === 'found' ? 'is-ok' : ''}">${icon(st === 'found' ? 'check' : 'alert')}</span>
+    ${schoolIcon(st === 'found' ? 'found' : 'missing', open ? 'is-danger' : st === 'found' ? 'is-ok' : '')}
     <span class="item-main">
       <strong>${MISSING_TITLE[st]}: ${studentLabel(a)}</strong>
       <span class="item-sub">${[a.place, a.room ? `Salón ${a.room}` : null, `avisó ${a.created_by_name}`].filter(Boolean).join(' · ')}</span>
@@ -372,7 +373,10 @@ export async function missingDetailView(ctx) {
             ${fact('Nota', a.note)}
             ${st === 'found' ? fact('Lo confirmó', `${a.resolved_by_name} · tardó ${minutesBetween(a.created_at, a.resolved_at)} min`) : ''}
             ${st === 'found' ? fact('Dónde estaba', a.found_place) : ''}
-            ${st === 'unconfirmed' ? fact('Se cerró', `Al terminar el día escolar, ${fmtDateTime(a.resolved_at)}. Nadie confirmó dónde estaba.`) : ''}
+            ${st === 'unconfirmed' ? fact('Se cerró', a.resolved_by_name && a.resolved_by_name !== 'Hallway'
+              ? `${a.resolved_by_name} la dejó sin confirmar, ${fmtDateTime(a.resolved_at)}.`
+              : `Al terminar el día escolar, ${fmtDateTime(a.resolved_at)}. Nadie confirmó dónde estaba.`) : ''}
+            ${a.edited_at ? fact('Último cambio', `${a.edited_by_name} · ${fmtDateTime(a.edited_at)}`) : ''}
           </div>
         </section>
         ${open
@@ -381,6 +385,21 @@ export async function missingDetailView(ctx) {
           : ''}
         ${a.turn_id && a.created_by === me.id
           ? html`<a class="btn btn-secondary btn-block" href="#/turns/${a.turn_id}">${icon('pulse', 18)} Ver el turno</a>`
+          : a.turn_id && can(me, 'live')
+            ? html`<a class="btn btn-secondary btn-block" href="#/live/turn/${a.turn_id}">${icon('pulse', 18)} Ver el turno completo</a>`
+            : ''}
+        ${can(me, 'settings')
+          ? html`<section class="card stack" data-manage>
+              <h3 class="card-title">${icon('shield')} Administrar esta alerta</h3>
+              <div class="button-row wrap">
+                ${st !== 'found' ? html`<button type="button" class="btn btn-secondary btn-sm" data-manage-found>${icon('check', 16)} Apareció</button>` : html`<button type="button" class="btn btn-secondary btn-sm" data-manage-found>${icon('edit', 16)} Cambiar dónde estaba</button>`}
+                ${st !== 'unconfirmed' ? html`<button type="button" class="btn btn-secondary btn-sm" data-manage-unconfirmed>Sin confirmar</button>` : ''}
+                ${st !== 'open' ? html`<button type="button" class="btn btn-secondary btn-sm" data-manage-reopen>Reabrir</button>` : ''}
+                <button type="button" class="btn btn-secondary btn-sm" data-manage-edit>${icon('edit', 16)} Corregir datos</button>
+              </div>
+              <button type="button" class="btn btn-ghost-danger btn-block" data-manage-delete>Borrar alerta</button>
+              <p class="hint">Solo la dirección ve esto. Cada cambio queda anotado con tu nombre.</p>
+            </section>`
           : ''}
         <a class="btn btn-ghost btn-block" href="#/alerts">${icon('back', 18)} Todas las alertas</a>
       </div>`);
@@ -405,7 +424,65 @@ export async function missingDetailView(ctx) {
         await load();
       });
     $('[data-found]', el)?.addEventListener('click', (e) => resolve(e.currentTarget, false));
+    bindManage(a);
     $('[data-found-elsewhere]', el)?.addEventListener('click', (e) => resolve(e.currentTarget, true));
+  }
+
+  /** The dirección's tools: change the state, correct the data or delete an alert put by mistake. */
+  function bindManage(a) {
+    const run = (btn, fn, done) =>
+      busy(btn, async () => {
+        if ((await fn()) === false) return;
+        toast(done, 'ok');
+        await load();
+      });
+    $('[data-manage-found]', el)?.addEventListener('click', (e) =>
+      run(e.currentTarget, async () => {
+        const v = await dialog({
+          title: '¿Dónde estaba?',
+          body: html`<label class="field"><span>Lugar <em class="optional">opcional</em></span>
+            <input name="found" maxlength="120" autocomplete="off" value="${a.found_place || ''}" placeholder="Ej. En la biblioteca"></label>`,
+          confirmText: 'Guardar',
+          collect: true,
+        });
+        if (!v) return false;
+        await manageStudentAlert(id, 'found', { found: v.found.trim() });
+      }, 'Guardado: apareció.'));
+    $('[data-manage-unconfirmed]', el)?.addEventListener('click', (e) =>
+      run(e.currentTarget, () => manageStudentAlert(id, 'unconfirmed'), 'Quedó sin confirmar.'));
+    $('[data-manage-reopen]', el)?.addEventListener('click', (e) =>
+      run(e.currentTarget, async () => {
+        const ok = await dialog({ title: '¿Reabrir esta alerta?', message: 'Vuelve a quedar como «No ha llegado». Solo se puede con alertas de hoy, antes de la hora de salida.', confirmText: 'Reabrir' });
+        if (!ok) return false;
+        await manageStudentAlert(id, 'reopen');
+      }, 'Alerta abierta otra vez.'));
+    $('[data-manage-edit]', el)?.addEventListener('click', (e) =>
+      run(e.currentTarget, async () => {
+        const v = await dialog({
+          title: 'Corregir datos',
+          body: html`<label class="field"><span>De dónde venía / a dónde iba</span>
+              <input name="place" maxlength="120" value="${a.place || ''}"></label>
+            <label class="field"><span>Salón</span><input name="room" maxlength="40" value="${a.room || ''}"></label>
+            <label class="field"><span>Nota</span><textarea name="note" rows="3" maxlength="500">${a.note || ''}</textarea></label>`,
+          confirmText: 'Guardar',
+          collect: true,
+        });
+        if (!v) return false;
+        await manageStudentAlert(id, 'edit', { place: v.place.trim(), room: v.room.trim(), note: v.note.trim() });
+      }, 'Datos corregidos.'));
+    $('[data-manage-delete]', el)?.addEventListener('click', (e) =>
+      busy(e.currentTarget, async () => {
+        const ok = await dialog({
+          title: '¿Borrar esta alerta?',
+          message: 'Úsalo solo si se puso por error: desaparece de las listas y no cuenta en los reportes. No se puede deshacer.',
+          confirmText: 'Borrar',
+          danger: true,
+        });
+        if (!ok) return;
+        await manageStudentAlert(id, 'delete');
+        toast('Alerta borrada.', 'ok');
+        go('/alerts', { replace: true });
+      }));
   }
 
   await load();

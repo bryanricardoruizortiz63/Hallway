@@ -34,7 +34,10 @@ async function handlePush(payload: { notification_id: number; repeat?: boolean }
   const icon = school?.icon_version
     ? `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/branding/${school.id}/icon-192.png?v=${school.icon_version}`
     : undefined;
-  const message = JSON.stringify({ title: n.title, body: n.body || '', url: n.link || '#/notifications', icon, tag: n.tag, urgent: n.urgent });
+  // uid: with two accounts on one phone, the app opens the notice as the account it belongs to.
+  const message = JSON.stringify({
+    title: n.title, body: n.body || '', url: n.link || '#/notifications', icon, tag: n.tag, urgent: n.urgent, uid: n.user_id,
+  });
   // An urgent notice that arrives more than 15 minutes late is no use.
   const options = { ttl: n.urgent ? 900 : 86400 };
   const results = await Promise.all(

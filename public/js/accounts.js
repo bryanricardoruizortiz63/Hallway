@@ -55,14 +55,14 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
-/** Opens the app again from the start, as whichever account is signed in now. */
-function restart() {
-  location.hash = '#/';
+/** Opens the app again (at link, or from the start) as whichever account is signed in now. */
+function restart(link = '#/') {
+  location.hash = link;
   location.reload();
 }
 
-/** Switches to a saved account. The page reloads; the daily code is asked there if needed. */
-export async function switchAccount(id, me) {
+/** Switches to a saved account (and opens link there). The page reloads; the daily code is asked there if needed. */
+export async function switchAccount(id, me, link) {
   await remember(me);
   const target = read().find((a) => a.id === id);
   if (!target) throw new Error('No se encontró esa cuenta en este teléfono.');
@@ -73,7 +73,36 @@ export async function switchAccount(id, me) {
     if (previous) await sb.auth.refreshSession({ refresh_token: previous.refresh }).catch(() => {});
     throw new Error(`La sesión de ${target.name} venció. Agrégala otra vez con su usuario y contraseña.`);
   }
-  restart();
+  restart(link);
+}
+
+/** The saved account a notice belongs to, when it isn't the open one (null otherwise). */
+export function otherAccount(uid, me) {
+  if (!uid || !me || uid === me.user.id) return null;
+  return read().find((a) => a.id === uid) || null;
+}
+
+/**
+ * A notice of the other account opened the app (?as=<user id>): start as that account. Before anything loads, so
+ * the app opens directly where the notice points.
+ */
+export async function adoptAccountFromUrl() {
+  const url = new URL(location.href);
+  const uid = url.searchParams.get('as');
+  if (!uid) return;
+  url.searchParams.delete('as');
+  history.replaceState(null, '', url.pathname + url.search + url.hash);
+  const { data } = await sb.auth.getSession();
+  const current = data.session;
+  if (!current || current.user.id === uid) return;
+  const list = read();
+  const target = list.find((a) => a.id === uid);
+  const mine = list.find((a) => a.id === current.user.id);
+  if (!target || !mine) return;
+  mine.refresh = current.refresh_token;
+  write(list);
+  const { error } = await sb.auth.refreshSession({ refresh_token: target.refresh });
+  if (error) await sb.auth.refreshSession({ refresh_token: mine.refresh }).catch(() => {});
 }
 
 /** Signs in to one more account, keeping the open one. */
@@ -119,9 +148,11 @@ function codeTime(session) {
   }
 }
 
-/** With two or more accounts on this phone, the open one must have passed the code today. */
+/** The open account must have passed the code today (two accounts on this phone, or turned on for this person). */
 export async function needsDailyCode(me) {
-  if (!me || read().length < 2) return false;
+  if (!me) return false;
+  // Two accounts on this phone, or the dirección turned the code on for this person.
+  if (read().length < 2 && !(await sb.rpc('mfa_required')).data) return false;
   const { data } = await sb.auth.getSession();
   if (!data.session) return false;
   const t = codeTime(data.session);
@@ -135,16 +166,31 @@ export async function authenticator() {
   return data.totp.find((f) => f.status === 'verified') || null;
 }
 
-/** A new authenticator to scan: { factorId, qr (an image), secret (to type it by hand) }. */
-export async function startAuthenticator() {
+/**
+ * A new authenticator to scan: { factorId, qr (SVG), secret (to type it by hand) }. In the authenticator app it
+ * shows as «Hallway · <role>» with the person and the school, not Supabase's internal address, so someone with two
+ * accounts (Administración and IT) knows which code is which.
+ */
+export async function startAuthenticator(me) {
   const { data: factors } = await sb.auth.mfa.listFactors();
   // A previous attempt that was never confirmed.
   for (const f of factors?.all || []) {
     if (f.factor_type === 'totp' && f.status !== 'verified') await sb.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
   }
-  const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Hallway', issuer: 'Hallway' });
+  const issuer = `Hallway · ${roleLabel(me.user.role) || 'Cuenta'}`;
+  const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: issuer, issuer });
   if (error) throw new Error('No se pudo preparar la verificación. Habla con la dirección para que la active en Supabase.');
-  return { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
+  // Same secret, our own label: «issuer:account» plus issuer= (spaces as %20, which every authenticator app reads).
+  const params = new URL(data.totp.uri).searchParams;
+  params.set('issuer', issuer);
+  const query = [...params].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+  const account = `${me.user.full_name} · ${me.school.name}`;
+  const uri = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?${query}`;
+  const { default: qrcode } = await import('../vendor/qrcode.js');
+  const qr = qrcode(0, 'M');
+  qr.addData(uri);
+  qr.make();
+  return { factorId: data.id, qr: qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true, alt: 'Código QR para la app de autenticación' }), secret: data.totp.secret, issuer, account };
 }
 
 /** Checks the 6-digit code; the session then counts as verified today. */

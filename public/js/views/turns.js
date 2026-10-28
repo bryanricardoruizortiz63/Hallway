@@ -16,7 +16,7 @@ import {
   setMyServiceStatus,
   turnHistory,
 } from '../backend.js';
-import { $, busy, dialog, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, schoolIcon, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -333,7 +333,7 @@ function queueItem(t, me, service) {
     <a class="item-link" href="#/turns/${t.id}">
       ${t.status === 'waiting'
         ? html`<span class="item-icon queue-num" title="Turno ${t.position}">${t.position}</span>`
-        : html`<span class="item-icon ${late ? 'is-danger' : ''}">${icon('pulse')}</span>`}
+        : schoolIcon(t.service_mode, late ? 'is-danger' : '')}
       <span class="item-main">
         <strong>${whoHtml(t)}</strong>
         <span class="item-sub">${(isSupport(t)
@@ -363,7 +363,7 @@ function studentTurnItem(t, me) {
   const late = isLate(t);
   return html`<div class="item alert-item ${late || t.status === 'called' ? 'is-urgent' : ''} ${isOpen(t) ? '' : 'is-muted'}" data-turn="${t.id}">
     <a class="item-link" href="#/turns/${t.id}">
-      <span class="item-icon ${late ? 'is-danger' : ''}">${icon('pulse')}</span>
+      ${schoolIcon(t.service_mode, late ? 'is-danger' : '')}
       <span class="item-main">
         <strong>${whoHtml(t)}</strong>
         <span class="item-sub">${[t.service_name, t.reason, t.teacher_name && t.teacher_id !== me.id ? `está con ${t.teacher_name}` : null]
@@ -387,13 +387,15 @@ function returningSection(list) {
   return html`<section class="section" data-returning>
     <h3 class="section-title">Regresando a clase <span class="count">${list.length}</span></h3>
     <div class="list">${list.map((x) => html`<div class="item" data-back-id="${x.id}">
-      <span class="item-icon">${icon('back')}</span>
-      <span class="item-main">
-        <strong>${x.student_name} (${x.group_name})</strong>
-        <span class="item-tags">${x.asked
-          ? html`<span class="tag tag-warn">¿Ya llegó?</span>`
-          : html`<span class="tag">${icon('clock', 14)} salió ${timeAgo(x.returning_at)}</span>`}</span>
-      </span>
+      <a class="item-link" href="#/turns/back/${x.id}">
+        ${schoolIcon('returning')}
+        <span class="item-main">
+          <strong>${x.student_name} (${x.group_name})</strong>
+          <span class="item-tags">${x.asked
+            ? html`<span class="tag tag-warn">¿Ya llegó?</span>`
+            : html`<span class="tag">${icon('clock', 14)} salió ${timeAgo(x.returning_at)}</span>`}</span>
+        </span>
+      </a>
       <button type="button" class="btn btn-primary btn-sm" data-in-class>${icon('check', 16)} Está en mi clase</button>
     </div>`)}</div>
     <p class="hint">Si uno de ellos llega a tu clase, toca «Está en mi clase» y le avisamos a quien lo envió. Así no se avisa a Seguridad por error.</p>
@@ -430,7 +432,7 @@ function supportItem(t, { serving = false } = {}) {
     <a class="item-link" href="#/turns/${t.id}">
       ${waiting && t.position
         ? html`<span class="item-icon queue-num" title="Turno ${t.position}">${t.position}</span>`
-        : html`<span class="item-icon">${icon('wrench')}</span>`}
+        : schoolIcon('support')}
       <span class="item-main">
         <strong>${serving ? supportTitle(t) : `${t.service_name}: ${supportTitle(t)}`}</strong>
         <span class="item-sub">${sub.filter(Boolean).join(' · ')}</span>
@@ -970,4 +972,69 @@ export async function serviceFormView(ctx) {
       go('/services', { replace: true });
     });
   });
+}
+
+/**
+ * One student on the way back to class («Regresando a clase»): any teacher can open it. Only the name, the group
+ * and the time (never the service or the reason); whoever can see En vivo also gets the whole turn.
+ */
+export async function returningDetailView(ctx) {
+  const { el, params, isCurrent } = ctx;
+  const id = Number(params[0]);
+  const me = state.me.user;
+
+  async function load() {
+    const list = (await returningStudents().catch(() => [])) || [];
+    if (!isCurrent()) return;
+    const x = list.find((r) => r.id === id);
+    if (!x) {
+      el.innerHTML = String(html`<div class="stack">
+        <div class="card">${empty('check', 'Ya no va de regreso', 'Ya llegó a un salón o el turno se cerró.')}</div>
+        <a class="btn btn-ghost btn-block" href="#/turns">${icon('back', 18)} Volver a Turnos</a>
+      </div>`);
+      return;
+    }
+    const mine = (me.groups || []).includes(x.group_name);
+    el.innerHTML = String(html`
+      <div class="stack">
+        <section class="card stack alert-head ${x.late || x.asked ? 'is-urgent' : ''}">
+          <p class="alert-kind">${icon('back', 18)} Regresando a clase ${x.asked ? html`<span class="tag tag-warn">¿Ya llegó?</span>` : ''}</p>
+          <h2>${x.student_name} <span class="muted">· ${x.group_name}</span></h2>
+          ${x.due_at ? html`<p class="turn-timer ${x.late ? 'is-late' : ''}" data-due="${x.due_at}">${countdown(x.due_at)}</p>` : ''}
+          <div class="facts">
+            ${fact('Salió', `${timeOf(x.returning_at)} · ${timeAgo(x.returning_at)}`)}
+            ${fact('Debe llegar', x.due_at ? timeOf(x.due_at) : null)}
+          </div>
+        </section>
+        <button type="button" class="btn btn-primary btn-block btn-lg" data-in-class>${icon('check')} Está en mi clase</button>
+        ${x.asked && mine ? html`<button type="button" class="btn btn-ghost-danger btn-block" data-missing>${icon('alert', 18)} No ha llegado</button>` : ''}
+        ${can(me, 'live') ? html`<a class="btn btn-secondary btn-block" href="#/live/turn/${x.id}">${icon('pulse', 18)} Ver el turno completo</a>` : ''}
+        <p class="hint">Si llegó a tu clase, toca «Está en mi clase» y le avisamos a quien lo envió. Así no se avisa a Seguridad por error.</p>
+        <a class="btn btn-ghost btn-block" href="#/turns">${icon('back', 18)} Todos los turnos</a>
+      </div>`);
+    $('[data-in-class]', el).addEventListener('click', (e) =>
+      busy(e.currentTarget, async () => {
+        await advanceTurn(x.id, 'back');
+        toast(STEP_DONE.back, 'ok');
+        go('/turns', { replace: true });
+      }));
+    $('[data-missing]', el)?.addEventListener('click', (e) =>
+      busy(e.currentTarget, async () => {
+        const ok = await dialog({
+          title: `¿${x.student_name} no ha llegado?`,
+          message: 'Se avisa ahora a Seguridad, al servicio y a los maestros de su grupo. Si después llega, toca «Está en mi clase».',
+          confirmText: 'No ha llegado',
+          cancelText: 'Volver',
+          danger: true,
+        });
+        if (!ok) return;
+        await advanceTurn(x.id, 'missing');
+        toast(STEP_DONE.missing, 'ok');
+        await load();
+      }));
+  }
+
+  await load();
+  tickCountdowns(ctx);
+  keepFresh(ctx, load);
 }
