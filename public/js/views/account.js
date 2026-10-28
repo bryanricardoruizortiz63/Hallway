@@ -456,7 +456,7 @@ export async function verifyCodeView({ el }) {
               <img class="mfa-qr" src="${setup.qr}" alt="Código QR para la app de autenticación" width="200" height="200">
               <details><summary>¿No puedes escanearlo?</summary>
                 <p>En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
-          : html`<p class="otp-lead">Escribe el código de 6 números de <strong>Hallway</strong> que sale en tu app de autenticación. Te lo pide una vez al día porque en este teléfono tienes más de una cuenta.</p>`}
+          : html`<p class="otp-lead">Escribe el código de 6 números de <strong>Hallway</strong> que sale en tu app de autenticación. Te lo pide una vez al día.</p>`}
         <form data-code novalidate>
           ${otpField()}
           <p class="otp-status" data-otp-status aria-live="polite"></p>

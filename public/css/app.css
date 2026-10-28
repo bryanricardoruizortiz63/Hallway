@@ -4268,3 +4268,10 @@ button.side-brand:hover { background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) {
   .acct-layer, .acct-sheet, .acct-layer.is-closing, .acct-layer.is-closing .acct-sheet { animation: none; }
 }
+
+/* ---- Código del día in Personal ---- */
+.mfa-pick { cursor: pointer; }
+.mfa-pick input[type='checkbox'] { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--primary); }
+.mfa-bar { display: flex; align-items: center; gap: 8px; }
+.mfa-count { flex: 1; font-weight: 600; }
+.mfa-reset { align-items: flex-start; line-height: 1.4; }

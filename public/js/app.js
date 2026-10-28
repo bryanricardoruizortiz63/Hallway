@@ -9,7 +9,7 @@ import { adoptSchoolFromUrl, changePasswordView, loginView, rememberSchool } fro
 import { appIcon, applyBranding, restoreBranding } from './branding.js';
 import { absenceView, coverView, editAbsenceView, homeView, reportView } from './views/absences.js';
 import { absencesListView, dashboardView } from './views/staff.js';
-import { dataView, employeeFormView, employeesView, settingsView } from './views/admin.js';
+import { dataView, employeeFormView, employeesView, mfaAdminView, settingsView } from './views/admin.js';
 import { accessCardsView } from './views/access.js';
 import { rolesView } from './views/roles.js';
 import { calendarView, groupsView } from './views/calendar.js';
@@ -63,6 +63,7 @@ const ROUTES = [
   { re: /^\/absences$/, view: absencesListView, title: 'Todas las ausencias', allow: STAFF, back: true },
   { re: /^\/employees$/, view: employeesView, title: 'Personal', allow: may('staff') },
   { re: /^\/employees\/accesos$/, view: accessCardsView, title: 'Accesos para repartir', allow: may('staff'), back: true },
+  { re: /^\/employees\/codigo$/, view: mfaAdminView, title: 'Código del día', allow: may('staff'), back: true },
   // Employee ids are Supabase Auth UUIDs.
   { re: /^\/employees\/(new|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, view: employeeFormView, title: 'Empleado', allow: may('staff'), back: true },
   { re: /^\/settings$/, view: settingsView, title: 'Escuela y Teams', allow: may('settings'), back: true },

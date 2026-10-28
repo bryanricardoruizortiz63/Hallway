@@ -148,9 +148,11 @@ function codeTime(session) {
   }
 }
 
-/** With two or more accounts on this phone, the open one must have passed the code today. */
+/** The open account must have passed the code today (two accounts on this phone, or turned on for this person). */
 export async function needsDailyCode(me) {
-  if (!me || read().length < 2) return false;
+  if (!me) return false;
+  // Two accounts on this phone, or the dirección turned the code on for this person.
+  if (read().length < 2 && !(await sb.rpc('mfa_required')).data) return false;
   const { data } = await sb.auth.getSession();
   if (!data.session) return false;
   const t = codeTime(data.session);

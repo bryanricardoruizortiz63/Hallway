@@ -487,6 +487,9 @@ export async function listEmployees() {
   return rows.map(withRoleLabel);
 }
 
+/** Turns the daily code on or off for these people (reset: also removes their configured authenticator). */
+export const setRequireMfa = (ids, on, reset = false) => rpc('set_require_mfa', { p_ids: ids, p_on: on, p_reset: reset });
+
 export async function getEmployee(id) {
   const row = await run(sb.from('employees_v').select('*').eq('id', id).maybeSingle());
   if (!row) throw new ApiError('Empleado no encontrado.', 404);
