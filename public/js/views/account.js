@@ -10,7 +10,8 @@ import {
 import { $, busy, can, formValues, html, isManager, isStaff, roleLabel, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
-import { logout, setUnread, state } from '../store.js';
+import { go, homePath, logout, setUnread, state } from '../store.js';
+import { addAccount, authenticator, checkCode, savedAccounts, startAuthenticator, switchAccount } from '../accounts.js';
 import { inTabBar } from '../nav.js';
 import { bindPasswordToggles } from './auth.js';
 import { avatar, empty, installHint } from './common.js';
@@ -263,6 +264,7 @@ export async function moreView({ el }) {
           : null,
     ]],
     ['Tu cuenta', [
+      canAddAccount(user) ? ['#/accounts/add', 'plus', 'Agregar otra cuenta', 'Si tienes otro rol (p. ej. Administración y tu cuenta de IT): cambias sin salir'] : null,
       ['#/notifications', 'bell', 'Avisos', state.unread ? `${state.unread} sin leer` : 'Lo que te ha llegado: ausencias, turnos, alertas y mensajes'],
       ['#/profile', 'user', 'Mi perfil', 'Notificaciones, contraseña, tu salón e instalar la app'],
       ['#/guide', 'sparkle', 'Cómo usar Hallway', 'Dónde está cada cosa'],
@@ -271,8 +273,21 @@ export async function moreView({ el }) {
     .map(([title, links]) => [title, links.filter((link) => link && !inTabBar(user, link[0].slice(1)))])
     .filter(([, links]) => links.length);
 
+  const others = savedAccounts().filter((a) => a.id !== user.id);
   el.innerHTML = String(html`
     <div class="more-groups">
+      ${others.length
+        ? html`<section class="section" data-accounts>
+            <h3 class="section-title">Cambiar de cuenta</h3>
+            <div class="list">${others.map(
+              (a) => html`<button type="button" class="item" data-switch="${a.id}">
+                <span class="item-icon">${icon('user')}</span>
+                <span class="item-main"><strong>${a.name}</strong><span class="item-sub">${[a.role, a.school].filter(Boolean).join(' · ')}</span></span>
+                ${icon('swap', 18)}
+              </button>`,
+            )}</div>
+          </section>`
+        : ''}
       ${groups.map(
         ([title, links]) => html`<section class="section">
           <h3 class="section-title">${title}</h3>
@@ -289,5 +304,102 @@ export async function moreView({ el }) {
         <button class="btn btn-ghost-danger btn-block" data-logout>${icon('logout', 18)} Cerrar sesión</button>
       </div>
     </div>`);
+  $('[data-logout]', el).addEventListener('click', logout);
+  for (const btn of el.querySelectorAll('[data-switch]')) {
+    btn.addEventListener('click', () => busy(btn, () => switchAccount(btn.dataset.switch, state.me)));
+  }
+}
+
+// ---- Several accounts on one phone ------------------------------------------------------------
+
+/** Whoever manages the school (and whoever already has two accounts here) can add one. */
+const canAddAccount = (user) => user.role === 'admin' || isManager(user) || savedAccounts().length > 1;
+
+export async function addAccountView({ el }) {
+  const me = state.me;
+  el.innerHTML = String(html`
+    <div class="stack">
+      <section class="card stack">
+        <h2 class="card-title">${icon('plus')} Agregar otra cuenta</h2>
+        <p class="hint">Para quien tiene dos cuentas en Hallway, por ejemplo la de Administración y la suya de IT. Las dos quedan
+          en este teléfono y cambias desde <strong>Más</strong> con un toque, sin salir. Cada día, cada cuenta te pide el código
+          de una app de autenticación (Google Authenticator o Microsoft Authenticator); la primera vez te ayudamos a configurarla.</p>
+        <form class="stack" data-add-account novalidate>
+          <label class="field"><span>Código de escuela</span>
+            <input name="school_code" required autocapitalize="characters" spellcheck="false" value="${me.school.code}"></label>
+          <label class="field"><span>Usuario de la otra cuenta</span>
+            <input name="username" required autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Ej. admin"></label>
+          <label class="field"><span>Contraseña</span>
+            <span class="pw"><input name="password" type="password" required autocomplete="off">
+              <button type="button" class="pw-toggle" data-pw>Ver</button></span></label>
+          <button type="submit" class="btn btn-primary btn-block btn-lg">${icon('plus', 18)} Agregar y abrir</button>
+        </form>
+        <p class="hint">Tu cuenta de ahora (${me.user.full_name}) se queda guardada en este teléfono.</p>
+      </section>
+    </div>`);
+  bindPasswordToggles(el);
+  const form = $('[data-add-account]', el);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = formValues(form);
+    busy(form.querySelector('[type=submit]'), () => addAccount(me, v.school_code, v.username, v.password));
+  });
+}
+
+/** With two or more accounts on this phone: the code of the authenticator app, once a day per account. */
+export async function verifyCodeView({ el }) {
+  const me = state.me;
+  const factor = await authenticator().catch(() => null);
+  let setup = null;
+  if (!factor) {
+    try {
+      setup = await startAuthenticator();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+  const others = savedAccounts().filter((a) => a.id !== me.user.id);
+  el.innerHTML = String(html`
+    <div class="auth">
+      <div class="auth-brand">
+        <h1>Código del día</h1>
+        <p>${me.user.full_name} · ${me.school.name}</p>
+      </div>
+      <div class="card auth-card stack">
+        ${setup
+          ? html`<p><strong>Primera vez con esta cuenta:</strong></p>
+              <ol class="steps-list">
+                <li>Instala <strong>Google Authenticator</strong> o <strong>Microsoft Authenticator</strong> en tu teléfono.</li>
+                <li>En la app toca <strong>+</strong> y escanea este código.</li>
+                <li>Escribe aquí el código de 6 números que te sale para «Hallway».</li>
+              </ol>
+              <img class="mfa-qr" src="${setup.qr}" alt="Código QR para la app de autenticación" width="200" height="200">
+              <details><summary>¿No puedes escanearlo?</summary>
+                <p class="hint">En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
+          : html`<p>Abre tu app de autenticación y escribe el código de 6 números de <strong>Hallway</strong> para ${me.user.full_name}. Te lo pide una vez al día porque en este teléfono tienes más de una cuenta.</p>`}
+        <form class="stack" data-code novalidate>
+          <label class="field"><span>Código</span>
+            <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required placeholder="123456"></label>
+          <button type="submit" class="btn btn-primary btn-block btn-lg" ${factor || setup ? '' : 'disabled'}>${icon('check', 18)} Verificar</button>
+        </form>
+        ${others.map((a) => html`<button type="button" class="btn btn-secondary btn-block" data-switch="${a.id}">${icon('swap', 18)} Usar ${a.name}</button>`)}
+        <button type="button" class="btn btn-ghost-danger btn-block" data-logout>${icon('logout', 18)} Salir de esta cuenta</button>
+      </div>
+    </div>`);
+  const form = $('[data-code]', el);
+  form.querySelector('[name=code]').focus();
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = form.querySelector('[name=code]').value;
+    busy(form.querySelector('[type=submit]'), async () => {
+      await checkCode(setup?.factorId || factor.id, code);
+      state.needsCode = false;
+      toast('Listo.', 'ok');
+      go(homePath(), { replace: true });
+    });
+  });
+  for (const btn of el.querySelectorAll('[data-switch]')) {
+    btn.addEventListener('click', () => busy(btn, () => switchAccount(btn.dataset.switch, me)));
+  }
   $('[data-logout]', el).addEventListener('click', logout);
 }

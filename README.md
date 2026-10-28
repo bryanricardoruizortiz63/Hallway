@@ -123,6 +123,13 @@ Funciona con servicios gratuitos:
 **Notificaciones**
 - **Microsoft Teams**: cada ausencia nueva, modificada (con qué cambió) o cancelada (quién y por qué) se publica en el canal que elija la escuela. Las solicitudes de contraseña van al mismo canal o a otro distinto.
 - **En la app**: campana con avisos y contador.
+- **Dos cuentas en un teléfono**: quien administra la escuela puede tener, por ejemplo, la cuenta de Administración y su propia cuenta de IT.
+  - Se agrega la otra cuenta en *Más → Agregar otra cuenta*, con su usuario y contraseña.
+  - Desde entonces se cambia en *Más → Cambiar de cuenta* con un toque, sin salir.
+  - Con más de una cuenta en el teléfono, **cada cuenta pide una vez al día el código** de una app de autenticación (Google Authenticator o Microsoft Authenticator). Es la verificación en dos pasos de Supabase.
+  - La primera vez, la app muestra el código QR para configurarla.
+  - Al cerrar sesión de una cuenta, se abre la otra.
+  - Los avisos push llegan a la cuenta que está abierta en ese teléfono.
 - **Push al teléfono**: se activan en *Más → Mi perfil*. Funcionan en Android, computadoras e iPhone (iOS 16.4+ con la app añadida a la pantalla de inicio).
 
 **En vivo por servicio:** `live_turns(servicio, desde)` (permiso `live`, o quien atiende el servicio) da los turnos del día (desde el inicio del día en el teléfono) y los que siguen abiertos de antes, con cada paso, quién pidió, quién tiene al estudiante, quién atendió, cómo terminó y qué se hizo; sin la nota. `live_turn(id)` (mismo permiso) da un turno con todo, también la nota del maestro, su lugar en la fila y la hora límite para llegar o regresar (`due_at`). `live_board` dice, de cada estudiante fuera del salón, desde cuándo (`out_since`), y `live_hours(servicio, desde)` (mismo permiso) cuenta los turnos por hora de las 4 semanas antes de hoy, en la zona horaria de la escuela, y en cuántos días hubo; sin nombres.
@@ -263,6 +270,11 @@ index.html                Redirige de la raíz del sitio a public/ (conservando 
 **Mantenimiento diario:** `pg_cron` (7:23 UTC) pone una tarea en `outbox` y `notify` borra las ausencias canceladas hace más de 15 días (con sus archivos), los registros de envío de más de 30 días, los avisos de más de 180 días, las fotos de mantenimiento 30 días después de cerrarse la solicitud (y las que se subieron sin llegar a usarse), y los mensajes, turnos, visitas, solicitudes de mantenimiento y reservas del salón de más de un año.
 
 **Correo:** `functions/_shared/email.ts` envía por SMTP con [nodemailer](https://nodemailer.com) (puerto 465), una sola conexión por envío, y deja de intentar si el servidor rechaza la cuenta. `functions/_shared/email_template.ts` convierte el texto en el diseño HTML (tablas y estilos en línea, para que se vea igual en Gmail, Outlook y teléfonos) y el ícono va adjunto dentro del correo, así se ve aunque el lector bloquee las imágenes externas.
+
+**Varias cuentas:** `js/accounts.js`.
+- Guarda en el teléfono (`localStorage`, `lah:accounts`) cada cuenta agregada con su *refresh token*, y lo mantiene al día.
+- Al cambiar de cuenta abre esa sesión con `refreshSession` y recarga la app.
+- Con dos o más cuentas, la app exige que la sesión abierta haya pasado hoy el código TOTP de Supabase MFA (`mfa.enroll` y `mfa.challengeAndVerify`). La fecha sale del `amr` del token firmado.
 
 **Excel sin librerías:** `js/xlsx.js` y `js/zip.js` generan los .xlsx y el ZIP de documentos en el navegador.
 

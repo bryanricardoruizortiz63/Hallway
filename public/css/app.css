@@ -1112,6 +1112,21 @@ select {
   border-bottom: 0;
 }
 
+/* A row that is a button (e.g. switching accounts in Más). */
+button.item {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.item:last-child {
+  border-bottom: 0;
+}
+
 .item:hover,
 .item:active {
   background: var(--surface-2);
@@ -3931,4 +3946,24 @@ body.tv-mode {
   .hall-step:nth-of-type(4) { transform: scale(0.72); }
   .hall-step:nth-of-type(5) { transform: scale(1); }
   .hall-step:nth-of-type(6) { transform: scale(1.4); }
+}
+
+/* ---- Code of the day (authenticator app) ---- */
+.mfa-qr {
+  display: block;
+  margin: 0 auto;
+  padding: 8px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.mfa-secret {
+  word-break: break-all;
+}
+
+.steps-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
 }

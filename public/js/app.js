@@ -34,7 +34,8 @@ import {
   roomsPanelView,
   servicePanelView,
 } from './views/panels.js';
-import { moreView, notificationsView, profileView } from './views/account.js';
+import { addAccountView, moreView, notificationsView, profileView, verifyCodeView } from './views/account.js';
+import { needsDailyCode } from './accounts.js';
 import { guideView } from './views/guide.js';
 import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
@@ -50,6 +51,8 @@ const ROUTES = [
   { re: /^\/login$/, view: loginView, public: true, bare: true },
   { re: /^\/platform$/, view: platformView, public: true, bare: true },
   { re: /^\/change-password$/, view: changePasswordView, bare: true },
+  { re: /^\/verify-code$/, view: verifyCodeView, bare: true },
+  { re: /^\/accounts\/add$/, view: addAccountView, title: 'Agregar otra cuenta', back: true },
   { re: /^\/home$/, view: homeView, title: 'Mis ausencias', allow: PEOPLE },
   { re: /^\/report$/, view: reportView, title: 'Reportar ausencia', back: true },
   { re: /^\/absence\/(\d+)$/, view: absenceView, title: 'Ausencia', back: true },
@@ -236,6 +239,8 @@ async function router() {
     return go('/login', { replace: true });
   }
   if (user?.must_change_password && path !== '/change-password') return go('/change-password', { replace: true });
+  if (user && state.needsCode && path !== '/verify-code') return go('/verify-code', { replace: true });
+  if (path === '/verify-code' && !state.needsCode) return go(homePath(), { replace: true });
   if (path === '/login' && user) return go(homePath(), { replace: true });
   if (route.allow && !route.allow(user)) return go(homePath(), { replace: true });
 
@@ -331,6 +336,7 @@ async function boot() {
   } catch (err) {
     toast(err.message, 'error');
   }
+  if (state.me) state.needsCode = await needsDailyCode(state.me).catch(() => false);
   if (state.me) {
     // The school may have changed its code or icon since this device last saw it.
     rememberSchool(state.me.school);
