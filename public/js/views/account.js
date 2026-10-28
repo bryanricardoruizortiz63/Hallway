@@ -365,7 +365,7 @@ export function openAccountMenu(trigger) {
           : ''}
         <button type="button" class="acct-row" data-logout>
           <span class="acct-add">${icon('logout', 20)}</span>
-          <span class="acct-row-text"><strong>Cerrar sesión</strong>${others.length ? html`<small>Se abre ${others[0].name}</small>` : ''}</span>
+          <span class="acct-row-text"><strong>Cerrar sesión</strong></span>
         </button>
       </div>
       ${others.length ? html`<p class="acct-note">${icon('shield', 14)} Cada cuenta te pide su código una vez al día.</p>` : ''}
