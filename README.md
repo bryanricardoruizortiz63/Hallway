@@ -148,6 +148,11 @@ Funciona con servicios gratuitos:
 **Resumen del día:** `daily_summary(día)` (permiso `summary`; hoy en la zona horaria de la escuela, o un día de los últimos 60) arma con `private.summary_of` las ausencias del día (`private.summary_absences`: quién cubre ese día, quién no ha confirmado, `no_cover` y si el rol necesita cobertura; sin el motivo), los turnos de cada servicio en números, alertas, salidas, relevos, visitas, mantenimiento y el próximo día de clases (`private.next_school_day`, sin días sin clases). `private.send_daily_summaries` corre cada 5 minutos (pg_cron) y, a la hora de salida de la escuela (hasta 3 horas después) en un día de clases, avisa una vez (`daily_summaries`) a quien tiene el permiso (no a la cuenta de Administración) con `private.summary_text`.
 
 **Varias escuelas:** cada una tiene su código, su personal, sus ausencias y sus archivos, separados por reglas de seguridad en la base de datos. Desde el **Panel de plataforma** (`#/platform`) se crean escuelas nuevas.
+- **Uso de cada escuela:** cuántas personas entraron este mes, turnos, alertas, mantenimiento y reservas del mes, el último inicio de sesión y el espacio de archivos.
+- **Módulos:** se puede apagar por escuela Turnos (Enfermería, Trabajo Social), Soporte IT, Alertas, Visitas, Mantenimiento, Reservas del salón y En vivo.
+  - Lo apagado deja de verse en esa escuela: pestañas, enlaces de *Más*, servicios y pantallas.
+  - Los datos no se borran.
+  - Lo guarda `schools.disabled_modules`, y `me()` lo manda en `school.disabled_modules`.
 
 Permisos con los que vienen los roles (la cuenta de Administración los cambia en **Más → Roles y permisos**):
 

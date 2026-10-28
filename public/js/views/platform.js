@@ -1,6 +1,6 @@
 import { platform } from '../backend.js';
 import { APP_URL } from '../config.js';
-import { $, busy, copyText, dialog, fmtDateTime, formValues, html, toast } from '../lib.js';
+import { $, busy, copyText, dialog, fmtDateTime, formValues, html, MODULES, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { logout, state } from '../store.js';
 import { bindPasswordToggles } from './auth.js';
@@ -11,6 +11,12 @@ function randomPassword() {
   const alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const bytes = crypto.getRandomValues(new Uint32Array(12));
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+}
+
+/** "16.6 MB", "820 KB". */
+function megabytes(bytes) {
+  const n = Number(bytes) || 0;
+  return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
 }
 
 export async function platformView(ctx) {
@@ -58,7 +64,18 @@ export async function platformView(ctx) {
                   </div>
                   ${s.active ? html`<span class="badge badge-ok">Activa</span>` : html`<span class="badge badge-muted">Inactiva</span>`}
                 </div>
-                <div class="button-row">
+                <div class="usage-grid">
+                  <span><strong>${s.active_month}</strong><small>entraron este mes</small></span>
+                  <span><strong>${s.turns_month}</strong><small>turnos del mes</small></span>
+                  <span><strong>${s.alerts_month}</strong><small>alertas del mes</small></span>
+                  <span><strong>${s.maintenance_month}</strong><small>mantenimiento</small></span>
+                  <span><strong>${s.bookings_month}</strong><small>reservas</small></span>
+                  <span><strong>${megabytes(s.storage_bytes)}</strong><small>archivos</small></span>
+                </div>
+                <p class="muted small">${s.last_login_at ? `Último inicio de sesión ${timeAgo(s.last_login_at)}` : 'Nadie ha entrado todavía'}${(s.disabled_modules || []).length
+                  ? ` · Apagado: ${s.disabled_modules.map((m) => MODULES[m]?.split(' (')[0] || m).join(', ')}` : ''}</p>
+                <div class="button-row wrap">
+                  <button class="btn btn-secondary btn-sm" data-modules="${s.id}">${icon('sliders', 16)} Módulos</button>
                   <button class="btn btn-secondary btn-sm" data-reset="${s.id}">${icon('key', 16)} Nueva contraseña admin</button>
                   <button class="btn btn-ghost btn-sm" data-toggle="${s.id}" data-active="${s.active}">${s.active ? 'Desactivar' : 'Activar'}</button>
                 </div>
@@ -111,6 +128,27 @@ export async function platformView(ctx) {
         await call('reset_admin_password', { school_id: btn.dataset.reset, new_password: password });
         await copyText(password);
         toast('Contraseña cambiada y copiada', 'ok');
+      });
+    });
+  }
+  for (const btn of el.querySelectorAll('[data-modules]')) {
+    btn.addEventListener('click', async () => {
+      const school = schools.find((x) => x.id === btn.dataset.modules);
+      const off = new Set(school.disabled_modules || []);
+      const v = await dialog({
+        title: `Módulos de ${school.name}`,
+        message: 'Lo que apagues deja de verse en la app de esa escuela (pestañas, enlaces y servicios). Los datos no se borran.',
+        body: html`<div class="stack">${Object.entries(MODULES).map(
+          ([key, label]) => html`<label class="switch-inline"><input type="checkbox" name="${key}" ${off.has(key) ? '' : 'checked'}> ${label}</label>`,
+        )}</div>`,
+        confirmText: 'Guardar',
+        collect: true,
+      });
+      if (!v) return;
+      await busy(btn, async () => {
+        await call('set_school_modules', { school_id: school.id, disabled_modules: Object.keys(MODULES).filter((k) => !v[k]) });
+        toast('Módulos guardados', 'ok');
+        ctx.reload();
       });
     });
   }

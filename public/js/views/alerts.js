@@ -17,7 +17,7 @@ import {
   resolveStudentAlert,
   takeRelief,
 } from '../backend.js';
-import { $, busy, can, dialog, schoolIcon, fmtDateTime, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, moduleOn, schoolIcon, fmtDateTime, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -180,7 +180,7 @@ export async function alertsView(ctx) {
             : ''}
         </div>
 
-        ${visitsSection(data.visits, me)}
+        ${moduleOn(state.me.school, 'visits') ? visitsSection(data.visits, me) : ''}
 
         ${missingOpen.length
           ? html`<section class="section">

@@ -16,7 +16,7 @@ import {
   setMyServiceStatus,
   turnHistory,
 } from '../backend.js';
-import { $, busy, can, dialog, schoolIcon, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, moduleOn, schoolIcon, serviceOn, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -532,11 +532,11 @@ export async function turnsView(ctx) {
                       <small class="${a.ok ? '' : 'is-off'}"><i class="service-dot" aria-hidden="true"></i>${availabilityText(s)}</small></span>
                     ${icon('chevron', 18)}</a>`;
                 })}
-                <a class="alert-action" href="#/maintenance/new">
+                ${moduleOn(state.me.school, 'maintenance') ? html`<a class="alert-action" href="#/maintenance/new">
                   <span class="service-icon">${icon('wrench', 22)}</span>
                   <span class="service-text"><strong>Mantenimiento</strong>
                     <small>Derrame, limpieza, baño, basura</small></span>
-                  ${icon('chevron', 18)}</a>
+                  ${icon('chevron', 18)}</a>` : ''}
               </div>
             </section>
 
@@ -600,7 +600,8 @@ export async function turnsView(ctx) {
       servicesOverview(), listTurns(), myOpenMaintenance(me.id), returningStudents().then((x) => x || [], () => []),
     ]);
     if (!isCurrent()) return;
-    data = { services, turns, maintenance, returning };
+    // Services whose module the platform turned off (Soporte IT, Enfermería…) don't show.
+    data = { services: services.filter((s) => serviceOn(state.me.school, s)), turns, maintenance, returning };
     render();
   }
 
@@ -616,7 +617,7 @@ export async function turnsView(ctx) {
 export async function newTurnView(ctx) {
   const { el, query } = ctx;
   const me = state.me.user;
-  const services = (await servicesOverview()).filter((s) => s.active);
+  const services = (await servicesOverview()).filter((s) => s.active && serviceOn(state.me.school, s));
   if (!services.length) {
     el.innerHTML = String(html`<div class="card">${empty('pulse', 'No hay servicios', 'La dirección todavía no activó Enfermería ni Trabajo Social.')}</div>`);
     return;

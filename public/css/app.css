@@ -4289,3 +4289,15 @@ button.side-brand:hover { background: var(--surface-2); }
   .item-icon.emoji-icon.is-danger { background: #4a2328; }
   .item-icon.emoji-icon.is-ok { background: #1f3b33; }
 }
+
+/* ---- Platform: usage per school ---- */
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.usage-grid span { display: grid; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); }
+.usage-grid strong { font-size: 18px; }
+.usage-grid small { color: var(--muted); font-size: 12px; }
+.muted.small { font-size: 13px; margin: 0 0 8px; }
