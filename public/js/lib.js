@@ -299,6 +299,31 @@ export async function copyText(text) {
   }
 }
 
+// ---- Modules the platform can turn off per school ---------------------------------
+
+/** key → name. «turns» is Enfermería and Trabajo Social; Soporte IT is «support». */
+export const MODULES = {
+  turns: 'Turnos (Enfermería, Trabajo Social)',
+  support: 'Soporte IT',
+  alerts: 'Alertas (No ha llegado, salidas, relevos)',
+  visits: 'Visitas',
+  maintenance: 'Mantenimiento',
+  rooms: 'Reservas del salón',
+  live: 'En vivo',
+};
+
+/** Whether the school uses this module (all are on unless the platform turned it off). */
+export const moduleOn = (school, key) => !(school?.disabled_modules || []).includes(key);
+
+/** A service is on when its module is: Soporte IT (support) or Enfermería and the like (turns). */
+export const serviceOn = (school, s) => moduleOn(school, s.mode === 'support' || s.service_mode === 'support' ? 'support' : 'turns');
+
+/** The module of a screen (by its path), or null. */
+export function pathModule(path) {
+  const map = [['/alerts/visit', 'visits'], ['/alerts', 'alerts'], ['/maintenance', 'maintenance'], ['/rooms', 'rooms'], ['/live', 'live']];
+  return map.find(([p]) => path === p || path.startsWith(`${p}/`))?.[1] || null;
+}
+
 // ---- Friendly icons ------------------------------------------------------------
 
 /** Pictures teachers recognize at a glance in the lists (turns, alerts, maintenance), as emoji. */

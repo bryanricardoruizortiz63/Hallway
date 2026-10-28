@@ -1,5 +1,5 @@
 import { getMe, markAlertsRead } from './backend.js';
-import { can, html, isStaff, poll, raw, toast } from './lib.js';
+import { can, html, isStaff, moduleOn, pathModule, poll, raw, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -151,7 +151,7 @@ let cleanups = [];
 
 function renderShell(route, path) {
   const { user, school } = state.me;
-  const key = `${user.id}:${user.role}:${(user.permissions || []).join()}`;
+  const key = `${user.id}:${user.role}:${(user.permissions || []).join()}:${(school.disabled_modules || []).join()}`;
   if (shellKey !== key || !document.getElementById('view')) {
     shellKey = key;
     appRoot.innerHTML = String(html`
@@ -251,6 +251,12 @@ async function router() {
   if (path === '/verify-code' && !state.needsCode) return go(homePath(), { replace: true });
   if (path === '/login' && user) return go(homePath(), { replace: true });
   if (route.allow && !route.allow(user)) return go(homePath(), { replace: true });
+  // A module the platform turned off for this school.
+  const mod = pathModule(path);
+  if (user && mod && !moduleOn(state.me.school, mod)) return go(homePath(), { replace: true });
+  if (user && (path === '/turns' || path.startsWith('/turns/')) && !['turns', 'support', 'maintenance'].some((m) => moduleOn(state.me.school, m))) {
+    return go(homePath(), { replace: true });
+  }
 
   if (bootScreen && !bootScreen.classList.contains('is-leaving')) {
     bootScreen.classList.add('is-leaving');

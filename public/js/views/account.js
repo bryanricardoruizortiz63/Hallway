@@ -7,7 +7,7 @@ import {
   testPush,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, formValues, html, isManager, isStaff, raw, roleLabel, timeAgo, toast } from '../lib.js';
+import { $, busy, can, formValues, html, isManager, isStaff, moduleOn, pathModule, raw, roleLabel, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
@@ -225,6 +225,15 @@ export async function profileView({ el }) {
 
 // ---- Más ------------------------------------------------------------------------
 
+/** Whether a link of Más goes to a module the school uses. */
+function linkOn(href) {
+  const path = href.replace(/^#/, '');
+  const school = state.me.school;
+  if (path === '/turns') return moduleOn(school, 'turns') || moduleOn(school, 'support') || moduleOn(school, 'maintenance');
+  const mod = pathModule(path);
+  return !mod || moduleOn(school, mod);
+}
+
 export async function moreView({ el }) {
   const { user } = state.me;
   const admin = user.role === 'admin';
@@ -271,7 +280,7 @@ export async function moreView({ el }) {
       ['#/guide', 'sparkle', 'Cómo usar Hallway', 'Dónde está cada cosa'],
     ]],
   ]
-    .map(([title, links]) => [title, links.filter((link) => link && !inTabBar(user, link[0].slice(1)))])
+    .map(([title, links]) => [title, links.filter((link) => link && !inTabBar(user, link[0].slice(1)) && linkOn(link[0]))])
     .filter(([, links]) => links.length);
 
   const others = savedAccounts().filter((a) => a.id !== user.id);

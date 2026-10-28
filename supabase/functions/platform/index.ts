@@ -13,6 +13,7 @@ import {
 } from '../_shared/http.ts';
 
 const db = serviceClient();
+const MODULES = ['turns', 'support', 'alerts', 'maintenance', 'rooms', 'visits', 'live'];
 const ICON_FILES = ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'icon-maskable-512.png'];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -130,6 +131,15 @@ const actions: Record<string, (b: Record<string, unknown>) => Promise<Response>>
 
   async set_school_active(b) {
     const { error } = await db.from('schools').update({ active: b.active === true }).eq('id', String(b.school_id));
+    if (error) throw error;
+    return json({ ok: true });
+  },
+
+  /** What the school doesn't use: the app hides those tabs, links and services. */
+  async set_school_modules(b) {
+    const disabled = Array.isArray(b.disabled_modules) ? [...new Set(b.disabled_modules.map(String))] : [];
+    if (disabled.some((m) => !MODULES.includes(m))) throw new HttpError(400, 'Módulo no válido.');
+    const { error } = await db.from('schools').update({ disabled_modules: disabled }).eq('id', String(b.school_id));
     if (error) throw error;
     return json({ ok: true });
   },
