@@ -201,7 +201,7 @@ Gmail permite unos 500 correos al día. También sirve cualquier servidor SMTP e
 
 El personal de esas escuelas lo ve al instante en la app, en los correos y en las notificaciones; las demás escuelas siguen igual. **Volver al predeterminado** quita el ícono propio. En la pantalla de inicio del teléfono, el ícono nuevo aparece al instalar la app: quien ya la tiene debe quitarla y volver a añadirla (iPhone) o reinstalarla (Android).
 
-El ícono **predeterminado** (el de las escuelas sin ícono propio) está en `public/icons`; para cambiarlo, en el mismo panel abre *Cambiar el ícono predeterminado*, descarga los 4 archivos y súbelos a esa carpeta en GitHub.
+El ícono **predeterminado** (el de las escuelas sin ícono propio) es el logo de Hallway: las paredes de un pasillo que forman una «H», con la puerta amarilla al fondo. Su dibujo original está en `public/icons/logo.svg` y de ahí salen los PNG de `public/icons` (también la insignia blanca `badge-72.png` de las notificaciones). Los correos lo toman de `{app_url}icons/icon-192.png`. Para cambiarlo, en el mismo panel abre *Cambiar el ícono predeterminado*, descarga los 4 archivos y súbelos a esa carpeta en GitHub.
 
 ### Instalar en los teléfonos
 

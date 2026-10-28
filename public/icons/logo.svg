@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Hallway</title>
+  <rect width="512" height="512" rx="112" fill="#f4f6fb"/>
+  <polygon points="200,170 312,170 400,96 112,96" fill="#e3e9f7"/>
+  <polygon points="200,350 312,350 400,416 112,416" fill="#dbe4fa"/>
+  <polygon points="112,96 200,170 200,350 112,416" fill="#1e4fd8"/>
+  <polygon points="400,96 312,170 312,350 400,416" fill="#1e4fd8"/>
+  <rect x="200" y="170" width="112" height="180" fill="#fff"/>
+  <rect x="226" y="222" width="60" height="128" rx="4" fill="#ffc94d"/>
+  <circle cx="275" cy="290" r="4.5" fill="#b8860b"/>
+</svg>
