@@ -11,7 +11,7 @@ import { $, busy, can, formValues, html, isManager, isStaff, raw, roleLabel, tim
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
-import { addAccount, authenticator, checkCode, savedAccounts, startAuthenticator, switchAccount } from '../accounts.js';
+import { addAccount, authenticator, cancelCode, checkCode, codeGiven, savedAccounts, startAuthenticator, switchAccount } from '../accounts.js';
 import { inTabBar } from '../nav.js';
 import { appIcon } from '../branding.js';
 import { bindPasswordToggles } from './auth.js';
@@ -409,7 +409,6 @@ export async function addAccountView({ el }) {
               <button type="button" class="pw-toggle" data-pw>Ver</button></span></label>
           <button type="submit" class="btn btn-primary btn-block btn-lg">${icon('plus', 18)} Agregar y abrir</button>
         </form>
-        <p class="hint">Tu cuenta de ahora (${me.user.full_name}) se queda guardada en este teléfono.</p>
       </section>
     </div>`);
   bindPasswordToggles(el);
@@ -433,7 +432,6 @@ export async function verifyCodeView({ el }) {
       toast(err.message, 'error');
     }
   }
-  const others = savedAccounts().filter((a) => a.id !== me.user.id);
   const factorId = setup?.factorId || factor?.id;
   el.innerHTML = String(html`
     <div class="otp-screen">
@@ -462,8 +460,7 @@ export async function verifyCodeView({ el }) {
           ${otpField()}
           <p class="otp-status" data-otp-status aria-live="polite"></p>
         </form>
-        ${others.map((a) => html`<button type="button" class="btn btn-secondary btn-block" data-switch="${a.id}">${icon('swap', 18)} Usar ${a.name}</button>`)}
-        <button type="button" class="btn btn-ghost-danger btn-block" data-logout>${icon('logout', 18)} Salir de esta cuenta</button>
+        <button type="button" class="btn btn-secondary btn-block" data-cancel>Cancelar</button>
       </div>
     </div>`);
   const form = $('[data-code]', el);
@@ -480,13 +477,15 @@ export async function verifyCodeView({ el }) {
     status.textContent = '¡Listo!';
     await otp.succeed();
     state.needsCode = false;
+    codeGiven();
     go(homePath(), { replace: true });
   });
   form.addEventListener('submit', (e) => e.preventDefault());
-  for (const btn of el.querySelectorAll('[data-switch]')) {
-    btn.addEventListener('click', () => busy(btn, () => switchAccount(btn.dataset.switch, me)));
-  }
-  $('[data-logout]', el).addEventListener('click', logout);
+  // Only the code or «Cancelar»: back to the account it came from (one just added is forgotten), else sign out.
+  $('[data-cancel]', el).addEventListener('click', (e) =>
+    busy(e.currentTarget, async () => {
+      if (!(await cancelCode(me))) await logout();
+    }));
 }
 
 /** Six glass boxes over one real input (so autofill from SMS/keyboard and paste work). */

@@ -28,6 +28,7 @@ import {
   changeSchoolCode,
   listEmployees,
   previewEmail,
+  resetMfa,
   setRequireMfa,
   removeEmailAccount,
   resetEmployeePassword,
@@ -901,6 +902,7 @@ export async function mfaAdminView({ el }) {
       <div class="stack">
         <section class="card stack">
           <h2 class="card-title">${icon('shield')} Código del día</h2>
+          <p class="hint">Marca a alguien y toca <strong>Reiniciar</strong> si cambió de teléfono o el código no le funciona: la próxima vez configura la app de nuevo con el QR.</p>
           <p class="hint">A quien se lo actives, Hallway le pide una vez al día el código de 6 números de su app de autenticación
             (Google o Microsoft Authenticator), en cualquier teléfono. La primera vez le muestra cómo configurarla. Lo tienen
             <strong>${on}</strong> de ${active.length} personas.</p>
@@ -939,6 +941,7 @@ export async function mfaAdminView({ el }) {
               <span class="mfa-count">${picked.size} ${picked.size === 1 ? 'persona' : 'personas'}</span>
               <button type="button" class="btn btn-primary" data-pick-on>${icon('shield', 18)} Activar</button>
               <button type="button" class="btn btn-secondary" data-pick-off>Quitar</button>
+              ${employees.some((e) => picked.has(e.id) && e.mfa_ready) ? html`<button type="button" class="btn btn-secondary" data-pick-reset>Reiniciar</button>` : ''}
             </div>`
           : ''}
       </div>`);
@@ -963,6 +966,21 @@ export async function mfaAdminView({ el }) {
     for (const b of el.querySelectorAll('[data-role-off]')) b.addEventListener('click', () => change(b, people(b.dataset.roleOff), false));
     $('[data-pick-on]', el)?.addEventListener('click', (e) => change(e.currentTarget, [...picked], true));
     $('[data-pick-off]', el)?.addEventListener('click', (e) => change(e.currentTarget, [...picked], false));
+    $('[data-pick-reset]', el)?.addEventListener('click', (e) =>
+      busy(e.currentTarget, async () => {
+        const ids = employees.filter((x) => picked.has(x.id) && x.mfa_ready).map((x) => x.id);
+        const ok = await dialog({
+          title: `¿Reiniciar el código de ${ids.length === 1 ? 'esta persona' : `${ids.length} personas`}?`,
+          message: 'Se borra su app de autenticación configurada. La próxima vez que Hallway le pida el código, le mostrará el QR para configurarla de nuevo. Úsalo si cambió de teléfono o el código no le funciona.',
+          confirmText: 'Reiniciar',
+        });
+        if (!ok) return;
+        const n = await resetMfa(ids);
+        toast(`Código reiniciado a ${n} ${n === 1 ? 'persona' : 'personas'}. Les avisamos.`, 'ok');
+        picked.clear();
+        employees = await listEmployees();
+        render();
+      }));
   };
 
   const change = (btn, ids, on) =>
