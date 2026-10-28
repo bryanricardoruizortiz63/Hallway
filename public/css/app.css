@@ -1962,15 +1962,43 @@ button.item:last-child {
   padding: 20px;
 }
 
+.dialog {
+  overscroll-behavior: contain;
+}
+
 .dialog-inner h2 {
   font-size: 19px;
 }
 
+.dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dialog-head h2 {
+  flex: 1;
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.dialog-close {
+  margin: 0 -8px 0 0;
+  color: var(--muted);
+}
+
+/* A long window (e.g. a role's permissions) scrolls, but Cancelar and Guardar always stay in sight at the bottom. */
 .dialog-actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
+  margin: 4px -20px -20px;
+  padding: 12px 20px 20px;
+  background: var(--surface);
+  box-shadow: 0 -1px 0 var(--border);
 }
 
 .credentials {

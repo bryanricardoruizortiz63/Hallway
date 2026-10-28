@@ -5,9 +5,10 @@ import {
   markNotificationRead,
   setMyRoom,
   testPush,
+  updateAdminProfile,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, formValues, html, isManager, isStaff, moduleOn, pathModule, raw, roleLabel, timeAgo, toast } from '../lib.js';
+import { $, busy, can, formValues, html, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, roleLabel, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
@@ -143,14 +144,14 @@ export async function profileView({ el }) {
       <section class="card profile-head">
         ${avatar(user.full_name, 'xl')}
         <h2>${user.full_name}</h2>
-        <p class="muted">${user.position || roleLabel(user.role)}</p>
+        <p class="muted">${user.position && user.role === 'admin' ? `${user.position} · ${roleLabel('admin')}` : user.position || roleLabel(user.role)}</p>
         <div class="profile-meta">
           <span>${icon('school', 16)} ${school.name}</span>
           <span>${icon('key', 16)} ${school.code} · ${user.username}</span>
         </div>
       </section>
 
-      ${user.role !== 'admin' && isStaff(user)
+      ${reportsOwn(user) && isStaff(user)
         ? html`<a class="card link-card" href="#/home">${icon('calendar')}<span><strong>Mis ausencias</strong><small>Tus propias ausencias y su estado</small></span>${icon('chevron', 18)}</a>`
         : ''}
 
@@ -161,6 +162,19 @@ export async function profileView({ el }) {
       ${isStaff(user) || isManager(user)
         ? ''
         : html`<a class="card link-card" href="#/calendar">${icon('calendar')}<span><strong>Calendario escolar</strong><small>Horario de clases y días sin clases</small></span>${icon('chevron', 18)}</a>`}
+
+      ${user.role === 'admin'
+        ? html`<form class="card stack" data-admin-profile>
+            <h2 class="card-title">${icon('user')} Mis datos</h2>
+            <p class="hint">La cuenta de Administración es tuya: con este nombre te ven los demás en los mensajes, las ausencias
+              que registras y los avisos.</p>
+            <label class="field"><span>Nombre</span><input name="full_name" required maxlength="120" value="${user.full_name === 'Administración' ? '' : user.full_name}" placeholder="Ej. María Rivera" autocomplete="name"></label>
+            <label class="field"><span>Puesto</span><input name="position" maxlength="120" value="${user.position || ''}" placeholder="Ej. Directora"></label>
+            <label class="field"><span>Correo</span><input name="email" type="email" value="${user.email || ''}" autocapitalize="none"></label>
+            <label class="field"><span>Teléfono</span><input name="phone" type="tel" value="${user.phone || ''}"></label>
+            <button class="btn btn-secondary" type="submit">Guardar</button>
+          </form>`
+        : ''}
 
       ${user.role !== 'admin'
         ? html`<form class="card stack" data-contact>
@@ -210,6 +224,22 @@ export async function profileView({ el }) {
     });
   });
 
+  const adminProfile = $('[data-admin-profile]', el);
+  adminProfile?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(adminProfile.querySelector('[type=submit]'), async () => {
+      const v = formValues(adminProfile);
+      if (!String(v.full_name || '').trim()) throw new Error('Escribe tu nombre.');
+      await updateAdminProfile(v);
+      Object.assign(state.me.user, {
+        full_name: v.full_name.trim(), position: v.position.trim() || null, email: v.email.trim() || null, phone: v.phone.trim() || null,
+      });
+      toast('Datos guardados', 'ok');
+      // The name shows at the top and in the side bar too.
+      window.dispatchEvent(new Event('hashchange'));
+    });
+  });
+
   const pw = $('[data-password]', el);
   pw.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -241,13 +271,13 @@ export async function moreView({ el }) {
   const groups = [
     ['Ausencias', [
       isStaff(user)
-        ? admin
-          ? ['#/report', 'plus', 'Registrar ausencia de un empleado', 'Si alguien no pudo reportarla o hubo un error']
+        ? !reportsOwn(user)
+          ? can(user, 'register') ? ['#/report', 'plus', 'Registrar ausencia de un empleado', 'Si alguien no pudo reportarla o hubo un error'] : null
           : can(user, 'register')
             ? ['#/report', 'plus', 'Registrar una ausencia', 'La tuya o la de otro empleado que avisó que va a faltar']
             : ['#/report', 'plus', 'Reportar mi ausencia', 'Avisa que vas a faltar']
         : null,
-      !admin && isStaff(user) ? ['#/home', 'calendar', 'Mis ausencias', 'Tus propias ausencias y su estado'] : null,
+      reportsOwn(user) && isStaff(user) ? ['#/home', 'calendar', 'Mis ausencias', 'Tus propias ausencias y su estado'] : null,
       isStaff(user) ? ['#/absences', 'list', 'Todas las ausencias', 'Busca por persona o fechas y exporta a Excel'] : null,
     ]],
     ['Día a día', [

@@ -1,5 +1,5 @@
 import { dashboard, exportAbsencesXlsx, listEmployees, myCoverages, pendingBookings, schoolAbsences } from '../backend.js';
-import { $, addDays, busy, can, fmtLongDate, html, poll, todayStr } from '../lib.js';
+import { $, addDays, busy, can, fmtLongDate, html, poll, reportsOwn, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
 import { absenceList, empty, installHint } from './common.js';
@@ -55,9 +55,11 @@ export async function dashboardView({ el, onLeave, isCurrent }) {
       </section>
 
       <div class="button-row">
-        <a class="btn btn-secondary" href="#/report">${icon('plus', 18)} ${me.role === 'admin'
-          ? 'Registrar ausencia de un empleado'
-          : can(me, 'register') ? 'Registrar una ausencia' : 'Reportar mi ausencia'}</a>
+        ${reportsOwn(me) || can(me, 'register')
+          ? html`<a class="btn btn-secondary" href="#/report">${icon('plus', 18)} ${!reportsOwn(me)
+            ? 'Registrar ausencia de un empleado'
+            : can(me, 'register') ? 'Registrar una ausencia' : 'Reportar mi ausencia'}</a>`
+          : ''}
         <a class="btn btn-ghost" href="#/absences">${icon('list', 18)} Ver todas</a>
         ${can(me, 'summary') ? html`<a class="btn btn-ghost" href="#/summary" data-summary-link>${icon('chart', 18)} Resumen del día</a>` : ''}
       </div>`);
