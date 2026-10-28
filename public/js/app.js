@@ -34,7 +34,8 @@ import {
   roomsPanelView,
   servicePanelView,
 } from './views/panels.js';
-import { addAccountView, moreView, notificationsView, profileView, verifyCodeView } from './views/account.js';
+import { addAccountView, moreView, notificationsView, openAccountMenu, profileView, verifyCodeView } from './views/account.js';
+import { avatar } from './views/common.js';
 import { adoptAccountFromUrl, needsDailyCode, otherAccount, switchAccount } from './accounts.js';
 import { guideView } from './views/guide.js';
 import { summaryView } from './views/summary.js';
@@ -154,10 +155,11 @@ function renderShell(route, path) {
     appRoot.innerHTML = String(html`
       <div class="shell">
         <nav class="tabbar" aria-label="Navegación principal">
-          <div class="side-brand">
-            <img src="${appIcon()}" alt="" width="36" height="36" data-app-icon>
-            <div><strong>Hallway</strong><small>${school.name}</small></div>
-          </div>
+          <button type="button" class="side-brand" data-account-menu aria-haspopup="dialog" aria-label="Tu cuenta: ${user.full_name}">
+            ${avatar(user.full_name)}
+            <span class="side-brand-text"><strong>${user.full_name}</strong><small>${school.name}</small></span>
+            ${icon('chevron', 16)}
+          </button>
           ${navItems(user).map(
             (item) => html`<a class="tab" href="#${item.path}" data-path="${item.path}"
                 data-match="${(item.match || [item.path]).join(',')}">
@@ -168,13 +170,17 @@ function renderShell(route, path) {
         <div class="main-col">
           <header class="topbar">
             <button class="icon-btn" data-back aria-label="Volver">${icon('back', 22)}</button>
-            <img class="topbar-logo" src="${appIcon()}" alt="" width="30" height="30" data-app-icon>
-            <div class="topbar-title"><h1 id="page-title"></h1><small>${school.name}</small></div>
+            <button type="button" class="topbar-logo me-btn" data-account-menu aria-haspopup="dialog" aria-label="Tu cuenta: ${user.full_name}">
+              ${avatar(user.full_name, 'sm')}
+              <img class="me-btn-badge" src="${appIcon()}" alt="" width="16" height="16" data-app-icon>
+            </button>
+            <div class="topbar-title"><h1 id="page-title"></h1><small>${user.full_name.split(' ')[0]} · ${school.name}</small></div>
             <a class="icon-btn" href="#/notifications" aria-label="Avisos">${icon('bell', 22)}<b class="dot" data-unread hidden></b></a>
           </header>
           <main id="view" class="view"></main>
         </div>
       </div>`);
+    for (const btn of appRoot.querySelectorAll('[data-account-menu]')) btn.addEventListener('click', () => openAccountMenu(btn));
     appRoot.querySelector('[data-back]').addEventListener('click', () => {
       if (history.length > 1) history.back();
       else go(homePath());

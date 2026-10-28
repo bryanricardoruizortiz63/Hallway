@@ -4127,3 +4127,144 @@ body.tv-mode {
 @media (prefers-reduced-motion: reduce) {
   .otp-blob, .otp-card, .otp-box, .otp.is-error, .otp.is-success .otp-box, .otp-box.is-active:empty::after { animation: none; }
 }
+
+/* ---- Your account at the top (like Google's account menu) ---- */
+.avatar.sm {
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+}
+
+.me-btn {
+  position: relative;
+  display: grid;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.me-btn:focus-visible, .side-brand:focus-visible { outline: 3px solid var(--primary-soft); outline-offset: 2px; }
+
+/* The app's icon, small, on the corner of your picture. */
+.me-btn-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--bg);
+  border-radius: 5px;
+}
+
+button.side-brand {
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.side-brand:hover { background: var(--surface-2); }
+.side-brand-text { flex: 1; min-width: 0; }
+.side-brand-text strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.acct-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: calc(56px + var(--safe-t)) 10px 10px;
+  background: rgba(8, 15, 35, 0.32);
+  animation: acct-fade 0.18s ease both;
+}
+
+@media (min-width: 900px) {
+  .acct-layer { padding: 84px 0 0 14px; }
+}
+
+.acct-sheet {
+  display: grid;
+  gap: 4px;
+  width: min(380px, 100%);
+  max-height: calc(100dvh - 80px);
+  overflow: auto;
+  padding: 10px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(8, 15, 35, 0.28);
+  transform-origin: top left;
+  animation: acct-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+.acct-layer.is-closing { animation: acct-fade 0.16s ease reverse both; }
+.acct-layer.is-closing .acct-sheet { animation: acct-in 0.16s ease reverse both; }
+
+@keyframes acct-fade { from { opacity: 0; } }
+@keyframes acct-in { from { opacity: 0; transform: scale(0.92) translateY(-8px); } }
+
+.acct-top { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 2px 10px; }
+.acct-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.acct-brand img { border-radius: 7px; }
+
+.acct-me {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 2px 0 6px;
+  padding: 18px 12px 16px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, var(--primary-soft), var(--surface-2));
+  text-align: center;
+}
+
+.acct-me .avatar { margin-bottom: 6px; box-shadow: 0 0 0 4px var(--surface), 0 8px 24px rgba(30, 79, 216, 0.3); }
+.acct-me strong { font-size: 18px; }
+.acct-me small { color: var(--muted); }
+.acct-profile { margin-top: 8px; border-radius: 999px; }
+
+.acct-list { display: grid; gap: 2px; }
+
+.acct-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.acct-row:hover { background: var(--surface-2); }
+.acct-row-text { flex: 1; min-width: 0; }
+.acct-row-text strong { display: block; }
+.acct-row-text small { display: block; color: var(--muted); font-size: 13px; }
+
+.acct-add {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--primary);
+}
+
+.acct-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .acct-layer, .acct-sheet, .acct-layer.is-closing, .acct-layer.is-closing .acct-sheet { animation: none; }
+}

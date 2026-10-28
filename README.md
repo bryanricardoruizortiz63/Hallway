@@ -124,6 +124,7 @@ Funciona con servicios gratuitos:
 - **Microsoft Teams**: cada ausencia nueva, modificada (con qué cambió) o cancelada (quién y por qué) se publica en el canal que elija la escuela. Las solicitudes de contraseña van al mismo canal o a otro distinto.
 - **En la app**: campana con avisos y contador.
 - **Dos cuentas en un teléfono**: quien administra la escuela puede tener, por ejemplo, la cuenta de Administración y su propia cuenta de IT.
+  - **Tu foto arriba** (donde estaba el logo; en computadora, tu nombre en la barra de la izquierda) abre el menú de tu cuenta, como el de Google. Ahí están quién eres, *Mi perfil*, las otras cuentas del teléfono (un toque para cambiar), *Agregar otra cuenta* y *Cerrar sesión*.
   - Se agrega la otra cuenta en *Más → Agregar otra cuenta*, con su usuario y contraseña.
   - Desde entonces se cambia en *Más → Cambiar de cuenta* con un toque, sin salir.
   - Con más de una cuenta en el teléfono, **cada cuenta pide una vez al día el código** de una app de autenticación (Google Authenticator o Microsoft Authenticator). Es la verificación en dos pasos de Supabase.

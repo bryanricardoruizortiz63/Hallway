@@ -13,6 +13,7 @@ import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, 
 import { go, homePath, logout, setUnread, state } from '../store.js';
 import { addAccount, authenticator, checkCode, savedAccounts, startAuthenticator, switchAccount } from '../accounts.js';
 import { inTabBar } from '../nav.js';
+import { appIcon } from '../branding.js';
 import { bindPasswordToggles } from './auth.js';
 import { avatar, empty, installHint } from './common.js';
 
@@ -311,6 +312,80 @@ export async function moreView({ el }) {
 }
 
 // ---- Several accounts on one phone ------------------------------------------------------------
+
+let menu = null;
+
+function closeAccountMenu() {
+  if (!menu) return;
+  const m = menu;
+  menu = null;
+  m.classList.add('is-closing');
+  setTimeout(() => m.remove(), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160);
+  document.removeEventListener('keydown', onMenuKey);
+  window.removeEventListener('hashchange', closeAccountMenu);
+}
+
+function onMenuKey(e) {
+  if (e.key === 'Escape') closeAccountMenu();
+}
+
+/**
+ * Tapping your picture at the top: like Google's account menu. Who you are (and your profile), the other accounts
+ * saved on this phone (one tap to switch), add another one and sign out.
+ */
+export function openAccountMenu(trigger) {
+  if (menu) return closeAccountMenu();
+  const { user, school } = state.me;
+  const others = savedAccounts().filter((a) => a.id !== user.id);
+  menu = document.createElement('div');
+  menu.className = 'acct-layer';
+  menu.innerHTML = String(html`
+    <div class="acct-sheet" role="dialog" aria-modal="true" aria-label="Tu cuenta">
+      <div class="acct-top">
+        <span class="acct-brand"><img src="${appIcon()}" alt="" width="24" height="24" data-app-icon> Hallway</span>
+        <button type="button" class="icon-btn" data-close aria-label="Cerrar">${icon('x', 20)}</button>
+      </div>
+      <div class="acct-me">
+        ${avatar(user.full_name, 'xl')}
+        <strong>¡Hola, ${user.full_name.split(' ')[0]}!</strong>
+        <small>${[roleLabel(user.role), school.name].filter(Boolean).join(' · ')}</small>
+        <a class="btn btn-secondary btn-sm acct-profile" href="#/profile">${icon('user', 16)} Mi perfil</a>
+      </div>
+      <div class="acct-list">
+        ${others.map((a) => html`<button type="button" class="acct-row" data-switch="${a.id}">
+          ${avatar(a.name)}
+          <span class="acct-row-text"><strong>${a.name}</strong><small>${[a.role, a.school].filter(Boolean).join(' · ')}</small></span>
+          ${icon('swap', 18)}
+        </button>`)}
+        ${canAddAccount(user)
+          ? html`<a class="acct-row" href="#/accounts/add">
+              <span class="acct-add">${icon('plus', 20)}</span>
+              <span class="acct-row-text"><strong>Agregar otra cuenta</strong><small>Ej. Administración y tu cuenta de IT</small></span>
+            </a>`
+          : ''}
+        <button type="button" class="acct-row" data-logout>
+          <span class="acct-add">${icon('logout', 20)}</span>
+          <span class="acct-row-text"><strong>Cerrar sesión</strong>${others.length ? html`<small>Se abre ${others[0].name}</small>` : ''}</span>
+        </button>
+      </div>
+      ${others.length ? html`<p class="acct-note">${icon('shield', 14)} Cada cuenta te pide su código una vez al día.</p>` : ''}
+    </div>`);
+  document.body.append(menu);
+  menu.addEventListener('click', (e) => {
+    if (e.target === menu || e.target.closest('[data-close]')) closeAccountMenu();
+  });
+  for (const btn of menu.querySelectorAll('[data-switch]')) {
+    btn.addEventListener('click', () => busy(btn, () => switchAccount(btn.dataset.switch, state.me)));
+  }
+  menu.querySelector('[data-logout]').addEventListener('click', () => {
+    closeAccountMenu();
+    logout();
+  });
+  document.addEventListener('keydown', onMenuKey);
+  window.addEventListener('hashchange', closeAccountMenu);
+  menu.querySelector('[data-close]').focus();
+  trigger?.setAttribute('aria-expanded', 'true');
+}
 
 /** Whoever manages the school (and whoever already has two accounts here) can add one. */
 const canAddAccount = (user) => user.role === 'admin' || isManager(user) || savedAccounts().length > 1;
