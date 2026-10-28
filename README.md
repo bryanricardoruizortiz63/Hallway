@@ -2,7 +2,7 @@
 
 Aplicación web móvil (PWA) para que el personal de una escuela **reporte sus ausencias** y la **dirección y secretaría** las gestionen. Se instala desde el navegador con “Añadir a pantalla de inicio”, sin App Store ni Google Play.
 
-**App:** https://bryanricardoruizortiz63.github.io/LeapAttendanceHub/
+**App:** https://app.hallwayedu.com/ (antes https://bryanricardoruizortiz63.github.io/LeapAttendanceHub/, que lleva a la nueva)
 
 Antes se llamaba *Leap Attendance Hub*. Solo cambió el nombre visible: la dirección web y los nombres internos (`LeapAttendanceHub`, `users.leap-hub.local`, las claves `lah:` del navegador) se mantienen para no romper las apps instaladas ni los inicios de sesión.
 
