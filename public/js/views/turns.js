@@ -16,7 +16,7 @@ import {
   setMyServiceStatus,
   turnHistory,
 } from '../backend.js';
-import { $, busy, can, dialog, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, schoolIcon, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -333,7 +333,7 @@ function queueItem(t, me, service) {
     <a class="item-link" href="#/turns/${t.id}">
       ${t.status === 'waiting'
         ? html`<span class="item-icon queue-num" title="Turno ${t.position}">${t.position}</span>`
-        : html`<span class="item-icon ${late ? 'is-danger' : ''}">${icon('pulse')}</span>`}
+        : schoolIcon(t.service_mode, late ? 'is-danger' : '')}
       <span class="item-main">
         <strong>${whoHtml(t)}</strong>
         <span class="item-sub">${(isSupport(t)
@@ -363,7 +363,7 @@ function studentTurnItem(t, me) {
   const late = isLate(t);
   return html`<div class="item alert-item ${late || t.status === 'called' ? 'is-urgent' : ''} ${isOpen(t) ? '' : 'is-muted'}" data-turn="${t.id}">
     <a class="item-link" href="#/turns/${t.id}">
-      <span class="item-icon ${late ? 'is-danger' : ''}">${icon('pulse')}</span>
+      ${schoolIcon(t.service_mode, late ? 'is-danger' : '')}
       <span class="item-main">
         <strong>${whoHtml(t)}</strong>
         <span class="item-sub">${[t.service_name, t.reason, t.teacher_name && t.teacher_id !== me.id ? `está con ${t.teacher_name}` : null]
@@ -388,7 +388,7 @@ function returningSection(list) {
     <h3 class="section-title">Regresando a clase <span class="count">${list.length}</span></h3>
     <div class="list">${list.map((x) => html`<div class="item" data-back-id="${x.id}">
       <a class="item-link" href="#/turns/back/${x.id}">
-        <span class="item-icon">${icon('back')}</span>
+        ${schoolIcon('returning')}
         <span class="item-main">
           <strong>${x.student_name} (${x.group_name})</strong>
           <span class="item-tags">${x.asked
@@ -432,7 +432,7 @@ function supportItem(t, { serving = false } = {}) {
     <a class="item-link" href="#/turns/${t.id}">
       ${waiting && t.position
         ? html`<span class="item-icon queue-num" title="Turno ${t.position}">${t.position}</span>`
-        : html`<span class="item-icon">${icon('wrench')}</span>`}
+        : schoolIcon('support')}
       <span class="item-main">
         <strong>${serving ? supportTitle(t) : `${t.service_name}: ${supportTitle(t)}`}</strong>
         <span class="item-sub">${sub.filter(Boolean).join(' · ')}</span>

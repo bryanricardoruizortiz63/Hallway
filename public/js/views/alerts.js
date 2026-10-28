@@ -17,7 +17,7 @@ import {
   resolveStudentAlert,
   takeRelief,
 } from '../backend.js';
-import { $, busy, can, dialog, fmtDateTime, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, schoolIcon, fmtDateTime, fmtTime, html, isStaff, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -62,7 +62,7 @@ function missingItem(a) {
   const st = missingState(a);
   const open = st === 'open';
   return html`<a class="item alert-item ${open ? 'is-urgent' : 'is-muted'}" href="#/alerts/missing/${a.id}">
-    <span class="item-icon ${open ? 'is-danger' : st === 'found' ? 'is-ok' : ''}">${icon(st === 'found' ? 'check' : 'alert')}</span>
+    ${schoolIcon(st === 'found' ? 'found' : 'missing', open ? 'is-danger' : st === 'found' ? 'is-ok' : '')}
     <span class="item-main">
       <strong>${MISSING_TITLE[st]}: ${studentLabel(a)}</strong>
       <span class="item-sub">${[a.place, a.room ? `Salón ${a.room}` : null, `avisó ${a.created_by_name}`].filter(Boolean).join(' · ')}</span>

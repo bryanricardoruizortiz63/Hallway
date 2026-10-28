@@ -9,7 +9,7 @@ import {
   maintenanceOverview,
   markAlertsRead,
 } from '../backend.js';
-import { $, busy, can, dialog, fmtDateTime, html, isStaff, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, fmtDateTime, html, isStaff, SCHOOL_ICONS as SCHOOL_KIND, schoolIcon, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -64,7 +64,7 @@ export function requestItem(m, me, { action = true } = {}) {
     <a class="item-link" href="#/maintenance/${m.id}">
       ${m.status === 'pending' && fixer && m.position
         ? html`<span class="item-icon queue-num" title="Turno ${m.position}">${m.position}</span>`
-        : html`<span class="item-icon ${open && m.urgency === 3 ? 'is-danger' : ''} ${m.status === 'done' ? 'is-ok' : ''}">${icon(k.icon)}</span>`}
+        : schoolIcon(SCHOOL_KIND[m.kind] ? m.kind : 'maintenance', `${open && m.urgency === 3 ? 'is-danger' : ''} ${m.status === 'done' ? 'is-ok' : ''}`)}
       <span class="item-main">
         <strong>${k.label} · ${m.place}</strong>
         <span class="item-sub">${[m.note, `pidió ${m.created_by_name}`, timeAgo(m.created_at)].filter(Boolean).join(' · ')}</span>

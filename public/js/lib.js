@@ -299,6 +299,17 @@ export async function copyText(text) {
   }
 }
 
+// ---- Friendly icons ------------------------------------------------------------
+
+/** Pictures teachers recognize at a glance in the lists (turns, alerts, maintenance), as emoji. */
+export const SCHOOL_ICONS = {
+  visit: '🩺', room: '🤝', support: '🖥️', returning: '🔙', missing: '🚸', found: '✅', maintenance: '🧹',
+  spill: '💧', cleaning: '🧹', bathroom: '🚻', trash: '🗑️', repair: '🔧', other: '💬',
+};
+
+/** The tile with one of those pictures (same size and place as the line icons it replaces). */
+export const schoolIcon = (kind, cls = '') => html`<span class="item-icon emoji-icon ${cls}" aria-hidden="true">${SCHOOL_ICONS[kind] || '📋'}</span>`;
+
 // ---- Polling -----------------------------------------------------------------
 
 /**
