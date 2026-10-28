@@ -1,3 +1,4 @@
+import { afterSignOut } from './accounts.js';
 import { signOut, unreadCount } from './backend.js';
 import { isStaff } from './lib.js';
 import { unlinkPush } from './pwa.js';
@@ -7,6 +8,7 @@ export const state = {
   platformPassword: null,
   nextPath: null,
   unread: 0,
+  needsCode: false, // two or more accounts on this phone and today's authenticator code not given yet
 };
 
 export function go(path, { replace = false } = {}) {
@@ -44,11 +46,14 @@ export async function refreshUnread() {
 }
 
 export async function logout() {
+  const id = state.me?.user.id;
   await unlinkPush();
   // Clear state first so the SIGNED_OUT event isn't treated as an expired session.
   state.me = null;
   state.platformPassword = null;
   await signOut();
+  // Another account saved on this phone opens instead (the page reloads).
+  if (id && (await afterSignOut(id))) return;
   setUnread(0);
   document.getElementById('toasts')?.replaceChildren();
   go('/login', { replace: true });

@@ -8,6 +8,7 @@ import {
   markAlertsRead,
   myOpenMaintenance,
   noteTurnResolution,
+  receiveSupportRequest,
   requestService,
   returningStudents,
   saveService,
@@ -100,6 +101,12 @@ export function countdown(dueAt) {
   return `Quedan ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
+/** "Esperando 12 min", "Esperando 1 h 5 min" (since it was asked). */
+function waitingText(t) {
+  const m = Math.max(0, Math.round((Date.now() - new Date(t.created_at)) / 60000));
+  return `Esperando ${m < 1 ? 'menos de 1 min' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`}`;
+}
+
 /** The countdowns on screen tick every second. */
 export function tickCountdowns(ctx) {
   const timer = setInterval(() => {
@@ -157,7 +164,7 @@ const SUPPORT_ASK = {
   attended: ['¿Ya quedó resuelto?', 'Se cierra el pedido y se le avisa a quien lo pidió.'],
   referred: ['¿Necesita seguimiento?', 'Se cierra como pendiente (una pieza, un técnico de fuera…) y se le avisa a quien lo pidió.'],
 };
-const SUPPORT_DONE = { go: 'Le avisamos que vas en camino.', finish: 'Pedido cerrado.', cancel: 'Pedido cancelado.' };
+const SUPPORT_DONE = { received: 'Le avisamos que lo recibiste.', go: 'Le avisamos que vas en camino.', finish: 'Pedido cerrado.', cancel: 'Pedido cancelado.' };
 
 /** What the service did, for the panel and the Excel (support). Resolves null if cancelled. */
 function askResolution(t, current = '') {
@@ -188,6 +195,11 @@ async function doStep(t, step, value) {
     await advanceTurn(t.id, step, value);
     if (v.resolution.trim()) await noteTurnResolution(t.id, v.resolution.trim());
     toast(SUPPORT_DONE.finish, 'ok');
+    return true;
+  }
+  if (step === 'received') {
+    await receiveSupportRequest(t.id);
+    toast(SUPPORT_DONE.received, 'ok');
     return true;
   }
   if ((step === 'call' || step === 'go') && t.position > 1) {
@@ -262,6 +274,8 @@ function turnActions(t, service, me) {
     if (t.status === 'on_the_way') add('finish', 'Referido', 'secondary', 'referred');
   }
   if (service.serves && isSupport(t)) {
+    // «Recibido» first: the teacher knows someone has it, before anyone is on the way.
+    if (t.status === 'waiting' && !t.received_at) add('received', 'Recibido', 'primary');
     if (t.status === 'waiting') add('go', 'Voy en camino', 'primary');
     if (t.status === 'on_the_way') add('finish', 'Resuelto', 'primary', 'attended');
     if (t.status === 'waiting') add('finish', 'Ya lo resolví', 'secondary', 'attended');
@@ -281,7 +295,7 @@ function turnActions(t, service, me) {
   return out;
 }
 
-const ICONS = { call: 'bell', go: 'send', sent: 'send', arrived: 'check', return: 'back', back: 'check', missing: 'alert', finish: 'check', take: 'user' };
+const ICONS = { received: 'check', call: 'bell', go: 'send', sent: 'send', arrived: 'check', return: 'back', back: 'check', missing: 'alert', finish: 'check', take: 'user' };
 // In the lists the button sits next to the student, so it says less.
 const SHORT = { go: 'Voy', return: 'Regresa', back: 'Llegó' };
 
@@ -329,7 +343,8 @@ function queueItem(t, me, service) {
         <span class="item-tags">
           <span class="tag ${sev.cls}">${sev.label}</span>
           ${t.status === 'waiting'
-            ? html`<span class="tag">${icon('clock', 14)} ${timeAgo(t.created_at)}</span>
+            ? html`<span class="tag">${icon('clock', 14)} ${waitingText(t)}</span>
+                ${t.received_at ? html`<span class="tag tag-ok">Recibido · ${t.received_by_name}</span>` : ''}
                 ${t.level > t.severity ? html`<span class="tag">Sube por la espera</span>` : ''}`
             : html`<span class="tag ${s.cls}">${s.label}</span>`}
           ${t.status === 'called' && t.called_at ? html`<span class="tag">${icon('clock', 14)} ${timeAgo(t.called_at)}</span>` : ''}
@@ -410,14 +425,18 @@ function supportItem(t, { serving = false } = {}) {
   const s = statusTag(t);
   const sub = [placeText(t.room), serving ? `pidió ${t.created_by_name}` : null,
     t.handled_by_name && t.status !== 'waiting' ? `atiende ${t.handled_by_name}` : null];
+  const waiting = t.status === 'waiting';
   return html`<div class="item alert-item ${isOpen(t) ? '' : 'is-muted'}" data-turn="${t.id}">
     <a class="item-link" href="#/turns/${t.id}">
-      <span class="item-icon">${icon('wrench')}</span>
+      ${waiting && t.position
+        ? html`<span class="item-icon queue-num" title="Turno ${t.position}">${t.position}</span>`
+        : html`<span class="item-icon">${icon('wrench')}</span>`}
       <span class="item-main">
         <strong>${serving ? supportTitle(t) : `${t.service_name}: ${supportTitle(t)}`}</strong>
         <span class="item-sub">${sub.filter(Boolean).join(' · ')}</span>
         <span class="item-tags"><span class="tag ${s.cls}">${s.label}</span>
-          ${t.status === 'waiting' ? html`<span class="tag">${icon('clock', 14)} ${timeAgo(t.created_at)}</span>` : ''}</span>
+          ${waiting ? html`<span class="tag">${icon('clock', 14)} ${waitingText(t)}</span>` : ''}
+          ${waiting && t.received_at ? html`<span class="tag tag-ok">${icon('check', 14)} Recibido</span>` : ''}</span>
       </span>
     </a>
   </div>`;
@@ -794,6 +813,9 @@ export async function turnDetailView(ctx) {
             ${fact(isSupport(t) ? 'Detalle' : 'Nota', t.note)}
             ${fact(isSupport(t) ? 'Dónde' : 'Salón', t.room)}
             ${fact('Pidió', `${t.created_by_name} · ${fmtDateTime(t.created_at)}`)}
+            ${t.status === 'waiting' && t.position ? fact('Turno', `#${t.position} en la fila`) : ''}
+            ${t.status === 'waiting' ? fact('Tiempo', waitingText(t)) : ''}
+            ${t.received_at ? fact('Recibido', `${t.received_by_name} · ${timeOf(t.received_at)}`) : ''}
             ${t.teacher_name && t.teacher_id !== t.created_by ? fact('Ahora está con', t.teacher_name) : ''}
             ${fact('Atiende', t.handled_by_name)}
             ${fact('Qué se hizo', t.resolution)}
