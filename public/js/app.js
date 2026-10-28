@@ -21,7 +21,7 @@ import {
   pickupDetailView,
   reliefDetailView,
 } from './views/alerts.js';
-import { newTurnView, serviceFormView, servicesView, turnDetailView, turnsView } from './views/turns.js';
+import { newTurnView, returningDetailView, serviceFormView, servicesView, turnDetailView, turnsView } from './views/turns.js';
 import { newVisitView, visitDetailView } from './views/visits.js';
 import { maintenanceDetailView, maintenanceView, newMaintenanceView } from './views/maintenance.js';
 import { bookingDetailView, bookingHistoryView, newBookingView, roomsView } from './views/rooms.js';
@@ -79,6 +79,7 @@ const ROUTES = [
   { re: /^\/turns$/, view: turnsView, title: 'Turnos' },
   { re: /^\/turns\/new$/, view: newTurnView, title: 'Pedir turno', back: true },
   { re: /^\/turns\/(\d+)$/, view: turnDetailView, title: 'Turno', back: true },
+  { re: /^\/turns\/back\/(\d+)$/, view: returningDetailView, title: 'Regresando a clase', back: true },
   { re: /^\/alerts\/visit\/new$/, view: newVisitView, title: 'Llegó una visita', allow: may('visitors'), back: true },
   { re: /^\/alerts\/visit\/(\d+)$/, view: visitDetailView, title: 'Visita', back: true },
   // Visits used to be in Turnos: the links of notices already sent still open them.

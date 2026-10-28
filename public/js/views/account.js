@@ -7,7 +7,7 @@ import {
   testPush,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, formValues, html, isManager, isStaff, roleLabel, timeAgo, toast } from '../lib.js';
+import { $, busy, can, formValues, html, isManager, isStaff, raw, roleLabel, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
@@ -428,7 +428,7 @@ export async function verifyCodeView({ el }) {
   let setup = null;
   if (!factor) {
     try {
-      setup = await startAuthenticator();
+      setup = await startAuthenticator(me);
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -453,7 +453,8 @@ export async function verifyCodeView({ el }) {
                 <li>En la app toca <strong>+</strong> y escanea este código.</li>
                 <li>Escribe aquí el código de 6 números que te sale para «Hallway».</li>
               </ol>
-              <img class="mfa-qr" src="${setup.qr}" alt="Código QR para la app de autenticación" width="200" height="200">
+              <div class="mfa-qr">${raw(setup.qr)}</div>
+              <p class="otp-lead">En tu app saldrá como <strong>${setup.issuer}</strong> · ${setup.account}</p>
               <details><summary>¿No puedes escanearlo?</summary>
                 <p>En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
           : html`<p class="otp-lead">Escribe el código de 6 números de <strong>Hallway</strong> que sale en tu app de autenticación. Te lo pide una vez al día.</p>`}

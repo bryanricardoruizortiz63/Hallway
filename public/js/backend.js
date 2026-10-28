@@ -644,6 +644,11 @@ export const createStudentAlert = ({ student, place, room, note, audience }) =>
     p_audience: audience,
   });
 export const resolveStudentAlert = (id, foundPlace) => rpc('resolve_student_alert', { p_id: id, p_found_place: foundPlace || null });
+/** The dirección: found | unconfirmed | reopen | edit ({ place, room, note }) | delete. */
+export const manageStudentAlert = (id, action, { found, place, room, note } = {}) =>
+  rpc('manage_student_alert', {
+    p_id: id, p_action: action, p_found_place: found || null, p_place: place || null, p_room: room || null, p_note: note || null,
+  });
 
 export const createPickup = ({ student, time, room, note }) =>
   rpc('create_pickup', {

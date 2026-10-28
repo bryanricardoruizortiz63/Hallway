@@ -166,16 +166,31 @@ export async function authenticator() {
   return data.totp.find((f) => f.status === 'verified') || null;
 }
 
-/** A new authenticator to scan: { factorId, qr (an image), secret (to type it by hand) }. */
-export async function startAuthenticator() {
+/**
+ * A new authenticator to scan: { factorId, qr (SVG), secret (to type it by hand) }. In the authenticator app it
+ * shows as «Hallway · <role>» with the person and the school, not Supabase's internal address, so someone with two
+ * accounts (Administración and IT) knows which code is which.
+ */
+export async function startAuthenticator(me) {
   const { data: factors } = await sb.auth.mfa.listFactors();
   // A previous attempt that was never confirmed.
   for (const f of factors?.all || []) {
     if (f.factor_type === 'totp' && f.status !== 'verified') await sb.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
   }
-  const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Hallway', issuer: 'Hallway' });
+  const issuer = `Hallway · ${roleLabel(me.user.role) || 'Cuenta'}`;
+  const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: issuer, issuer });
   if (error) throw new Error('No se pudo preparar la verificación. Habla con la dirección para que la active en Supabase.');
-  return { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
+  // Same secret, our own label: «issuer:account» plus issuer= (spaces as %20, which every authenticator app reads).
+  const params = new URL(data.totp.uri).searchParams;
+  params.set('issuer', issuer);
+  const query = [...params].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+  const account = `${me.user.full_name} · ${me.school.name}`;
+  const uri = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?${query}`;
+  const { default: qrcode } = await import('../vendor/qrcode.js');
+  const qr = qrcode(0, 'M');
+  qr.addData(uri);
+  qr.make();
+  return { factorId: data.id, qr: qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true, alt: 'Código QR para la app de autenticación' }), secret: data.totp.secret, issuer, account };
 }
 
 /** Checks the 6-digit code; the session then counts as verified today. */
