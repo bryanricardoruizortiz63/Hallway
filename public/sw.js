@@ -2,7 +2,7 @@
 // Paths are relative to this file so the app works under a sub-path (e.g. GitHub Pages).
 // VERSION is a fingerprint of every file in SHELL, written by `npm run sw-version` (CI checks it is up to date): any
 // change to the app changes this file, so phones download the new version.
-const VERSION = 'lah-3d1c6c471b1b';
+const VERSION = 'lah-ff0923b18e19';
 const SHELL = [
   'index.html',
   'manifest.webmanifest',
@@ -152,6 +152,8 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { body: event.data?.text() };
   }
+  // Whose notice (two accounts on one phone): opening it switches to that account (accounts.js, ?as=).
+  const uid = typeof data.uid === 'string' ? data.uid : null;
   const url = scoped(data.url || '');
   const urgent = !!data.urgent;
   // Notices about the same thing (an alert and its "Apareció") replace each other.
@@ -163,7 +165,7 @@ self.addEventListener('push', (event) => {
         // The school's own icon (sent by the server) or the app's.
         icon: typeof data.icon === 'string' && data.icon.startsWith('https://') ? data.icon : scoped('icons/icon-192.png'),
         badge: scoped('icons/badge-72.png'),
-        data: { url },
+        data: { url, uid },
         tag,
         renotify: !!tag,
         // Urgent: stays on screen until touched and vibrates long (Android).
@@ -174,7 +176,7 @@ self.addEventListener('push', (event) => {
         .matchAll({ type: 'window', includeUncontrolled: true })
         .then((clients) =>
           clients.forEach((c) =>
-            c.postMessage({ type: 'push', urgent, title: data.title || '', body: data.body || '', link: data.url || '' }),
+            c.postMessage({ type: 'push', urgent, title: data.title || '', body: data.body || '', link: data.url || '', uid }),
           ),
         ),
     ]),
@@ -184,14 +186,18 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || self.registration.scope;
+  const uid = event.notification.data?.uid || null;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const client = clients.find((c) => c.url.startsWith(self.registration.scope));
       if (client) {
-        client.postMessage({ type: 'navigate', url });
+        client.postMessage({ type: 'navigate', url, uid });
         return client.focus();
       }
-      return self.clients.openWindow(url);
+      if (!uid) return self.clients.openWindow(url);
+      const open = new URL(url);
+      open.searchParams.set('as', uid);
+      return self.clients.openWindow(open.href);
     }),
   );
 });

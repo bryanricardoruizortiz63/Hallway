@@ -1,3 +1,4 @@
+import { savedAccounts } from './accounts.js';
 import { deletePushSubscription, savePushSubscription } from './backend.js';
 import { VAPID_PUBLIC_KEY } from './config.js';
 
@@ -25,7 +26,9 @@ export function initPwa() {
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (e.data?.type === 'navigate' && e.data.url) {
         const hash = new URL(e.data.url, location.href).hash;
-        if (hash) location.hash = hash;
+        // A notice of the other account on this phone: app.js switches to it first.
+        if (e.data.uid) window.dispatchEvent(new CustomEvent('lah:open-notice', { detail: { link: hash, uid: e.data.uid } }));
+        else if (hash) location.hash = hash;
       } else if (e.data?.type === 'push') {
         // { urgent, title, body, link }: urgent notices ring inside the app too (see alarm.js).
         window.dispatchEvent(new CustomEvent('lah:push', { detail: e.data }));
@@ -103,6 +106,9 @@ function urlBase64ToUint8Array(base64) {
   return Uint8Array.from(rawData, (c) => c.charCodeAt(0));
 }
 
+/** The accounts saved on this phone: their notices keep arriving here too (see accounts.js). */
+const savedIds = () => savedAccounts().map((a) => a.id);
+
 export async function currentPushSubscription() {
   if (!pushSupported()) return null;
   const reg = await registration();
@@ -130,7 +136,7 @@ export async function enablePush() {
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     });
   }
-  await savePushSubscription(sub);
+  await savePushSubscription(sub, savedIds());
   return sub;
 }
 
@@ -146,7 +152,7 @@ export async function syncPush() {
   try {
     if (!pushSupported() || Notification.permission !== 'granted') return;
     const sub = await currentPushSubscription();
-    if (sub) await savePushSubscription(sub);
+    if (sub) await savePushSubscription(sub, savedIds());
   } catch {
     /* best effort */
   }

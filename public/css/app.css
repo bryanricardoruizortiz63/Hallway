@@ -3967,3 +3967,163 @@ body.tv-mode {
   margin: 0;
   padding-left: 20px;
 }
+
+/* Glass boxes for the code: a blurred card over moving light, six boxes that pop in, glow, shake or turn green. */
+.otp-screen {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 32px 16px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #0b1533 0%, #1a3fae 52%, #5b2fc9 100%);
+  color: #fff;
+}
+
+.otp-blob {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: otp-float 14s ease-in-out infinite alternate;
+}
+
+.otp-blob-1 { top: -80px; left: -60px; background: #38bdf8; }
+.otp-blob-2 { right: -90px; bottom: 10%; background: #a855f7; animation-delay: -5s; }
+.otp-blob-3 { bottom: -120px; left: 20%; background: #22d3ee; opacity: 0.35; animation-delay: -9s; }
+
+@keyframes otp-float {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(40px, -30px) scale(1.15); }
+}
+
+.otp-card {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  width: min(420px, 100%);
+  padding: 28px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: 0 24px 60px rgba(4, 10, 40, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  animation: otp-rise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes otp-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+}
+
+.otp-head { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.otp-head h1 { margin: 0; font-size: 24px; }
+.otp-head p, .otp-lead { margin: 0; color: rgba(255, 255, 255, 0.82); text-align: center; }
+.otp-card .steps-list, .otp-card details { color: rgba(255, 255, 255, 0.9); }
+.otp-card summary { cursor: pointer; }
+
+.otp-lock {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 24px rgba(56, 189, 248, 0.35);
+}
+
+.otp {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  cursor: text;
+}
+
+.otp-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px; /* no zoom on iPhone */
+  opacity: 0;
+}
+
+.otp-box {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 5;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 18px rgba(4, 10, 40, 0.18);
+  font: 700 26px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s, transform 0.2s;
+}
+
+.otp-box.is-filled { background: rgba(255, 255, 255, 0.22); animation: otp-pop 0.28s cubic-bezier(0.3, 1.6, 0.5, 1); }
+
+.otp-box.is-active {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22), 0 0 26px rgba(125, 211, 252, 0.7);
+  transform: translateY(-2px);
+}
+
+/* The blinking caret in the box that comes next. */
+.otp-box.is-active:empty::after {
+  content: '';
+  width: 2px;
+  height: 40%;
+  border-radius: 2px;
+  background: #fff;
+  animation: otp-caret 1s steps(1) infinite;
+}
+
+@keyframes otp-pop {
+  0% { transform: scale(0.8); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+@keyframes otp-caret { 50% { opacity: 0; } }
+
+.otp.is-error { animation: otp-shake 0.42s; }
+.otp.is-error .otp-box { border-color: #fca5a5; background: rgba(239, 68, 68, 0.28); }
+
+@keyframes otp-shake {
+  20% { transform: translateX(-10px); }
+  40% { transform: translateX(9px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
+
+.otp.is-success .otp-box {
+  border-color: #86efac;
+  background: rgba(34, 197, 94, 0.38);
+  box-shadow: 0 0 22px rgba(74, 222, 128, 0.55);
+  animation: otp-wave 0.45s calc(var(--i) * 60ms) cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+@keyframes otp-wave {
+  0% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.08); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.otp-status { min-height: 20px; margin: 10px 0 0; color: rgba(255, 255, 255, 0.85); text-align: center; font-size: 14px; }
+
+.otp-card .btn-secondary { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.14); color: #fff; }
+.otp-card .btn-ghost-danger { color: #fecaca; }
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-blob, .otp-card, .otp-box, .otp.is-error, .otp.is-success .otp-box, .otp-box.is-active:empty::after { animation: none; }
+}

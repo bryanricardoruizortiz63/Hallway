@@ -35,7 +35,7 @@ import {
   servicePanelView,
 } from './views/panels.js';
 import { addAccountView, moreView, notificationsView, profileView, verifyCodeView } from './views/account.js';
-import { needsDailyCode } from './accounts.js';
+import { adoptAccountFromUrl, needsDailyCode, otherAccount, switchAccount } from './accounts.js';
 import { guideView } from './views/guide.js';
 import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
@@ -301,10 +301,26 @@ async function router() {
 }
 
 /** An urgent notice while the app is open: alarm on screen (the screen already showing it just refreshes). */
+/** A notice was tapped: if it is the other account's, switch to it and open it there. */
+function onOpenNotice(e) {
+  const { link, uid } = e.detail;
+  const other = otherAccount(uid, state.me);
+  if (other) switchAccount(other.id, state.me, link).catch((err) => toast(err.message, 'error'));
+  else if (link) location.hash = link;
+}
+
 function onPush(e) {
   refreshUnread();
   const notice = e.detail;
   if (!notice?.urgent || !state.me) return;
+  const other = otherAccount(notice.uid, state.me);
+  if (other) {
+    // The other account's notice rings here too, saying whose it is; opening it switches account.
+    showAlarm({ ...notice, body: [`Para ${other.name}`, notice.body].filter(Boolean).join(' · ') }, {
+      onOpen: () => switchAccount(other.id, state.me, notice.link || '#/').catch((err) => toast(err.message, 'error')),
+    });
+    return;
+  }
   if (document.visibilityState !== 'visible') {
     blinkTitle(/^#\/turns\/\d+$/.test(notice.link || '') ? 'Turno nuevo' : 'Aviso urgente');
     return;
@@ -331,6 +347,7 @@ async function boot() {
   unlockAudio();
   restoreBranding();
   adoptSchoolFromUrl();
+  await adoptAccountFromUrl().catch(() => {});
   try {
     state.me = await getMe();
   } catch (err) {
@@ -347,6 +364,7 @@ async function boot() {
   window.addEventListener('lah:unauthorized', sessionEnded);
   window.addEventListener('lah:signed-out', sessionEnded);
   window.addEventListener('lah:push', onPush);
+  window.addEventListener('lah:open-notice', onOpenNotice);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshUnread();
   });

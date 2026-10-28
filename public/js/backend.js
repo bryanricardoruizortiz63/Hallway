@@ -466,9 +466,10 @@ export async function unreadCount() {
 export const markNotificationRead = (id) => rpc('mark_notification_read', { p_id: id });
 export const markAllNotificationsRead = () => rpc('mark_all_notifications_read');
 
-export function savePushSubscription(sub) {
+/** keep: the other accounts saved on this phone, which go on getting their notices here too. */
+export function savePushSubscription(sub, keep = []) {
   const json = sub.toJSON();
-  return rpc('save_push_subscription', { p_endpoint: json.endpoint, p_p256dh: json.keys.p256dh, p_auth: json.keys.auth });
+  return rpc('save_push_subscription', { p_endpoint: json.endpoint, p_p256dh: json.keys.p256dh, p_auth: json.keys.auth, p_keep: keep });
 }
 export const deletePushSubscription = (endpoint) => rpc('delete_push_subscription', { p_endpoint: endpoint });
 export const testPush = () => rpc('test_push');

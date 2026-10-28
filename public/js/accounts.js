@@ -55,14 +55,14 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
-/** Opens the app again from the start, as whichever account is signed in now. */
-function restart() {
-  location.hash = '#/';
+/** Opens the app again (at link, or from the start) as whichever account is signed in now. */
+function restart(link = '#/') {
+  location.hash = link;
   location.reload();
 }
 
-/** Switches to a saved account. The page reloads; the daily code is asked there if needed. */
-export async function switchAccount(id, me) {
+/** Switches to a saved account (and opens link there). The page reloads; the daily code is asked there if needed. */
+export async function switchAccount(id, me, link) {
   await remember(me);
   const target = read().find((a) => a.id === id);
   if (!target) throw new Error('No se encontró esa cuenta en este teléfono.');
@@ -73,7 +73,36 @@ export async function switchAccount(id, me) {
     if (previous) await sb.auth.refreshSession({ refresh_token: previous.refresh }).catch(() => {});
     throw new Error(`La sesión de ${target.name} venció. Agrégala otra vez con su usuario y contraseña.`);
   }
-  restart();
+  restart(link);
+}
+
+/** The saved account a notice belongs to, when it isn't the open one (null otherwise). */
+export function otherAccount(uid, me) {
+  if (!uid || !me || uid === me.user.id) return null;
+  return read().find((a) => a.id === uid) || null;
+}
+
+/**
+ * A notice of the other account opened the app (?as=<user id>): start as that account. Before anything loads, so
+ * the app opens directly where the notice points.
+ */
+export async function adoptAccountFromUrl() {
+  const url = new URL(location.href);
+  const uid = url.searchParams.get('as');
+  if (!uid) return;
+  url.searchParams.delete('as');
+  history.replaceState(null, '', url.pathname + url.search + url.hash);
+  const { data } = await sb.auth.getSession();
+  const current = data.session;
+  if (!current || current.user.id === uid) return;
+  const list = read();
+  const target = list.find((a) => a.id === uid);
+  const mine = list.find((a) => a.id === current.user.id);
+  if (!target || !mine) return;
+  mine.refresh = current.refresh_token;
+  write(list);
+  const { error } = await sb.auth.refreshSession({ refresh_token: target.refresh });
+  if (error) await sb.auth.refreshSession({ refresh_token: mine.refresh }).catch(() => {});
 }
 
 /** Signs in to one more account, keeping the open one. */

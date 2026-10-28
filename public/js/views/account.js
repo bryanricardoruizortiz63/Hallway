@@ -359,13 +359,18 @@ export async function verifyCodeView({ el }) {
     }
   }
   const others = savedAccounts().filter((a) => a.id !== me.user.id);
+  const factorId = setup?.factorId || factor?.id;
   el.innerHTML = String(html`
-    <div class="auth">
-      <div class="auth-brand">
-        <h1>Código del día</h1>
-        <p>${me.user.full_name} · ${me.school.name}</p>
-      </div>
-      <div class="card auth-card stack">
+    <div class="otp-screen">
+      <span class="otp-blob otp-blob-1" aria-hidden="true"></span>
+      <span class="otp-blob otp-blob-2" aria-hidden="true"></span>
+      <span class="otp-blob otp-blob-3" aria-hidden="true"></span>
+      <div class="otp-card">
+        <div class="otp-head">
+          <span class="otp-lock">${icon('shield', 26)}</span>
+          <h1>Código del día</h1>
+          <p>${me.user.full_name} · ${me.school.name}</p>
+        </div>
         ${setup
           ? html`<p><strong>Primera vez con esta cuenta:</strong></p>
               <ol class="steps-list">
@@ -375,31 +380,99 @@ export async function verifyCodeView({ el }) {
               </ol>
               <img class="mfa-qr" src="${setup.qr}" alt="Código QR para la app de autenticación" width="200" height="200">
               <details><summary>¿No puedes escanearlo?</summary>
-                <p class="hint">En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
-          : html`<p>Abre tu app de autenticación y escribe el código de 6 números de <strong>Hallway</strong> para ${me.user.full_name}. Te lo pide una vez al día porque en este teléfono tienes más de una cuenta.</p>`}
-        <form class="stack" data-code novalidate>
-          <label class="field"><span>Código</span>
-            <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required placeholder="123456"></label>
-          <button type="submit" class="btn btn-primary btn-block btn-lg" ${factor || setup ? '' : 'disabled'}>${icon('check', 18)} Verificar</button>
+                <p>En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
+          : html`<p class="otp-lead">Escribe el código de 6 números de <strong>Hallway</strong> que sale en tu app de autenticación. Te lo pide una vez al día porque en este teléfono tienes más de una cuenta.</p>`}
+        <form data-code novalidate>
+          ${otpField()}
+          <p class="otp-status" data-otp-status aria-live="polite"></p>
         </form>
         ${others.map((a) => html`<button type="button" class="btn btn-secondary btn-block" data-switch="${a.id}">${icon('swap', 18)} Usar ${a.name}</button>`)}
         <button type="button" class="btn btn-ghost-danger btn-block" data-logout>${icon('logout', 18)} Salir de esta cuenta</button>
       </div>
     </div>`);
   const form = $('[data-code]', el);
-  form.querySelector('[name=code]').focus();
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const code = form.querySelector('[name=code]').value;
-    busy(form.querySelector('[type=submit]'), async () => {
-      await checkCode(setup?.factorId || factor.id, code);
-      state.needsCode = false;
-      toast('Listo.', 'ok');
-      go(homePath(), { replace: true });
-    });
+  const status = $('[data-otp-status]', el);
+  bindOtp($('[data-otp]', el), async (code, otp) => {
+    if (!factorId) return otp.fail('No se pudo preparar la verificación.');
+    status.textContent = 'Verificando…';
+    try {
+      await checkCode(factorId, code);
+    } catch (err) {
+      status.textContent = '';
+      return otp.fail(err.message);
+    }
+    status.textContent = '¡Listo!';
+    await otp.succeed();
+    state.needsCode = false;
+    go(homePath(), { replace: true });
   });
+  form.addEventListener('submit', (e) => e.preventDefault());
   for (const btn of el.querySelectorAll('[data-switch]')) {
     btn.addEventListener('click', () => busy(btn, () => switchAccount(btn.dataset.switch, me)));
   }
   $('[data-logout]', el).addEventListener('click', logout);
+}
+
+/** Six glass boxes over one real input (so autofill from SMS/keyboard and paste work). */
+function otpField() {
+  return html`<label class="otp" data-otp>
+    <input class="otp-input" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+      pattern="[0-9]*" aria-label="Código de 6 números" autofocus>
+    ${[0, 1, 2, 3, 4, 5].map((i) => html`<span class="otp-box" style="--i:${i}" aria-hidden="true"></span>`)}
+  </label>`;
+}
+
+/**
+ * The boxes fill as the code is typed (each digit pops in) and the next one glows. With 6 digits, onComplete(code,
+ * otp) runs once: otp.fail(message) shakes the boxes and clears them; otp.succeed() turns them green, one by one.
+ */
+function bindOtp(root, onComplete) {
+  const input = root.querySelector('.otp-input');
+  const boxes = [...root.querySelectorAll('.otp-box')];
+  let busyNow = false;
+  const paint = () => {
+    const v = input.value;
+    boxes.forEach((b, i) => {
+      const digit = v[i] || '';
+      if (b.textContent !== digit) {
+        b.textContent = digit;
+        b.classList.toggle('is-filled', !!digit);
+      }
+      b.classList.toggle('is-active', document.activeElement === input && i === Math.min(v.length, 5) && !busyNow);
+    });
+  };
+  const otp = {
+    fail(message) {
+      busyNow = false;
+      root.classList.remove('is-error');
+      void root.offsetWidth; // restart the shake
+      root.classList.add('is-error');
+      toast(message, 'error');
+      setTimeout(() => {
+        root.classList.remove('is-error');
+        input.value = '';
+        input.disabled = false;
+        input.focus();
+        paint();
+      }, 450);
+    },
+    succeed() {
+      root.classList.add('is-success');
+      return new Promise((r) => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 650));
+    },
+  };
+  input.addEventListener('input', () => {
+    input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    paint();
+    if (input.value.length === 6 && !busyNow) {
+      busyNow = true;
+      input.disabled = true;
+      paint();
+      onComplete(input.value, otp);
+    }
+  });
+  input.addEventListener('focus', paint);
+  input.addEventListener('blur', paint);
+  input.focus();
+  paint();
 }
