@@ -1,6 +1,7 @@
 import { afterSignOut } from './accounts.js';
 import { signOut, unreadCount } from './backend.js';
-import { isStaff } from './lib.js';
+import { isStaff, reportsOwn } from './lib.js';
+import { navItems } from './nav.js';
 import { unlinkPush } from './pwa.js';
 
 export const state = {
@@ -20,7 +21,9 @@ export function go(path, { replace = false } = {}) {
 export function homePath() {
   const user = state.me?.user;
   if (!user) return state.platformPassword ? '/platform' : '/login';
-  return isStaff(user) ? '/dashboard' : '/home';
+  if (isStaff(user)) return '/dashboard';
+  // A role that doesn't report its own absences starts on its first tab.
+  return reportsOwn(user) ? '/home' : navItems(user)[0].path;
 }
 
 export function setUnread(n) {

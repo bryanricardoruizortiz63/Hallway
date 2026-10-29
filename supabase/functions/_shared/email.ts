@@ -36,7 +36,8 @@ export function schoolIconUrl(school: { id: string; icon_version?: number | null
 }
 
 export async function loadBranding(appUrl: string, iconUrl?: string | null): Promise<Branding> {
-  const url = iconUrl || new URL('public/icons/icon-192.png', appUrl || 'https://invalid.local/').href;
+  // The site is served from public/, so the icons hang from the app's root (app_url/icons/…).
+  const url = iconUrl || new URL('icons/icon-192.png', appUrl || 'https://invalid.local/').href;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (res.ok && (res.headers.get('content-type') || '').startsWith('image/')) {

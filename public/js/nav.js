@@ -1,6 +1,6 @@
 // The bottom bar (side bar on wide screens): the same places for everyone, named for what's in them.
 // "Más" lists whatever doesn't fit here (see moreView); Avisos are on the bell at the top.
-import { can, isManager, isStaff, moduleOn } from './lib.js';
+import { can, isManager, isStaff, moduleOn, reportsOwn } from './lib.js';
 import { state } from './store.js';
 
 export const anyManager = (u) => isStaff(u) || isManager(u);
@@ -27,7 +27,8 @@ export function navItems(user) {
   const on = (key) => moduleOn(state.me?.school, key);
   const turnsOn = on('turns') || on('support') || on('maintenance');
   const items = [
-    absences,
+    // A role that doesn't report its own absences and doesn't see everyone's has nothing there.
+    ...(isStaff(user) || reportsOwn(user) ? [absences] : []),
     ...(can(user, 'live') && on('live') ? [live] : []),
     ...(fixes ? [on('maintenance') && maintenance, on('alerts') && alerts] : [on('alerts') && alerts, turnsOn && turns]).filter(Boolean),
     ...(on('rooms') ? [rooms] : []),

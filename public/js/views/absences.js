@@ -17,6 +17,7 @@ import {
   isStaff,
   isoWeekday,
   roleLabel,
+  reportsOwn,
   roleNeedsCoverage,
   scheduleText,
   schoolCalendar,
@@ -119,9 +120,9 @@ async function absenceForm({ el, query }, absence) {
   const me = state.me.user;
   const editing = !!absence;
   // Whoever registers the staff's absences (and the Administración account) can report one for someone else;
-  // the Administración account always does, the rest also their own.
+  // the Administración account and the roles that don't report their own always do, the rest also their own.
   const forOthers = !editing && can(me, 'register');
-  const onlyOthers = me.role === 'admin';
+  const onlyOthers = !reportsOwn(me);
   const today = todayStr();
   const [employees, closures] = await Promise.all([
     forOthers ? listEmployees().then((list) => list.filter((e) => e.active && e.role !== 'admin' && e.id !== me.id)) : [],

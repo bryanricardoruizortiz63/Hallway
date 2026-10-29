@@ -1,6 +1,6 @@
 // "Así está organizada Hallway": what's behind each tab, for whoever opens the app for the first time,
 // and "Cómo usar Hallway" (from Más) with the usual tasks and where each one is.
-import { $, can, html, isStaff } from '../lib.js';
+import { $, can, html, isStaff, reportsOwn } from '../lib.js';
 import { icon } from '../icons.js';
 import { fixesOnly, inTabBar, navItems } from '../nav.js';
 import { state } from '../store.js';
@@ -105,18 +105,19 @@ export function guideHint(slot) {
 
 /** The usual tasks, each with where it is ("Alertas › No ha llegado") and a link straight to it. */
 function tasks(user) {
-  const admin = user.role === 'admin';
   const tab = (path) => navItems(user).find((i) => i.path === path)?.label;
   const where = (path, label, then) => `${tab(path) || `Más › ${label}`}${then ? ` › ${then}` : ''}`;
   const absences = tab(isStaff(user) ? '/dashboard' : '/home');
+  // The Administración account and the roles that don't report their own absences only register other people's.
+  const own = reportsOwn(user);
   return [
-    admin
-      ? ['#/report', 'plus', 'Registrar la ausencia de un empleado', `${absences} › Registrar ausencia de un empleado`]
+    !own
+      ? can(user, 'register') ? ['#/report', 'plus', 'Registrar la ausencia de un empleado', `${absences} › Registrar ausencia de un empleado`] : null
       : ['#/report', 'plus', 'Avisar que voy a faltar', `${absences} › ${can(user, 'register') ? 'Registrar una ausencia' : isStaff(user) ? 'Reportar mi ausencia' : 'Reportar ausencia'}`],
-    can(user, 'register') && !admin
+    can(user, 'register') && own
       ? ['#/report', 'plus', 'Registrar la ausencia de otro empleado', `${absences} › Registrar una ausencia › ¿Quién va a faltar?`]
       : null,
-    isStaff(user) && !admin ? ['#/home', 'calendar', 'Ver mis ausencias', 'Más › Mis ausencias'] : null,
+    isStaff(user) && own ? ['#/home', 'calendar', 'Ver mis ausencias', 'Más › Mis ausencias'] : null,
     isStaff(user) ? ['#/absences', 'list', 'Buscar o exportar las ausencias del personal', `${absences} › Ver todas`] : null,
     ['#/rooms', 'room', 'Pedir el salón de conferencias', `${where('/rooms', 'Salón de conferencias')} › Reservar el salón`],
     ['#/rooms/history', 'list', 'Ver las reservas canceladas y su historial', `${where('/rooms', 'Salón de conferencias')} › Historial y canceladas`],

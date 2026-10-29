@@ -197,6 +197,9 @@ export async function changePassword(currentPassword, newPassword) {
 }
 
 export const updateMyContact = (email, phone) => rpc('update_my_contact', { p_email: email || null, p_phone: phone || null });
+/** The Administración account's own name, position, email and phone (it belongs to a person, not just a role). */
+export const updateAdminProfile = ({ full_name: name, position, email, phone }) =>
+  rpc('update_admin_profile', { p_full_name: name || null, p_position: position || null, p_email: email || null, p_phone: phone || null });
 /** The room where I usually am (empty = none). Returns the saved value. */
 export const setMyRoom = (room) => rpc('set_my_room', { p_room: room || null });
 
@@ -537,8 +540,8 @@ export const previewEmail = (kind, subject, body) => callFunction('admin', { act
 export const changeSchoolCode = (code) => callFunction('admin', { action: 'change_school_code', code });
 
 /** Creates (no key) or changes a role. Returns { role }. */
-export const saveRole = ({ key, name, permissions, coverage }) =>
-  callFunction('admin', { action: 'save_role', key: key || null, name, permissions, coverage });
+export const saveRole = ({ key, name, permissions, coverage, own_absences: ownAbsences }) =>
+  callFunction('admin', { action: 'save_role', key: key || null, name, permissions, coverage, own_absences: ownAbsences });
 
 export const deleteRole = (key) => callFunction('admin', { action: 'delete_role', key });
 

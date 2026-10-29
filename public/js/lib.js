@@ -102,6 +102,8 @@ export const roleNeedsCoverage = (key) => findRole(key)?.coverage ?? key !== 'ad
 export const can = (u, perm) => u?.role === 'admin' || !!u?.permissions?.includes(perm);
 /** Sees and confirms everyone's absences. */
 export const isStaff = (u) => can(u, 'absences');
+/** Reports their own absences (Roles y permisos can turn it off; the Administración account never does). */
+export const reportsOwn = (u) => !!u && u.role !== 'admin' && u.own_absences !== false;
 /** Has some management permission. */
 export const isManager = (u) => ['staff', 'settings', 'services', 'messages', 'reports', 'calendar', 'rooms'].some((p) => can(u, p));
 
@@ -390,6 +392,9 @@ export function toast(message, type = 'info') {
  * body (collect) or true; resolves null on cancel. With onSubmit(values, dlg), the dialog stays open while
  * it runs, shows its error inside, and resolves with what it returns.
  */
+const CLOSE_ICON =
+  '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
 export function dialog({
   title,
   message = '',
@@ -407,7 +412,8 @@ export function dialog({
     dlg.className = 'dialog';
     dlg.innerHTML = String(html`
       <form method="dialog" class="dialog-inner">
-        <h2>${title}</h2>
+        <div class="dialog-head"><h2>${title}</h2>
+          <button type="button" class="icon-btn dialog-close" data-close aria-label="Cerrar">${raw(CLOSE_ICON)}</button></div>
         ${message ? html`<p class="muted">${message}</p>` : ''}
         ${body}
         ${input
@@ -427,6 +433,11 @@ export function dialog({
       resolve(value);
     };
     dlg.querySelector('[data-cancel]')?.addEventListener('click', () => done(null));
+    dlg.querySelector('[data-close]').addEventListener('click', () => done(null));
+    // A tap outside the window (on the dimmed page) closes it too.
+    dlg.addEventListener('click', (e) => {
+      if (e.target === dlg) done(null);
+    });
     dlg.addEventListener('cancel', (e) => {
       e.preventDefault();
       done(null);
@@ -454,6 +465,8 @@ export function dialog({
       }
     });
     dlg.showModal();
+    // The browser focuses the first button, the ✕: no ring around it as soon as the window opens.
+    if (document.activeElement?.matches('[data-close]')) document.activeElement.blur();
     onOpen?.(dlg);
   });
 }

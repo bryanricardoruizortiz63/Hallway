@@ -7,10 +7,12 @@ import { state } from '../store.js';
 
 const BASE = 'Reportar sus propias ausencias';
 
-/** "Ver y confirmar… · Enviar mensajes", or only the base permission. */
+/** "Ver y confirmar… · Enviar mensajes", only the base permission, or nothing. */
 export function permissionSummary(role) {
+  const own = role.own_absences !== false;
   const names = PERMISSIONS.filter((p) => role.permissions.includes(p.key)).map((p) => p.label);
-  return names.length ? names.join(' · ') : `Solo ${BASE.toLowerCase()}`;
+  if (!names.length) return own ? `Solo ${BASE.toLowerCase()}` : 'Sin permisos';
+  return own ? names.join(' · ') : `${names.join(' · ')} · No reporta sus ausencias`;
 }
 
 /** Reloads me() so the role names and permissions are current everywhere. */
@@ -23,6 +25,7 @@ async function refreshRoles() {
 export async function roleDialog(role = null) {
   const perms = new Set(role?.permissions || []);
   const coverage = role ? role.coverage : true;
+  const ownAbsences = role ? role.own_absences !== false : true;
   let saved = null;
   await dialog({
     title: role ? `Editar «${role.name}»` : 'Nuevo rol',
@@ -31,13 +34,15 @@ export async function roleDialog(role = null) {
         <input name="role_name" maxlength="40" required value="${role?.name || ''}" placeholder="Ej. Enfermería" autocomplete="off"></label>
       <div class="field"><span>Qué puede hacer</span>
         <div class="perm-list">
-          <label class="choice is-fixed"><input type="checkbox" checked disabled>
-            <span><strong>${BASE}</strong><small>Todos los roles pueden hacerlo.</small></span></label>
+          <label class="choice"><input type="checkbox" name="own_absences" ${ownAbsences ? 'checked' : ''}>
+            <span><strong>${BASE}</strong><small>Avisar desde la app que va a faltar y ver sus ausencias. Quítalo para roles
+              que no reportan las suyas aquí.</small></span></label>
           ${PERMISSIONS.map(
             (p) => html`<label class="choice"><input type="checkbox" name="perm" value="${p.key}" ${perms.has(p.key) ? 'checked' : ''}>
               <span><strong>${p.label}</strong><small>${p.hint}</small></span></label>`,
           )}
         </div>
+        <p class="hint" data-absences-note hidden></p>
       </div>
       <label class="toggle"><input type="checkbox" name="coverage" ${coverage ? 'checked' : ''}>
         <span class="toggle-ui"></span><span>Sus ausencias necesitan cobertura (sustituto)</span></label>
@@ -49,14 +54,23 @@ export async function roleDialog(role = null) {
     onOpen(dlg) {
       const form = dlg.querySelector('form');
       const box = (key) => form.querySelector(`[name=perm][value=${key}]`);
-      // Managing the staff, the reports, registering absences and the day's summary need to see everyone's absences.
-      const sync = () => {
-        const needed = ['staff', 'reports', 'register', 'summary'].some((key) => box(key).checked);
-        if (needed) box('absences').checked = true;
-        box('absences').disabled = needed;
-      };
-      form.addEventListener('change', sync);
-      sync();
+      // Managing the staff, the reports, registering absences and the day's summary need to see everyone's absences:
+      // turning one on turns that on too, and turning that off turns them off.
+      const NEED_ABSENCES = ['staff', 'reports', 'register', 'summary'];
+      const note = $('[data-absences-note]', form);
+      form.addEventListener('change', (e) => {
+        const key = e.target.matches('[name=perm]') ? e.target.value : null;
+        if (!key) return;
+        if (NEED_ABSENCES.includes(key) && e.target.checked) box('absences').checked = true;
+        const dropped = key === 'absences' && !e.target.checked
+          ? NEED_ABSENCES.filter((k) => box(k).checked)
+          : [];
+        for (const k of dropped) box(k).checked = false;
+        note.textContent = dropped.length
+          ? `También se quitó: ${dropped.map((k) => PERMISSIONS.find((p) => p.key === k).label).join(', ')} (necesitan ver las ausencias de todos).`
+          : '';
+        note.hidden = !dropped.length;
+      });
       form.querySelector('[name=role_name]').focus();
       // Save before closing, so errors (e.g. a repeated name) show in the dialog.
       form.addEventListener(
@@ -73,6 +87,7 @@ export async function roleDialog(role = null) {
                 name: String(v.role_name || '').trim(),
                 permissions: [...form.querySelectorAll('[name=perm]:checked')].map((c) => c.value),
                 coverage: form.querySelector('[name=coverage]').checked,
+                own_absences: form.querySelector('[name=own_absences]').checked,
               });
               saved = res.role;
               await refreshRoles();
@@ -99,7 +114,7 @@ export async function rolesView({ el }) {
     el.innerHTML = String(html`
       <div class="stack">
         <div class="toolbar">
-          <p class="muted grow">Todos pueden reportar sus propias ausencias. Elige qué más puede hacer cada rol.</p>
+          <p class="muted grow">Elige qué puede hacer cada rol, también si reporta sus propias ausencias.</p>
           <button class="btn btn-primary" data-new>${icon('plus', 18)} Nuevo rol</button>
         </div>
         <div class="list">${roles.map((r) => {

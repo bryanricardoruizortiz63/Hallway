@@ -750,6 +750,8 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
     const name = reqText(b.name, 40, 'El nombre del rol').replace(/\s+/g, ' ');
     const permissions = parsePermissions(b.permissions);
     const coverage = b.coverage !== false;
+    // Whether people with this role report their own absences (yes unless turned off).
+    const ownAbsences = b.own_absences !== false;
     const key = b.key ? String(b.key) : null;
     const roles = [...me.roles.values()];
     if (roles.some((r) => r.name.toLowerCase() === name.toLowerCase() && r.key !== key)) {
@@ -761,10 +763,10 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
       if (!role || role.system) throw new HttpError(404, 'No se encontró el rol.');
       saved = await db
         .from('school_roles')
-        .update({ name, permissions, coverage })
+        .update({ name, permissions, coverage, own_absences: ownAbsences })
         .eq('school_id', me.school_id)
         .eq('key', key)
-        .select('key, name, permissions, coverage')
+        .select('key, name, permissions, coverage, own_absences')
         .single();
     } else {
       saved = await db
@@ -775,9 +777,10 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
           name,
           permissions,
           coverage,
+          own_absences: ownAbsences,
           position: Math.max(0, ...roles.map((r) => r.position)) + 10,
         })
-        .select('key, name, permissions, coverage')
+        .select('key, name, permissions, coverage, own_absences')
         .single();
     }
     if (saved.error?.code === '23505') throw new HttpError(409, 'Ya existe un rol con ese nombre.');

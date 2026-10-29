@@ -1,5 +1,5 @@
 import { getMe, markAlertsRead } from './backend.js';
-import { can, html, isStaff, moduleOn, pathModule, poll, raw, toast } from './lib.js';
+import { can, html, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -43,7 +43,8 @@ import { platformView } from './views/platform.js';
 import { composeView, messageView, messagesView } from './views/messages.js';
 
 // Who may open each screen: by the permissions of the person's role.
-const PEOPLE = (u) => u.role !== 'admin';
+// Their own absences: everyone but the Administración account and the roles that don't report theirs.
+const PEOPLE = (u) => reportsOwn(u);
 const STAFF = (u) => isStaff(u);
 const ADMIN = (u) => u.role === 'admin';
 const may = (perm) => (u) => can(u, perm);
@@ -55,7 +56,7 @@ const ROUTES = [
   { re: /^\/verify-code$/, view: verifyCodeView, bare: true },
   { re: /^\/accounts\/add$/, view: addAccountView, title: 'Agregar otra cuenta', back: true },
   { re: /^\/home$/, view: homeView, title: 'Mis ausencias', allow: PEOPLE },
-  { re: /^\/report$/, view: reportView, title: 'Reportar ausencia', back: true },
+  { re: /^\/report$/, view: reportView, title: 'Reportar ausencia', allow: (u) => reportsOwn(u) || can(u, 'register'), back: true },
   { re: /^\/absence\/(\d+)$/, view: absenceView, title: 'Ausencia', back: true },
   { re: /^\/absence\/(\d+)\/edit$/, view: editAbsenceView, title: 'Modificar ausencia', back: true },
   { re: /^\/cover\/(\d+)$/, view: coverView, title: 'Cobertura', back: true },
@@ -151,7 +152,7 @@ let cleanups = [];
 
 function renderShell(route, path) {
   const { user, school } = state.me;
-  const key = `${user.id}:${user.role}:${(user.permissions || []).join()}:${(school.disabled_modules || []).join()}`;
+  const key = `${user.id}:${user.role}:${user.full_name}:${user.own_absences}:${(user.permissions || []).join()}:${(school.disabled_modules || []).join()}`;
   if (shellKey !== key || !document.getElementById('view')) {
     shellKey = key;
     appRoot.innerHTML = String(html`
@@ -235,6 +236,8 @@ async function router() {
 
   for (const fn of cleanups) fn();
   cleanups = [];
+  // Leaving the screen (the phone's back button, a link) closes whatever window was open on it.
+  for (const dlg of document.querySelectorAll('dialog.dialog[open]')) dlg.dispatchEvent(new Event('cancel'));
 
   let match = null;
   const route = ROUTES.find((r) => (match = path.match(r.re)));
