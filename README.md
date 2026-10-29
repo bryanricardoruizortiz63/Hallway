@@ -150,7 +150,16 @@ Funciona con servicios gratuitos:
 
 **Resumen del día:** `daily_summary(día)` (permiso `summary`; hoy en la zona horaria de la escuela, o un día de los últimos 60) arma con `private.summary_of` las ausencias del día (`private.summary_absences`: quién cubre ese día, quién no ha confirmado, `no_cover` y si el rol necesita cobertura; sin el motivo), los turnos de cada servicio en números, alertas, salidas, relevos, visitas, mantenimiento y el próximo día de clases (`private.next_school_day`, sin días sin clases). `private.send_daily_summaries` corre cada 5 minutos (pg_cron) y, a la hora de salida de la escuela (hasta 3 horas después) en un día de clases, avisa una vez (`daily_summaries`) a quien tiene el permiso (no a la cuenta de Administración) con `private.summary_text`.
 
-**Varias escuelas:** cada una tiene su código, su personal, sus ausencias y sus archivos, separados por reglas de seguridad en la base de datos. Desde el **Panel de plataforma** (`#/platform`) se crean escuelas nuevas.
+**Varias escuelas:** cada una tiene su código, su personal, sus ausencias y sus archivos, separados por reglas de seguridad en la base de datos. Desde el **Panel de plataforma** se crean escuelas nuevas. Se entra solo por **admin.hallwayedu.com** (una regla de Cloudflare lleva a la app; la app no tiene ningún enlace al panel).
+
+**Seguridad del panel de plataforma** (es el que crea y maneja todas las escuelas):
+- Entrar pide la **contraseña de plataforma** y, **cada vez**, el **código de una app de autenticación** (Microsoft o Google Authenticator). La primera vez muestra un QR para configurarla y **un código de recuperación** para entrar si se pierde el teléfono (sirve una vez; al usarlo se muestra uno nuevo).
+- En lugar del código de la app se puede pedir **un código por correo** (6 números, vale 10 minutos y una vez, como mucho uno por minuto) al correo que se guarde en *Seguridad del panel*. Lo envía Resend desde `notificaciones@hallwayedu.com`: hace falta el secreto `RESEND_API_KEY` en Supabase → Edge Functions → Secrets.
+- La contraseña ya no viaja en cada acción: al entrar se abre una **sesión** que termina a los **20 minutos sin uso** o a las **8 horas**, y la app la guarda solo en memoria (al recargar hay que entrar de nuevo).
+- **10 intentos fallidos** en 15 minutos (contraseña o código) cierran el panel **15 minutos**. Además, 10 intentos por minuto por IP.
+- Un código ya usado no sirve otra vez, y solo se aceptan llamadas desde la propia app (`https://app.hallwayedu.com`).
+- **Registro de actividad** en el panel: entradas, intentos fallidos (con IP y dispositivo), cambios. También muestra las sesiones abiertas y permite cerrarlas, **cambiar la contraseña** (mínimo 12 caracteres, con el código), generar un **código de recuperación nuevo**, poner el **correo para los códigos** y **cambiar de teléfono**.
+- Si se pierden el teléfono, el código de recuperación y el correo, el dueño lo desactiva en el SQL Editor de Supabase: `update public.platform_security set totp_enabled = false, totp_secret = null, recovery_hashes = '{}';` y la próxima entrada vuelve a mostrar el QR.
 - **Uso de cada escuela:** cuántas personas entraron este mes, turnos, alertas, mantenimiento y reservas del mes, el último inicio de sesión y el espacio de archivos.
 - **Módulos:** se puede apagar por escuela Turnos (Enfermería, Trabajo Social), Soporte IT, Alertas, Visitas, Mantenimiento, Reservas del salón y En vivo.
   - Lo apagado deja de verse en esa escuela: pestañas, enlaces de *Más*, servicios y pantallas.
@@ -272,7 +281,7 @@ index.html                Redirige de la raíz del sitio a public/ (conservando 
 **Avisos:** al crear una notificación, un *trigger* la pone en la tabla `outbox` y `pg_net` llama a la función `notify`, que envía el push y/o el mensaje de Teams. Cada aviso se procesa una sola vez. La llamada lleva la cabecera `x-notify-secret` con la clave de `app_settings.notify_secret`, que se genera sola en la migración; sin ella, `notify` responde 401.
 
 **Límites contra gastos:**
-- Lo que se puede llamar sin iniciar sesión acepta 60 llamadas por minuto desde la misma IP: `current_school_code`, `school_branding` y `request_password_help`. La función `platform` acepta 10, porque su contraseña es la única llave.
+- Lo que se puede llamar sin iniciar sesión acepta 60 llamadas por minuto desde la misma IP: `current_school_code`, `school_branding` y `request_password_help`. La función `platform` acepta 10 intentos de entrada por minuto y cierra el panel 15 minutos tras 10 fallos.
   - Los cuenta `private.rate_limit` en `private.rate_hits`: una fila por IP y acción, que se olvida tras un día sin uso.
   - La IP es la primera de `x-forwarded-for`.
   - Las funciones del servidor usan `limitIp` (en `_shared/http.ts`), que llama a `edge_rate_limit`.

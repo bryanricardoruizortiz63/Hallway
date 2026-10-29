@@ -6,7 +6,8 @@ import { unlinkPush } from './pwa.js';
 
 export const state = {
   me: null, // { user, school }
-  platformPassword: null,
+  /** The platform panel's session token: only in memory, so a reload means signing in again. */
+  platformSession: null,
   nextPath: null,
   unread: 0,
   needsCode: false, // two or more accounts on this phone and today's authenticator code not given yet
@@ -20,7 +21,7 @@ export function go(path, { replace = false } = {}) {
 
 export function homePath() {
   const user = state.me?.user;
-  if (!user) return state.platformPassword ? '/platform' : '/login';
+  if (!user) return state.platformSession ? '/platform' : '/login';
   if (isStaff(user)) return '/dashboard';
   // A role that doesn't report its own absences starts on its first tab.
   return reportsOwn(user) ? '/home' : navItems(user)[0].path;
@@ -53,7 +54,7 @@ export async function logout() {
   await unlinkPush();
   // Clear state first so the SIGNED_OUT event isn't treated as an expired session.
   state.me = null;
-  state.platformPassword = null;
+  state.platformSession = null;
   await signOut();
   // Another account saved on this phone opens instead (the page reloads).
   if (id && (await afterSignOut(id))) return;

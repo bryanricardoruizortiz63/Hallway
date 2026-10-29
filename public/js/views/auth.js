@@ -157,7 +157,6 @@ export async function loginView({ el, query }) {
             : html`<button type="button" class="btn btn-ghost btn-block" data-forgot>${icon('key', 18)} ¿Olvidaste tu contraseña?</button>`}
         </div>
         <div data-install-slot></div>
-        <p class="auth-foot"><a href="#/platform">Panel de plataforma</a></p>
       </div>`);
 
     const form = $('[data-login]', el);
@@ -202,7 +201,7 @@ export async function loginView({ el, query }) {
         applyBranding(me.school);
         if (mode === 'staff') remember('lah:username', v.username.trim());
         state.me = me;
-        state.platformPassword = null;
+        state.platformSession = null;
         syncPush();
         if (me.user.must_change_password) return go('/change-password', { replace: true });
         const next = state.nextPath;

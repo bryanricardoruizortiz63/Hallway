@@ -1250,9 +1250,11 @@ export const archivePurge = (from, to) => callFunction('admin', { action: 'archi
 
 // ---- Plataforma --------------------------------------------------------------------
 
-// The platform password goes last so a payload field can never replace it.
-export const platform = (password, action, payload = {}) =>
-  callFunction('platform', { ...payload, action, password }, { auth: false });
+// The panel's session goes last so a payload field can never replace it.
+export const platform = (session, action, payload = {}) =>
+  callFunction('platform', { ...payload, action, session }, { auth: false });
+/** Signing in to the panel: start (password), verify (code) or setup (first code of a new authenticator). */
+export const platformSignIn = (step, payload) => callFunction('platform', { ...payload, step }, { auth: false });
 
 // ---- Keep the app in sync when the session ends elsewhere ----------------------
 
