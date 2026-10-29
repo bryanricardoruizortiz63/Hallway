@@ -118,6 +118,37 @@ h3 {
   padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 20px);
 }
 
+/* Phones: the page itself never scrolls, only the content above the tab bar. When the whole page scrolled, the
+   browser shrank and grew its own bars and the tab bar (stuck to the bottom) went up and down with them. */
+@media screen and (max-width: 899px) {
+  body:has(> #app > .shell) {
+    overflow: hidden;
+  }
+
+  .shell {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .shell > .main-col {
+    order: 1;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 20px;
+  }
+
+  .shell > .tabbar {
+    position: relative;
+    order: 2;
+    flex-shrink: 0;
+  }
+}
+
 .topbar {
   position: sticky;
   top: 0;

@@ -283,6 +283,8 @@ async function router() {
     document.getElementById('view').replaceChildren(el);
   }
   window.scrollTo(0, 0);
+  // On phones the content scrolls inside the shell, not the page.
+  appRoot.querySelector('.main-col')?.scrollTo(0, 0);
 
   const ctx = {
     el,
