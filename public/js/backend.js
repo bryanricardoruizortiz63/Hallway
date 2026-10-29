@@ -1,6 +1,7 @@
 // All data access for the app: Supabase Auth, database (RLS + RPC functions), Storage and Edge Functions.
 import { MAX_UPLOAD_MB, SUPABASE_KEY, SUPABASE_URL } from './config.js';
 import { CATEGORIES, NO_COVER, STATUS, addDays, coversOn, fmtDate, roleLabel, roleNeedsCoverage, rolesLabel, scheduleText, setSchoolRoles, todayStr, weekdays } from './lib.js';
+import { setLang, takePicked } from './i18n.js';
 import { buildXlsx, xDate, xDateTime } from './xlsx.js';
 import { zip } from './zip.js';
 
@@ -134,6 +135,13 @@ export async function getMe() {
   try {
     const me = await run(info ? sb.rpc('me').setHeader('X-Client-Info', info) : sb.rpc('me'));
     setSchoolRoles(me?.roles);
+    // The language this person chose, on any device (or the one just picked on the sign-in screen).
+    const picked = takePicked();
+    if (me && picked && picked !== me.user.language) {
+      me.user.language = picked;
+      rpc('set_my_language', { p_language: picked }).catch(() => {});
+    }
+    if (me?.user?.language) setLang(me.user.language);
     return me;
   } catch (err) {
     if (err.status === 401) return null;
@@ -198,6 +206,9 @@ export async function changePassword(currentPassword, newPassword) {
 
 export const updateMyContact = (email, phone) => rpc('update_my_contact', { p_email: email || null, p_phone: phone || null });
 /** The Administración account's own name, position, email and phone (it belongs to a person, not just a role). */
+/** Spanish or English: saved on the profile. */
+export const setMyLanguage = (language) => rpc('set_my_language', { p_language: language });
+
 export const updateAdminProfile = ({ full_name: name, position, email, phone }) =>
   rpc('update_admin_profile', { p_full_name: name || null, p_position: position || null, p_email: email || null, p_phone: phone || null });
 /** The room where I usually am (empty = none). Returns the saved value. */

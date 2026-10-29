@@ -11,7 +11,7 @@
 
   async function refresh(button) {
     button.disabled = true;
-    button.textContent = 'Actualizando…';
+    button.textContent = text.busy;
     // Everything this page asked for (scripts, styles, icons) and the page itself, straight from the server: it
     // replaces the old copies the phone keeps.
     const own = (url) => url.startsWith(location.origin);
@@ -29,14 +29,25 @@
     location.reload();
   }
 
+  // The app's language (i18n.js) may not have loaded: the choice saved on this device.
+  let en = false;
+  try {
+    en = localStorage.getItem('lah:lang') === 'en';
+  } catch {
+    /* private mode */
+  }
+  const text = en
+    ? { title: 'Hallway couldn’t open', body: 'It can happen right after an update. Tap “Update” to download the new version.', button: 'Update', busy: 'Updating…' }
+    : { title: 'No se pudo abrir Hallway', body: 'Puede pasar justo después de una actualización. Toca «Actualizar» para descargar la versión nueva.', button: 'Actualizar', busy: 'Actualizando…' };
+
   function rescue() {
     const app = document.getElementById('app');
     if (started || !app || document.getElementById('boot-rescue')) return;
-    app.innerHTML = `<main class="view"><section class="card" id="boot-rescue">
+    app.innerHTML = `<main class="view"><section class="card" id="boot-rescue" translate="no">
       <div class="empty">
-        <h3>No se pudo abrir Hallway</h3>
-        <p>Puede pasar justo después de una actualización. Toca «Actualizar» para descargar la versión nueva.</p>
-        <button type="button" class="btn btn-primary btn-block">Actualizar</button>
+        <h3>${text.title}</h3>
+        <p>${text.body}</p>
+        <button type="button" class="btn btn-primary btn-block">${text.button}</button>
       </div>
     </section></main>`;
     const button = app.querySelector('#boot-rescue button');

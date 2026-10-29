@@ -1,3 +1,5 @@
+import { getLang, locale, t } from './i18n.js';
+
 // ---- Safe HTML templating ---------------------------------------------------
 
 class Safe {
@@ -136,18 +138,18 @@ function toDate(dateStr) {
 }
 
 export function fmtDate(dateStr, opts = { weekday: 'short', day: 'numeric', month: 'short' }) {
-  return toDate(dateStr).toLocaleDateString('es', opts);
+  return toDate(dateStr).toLocaleDateString(locale(), opts);
 }
 
 export function fmtLongDate(dateStr) {
-  return toDate(dateStr).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+  return toDate(dateStr).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 export function dayLabel(dateStr) {
   const today = todayStr();
-  if (dateStr === today) return 'Hoy';
-  if (dateStr === addDays(today, 1)) return 'Mañana';
-  if (dateStr === addDays(today, -1)) return 'Ayer';
+  if (dateStr === today) return t('Hoy');
+  if (dateStr === addDays(today, 1)) return t('Mañana');
+  if (dateStr === addDays(today, -1)) return t('Ayer');
   return fmtDate(dateStr);
 }
 
@@ -163,18 +165,19 @@ export function fmtRange(start, end) {
 export function fmtTime(t) {
   if (!t) return '';
   const [h, m] = t instanceof Date ? [t.getHours(), t.getMinutes()] : String(t).split(':').map(Number);
-  return `${h % 12 || 12}:${pad(m)}\u00a0${h < 12 ? 'a.\u00a0m.' : 'p.\u00a0m.'}`;
+  const ampm = getLang() === 'en' ? (h < 12 ? 'AM' : 'PM') : h < 12 ? 'a.\u00a0m.' : 'p.\u00a0m.';
+  return `${h % 12 || 12}:${pad(m)}\u00a0${ampm}`;
 }
 
 export function scheduleText(a) {
-  if (!a.partial) return 'Día completo';
-  return a.end_time ? `${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}` : `Desde ${fmtTime(a.start_time)}`;
+  if (!a.partial) return t('Día completo');
+  return a.end_time ? `${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}` : `${t('Desde')} ${fmtTime(a.start_time)}`;
 }
 
 export function fmtDateTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
-  return `${d.toLocaleDateString('es', { day: 'numeric', month: 'short' })}, ${fmtTime(d)}`;
+  return `${d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}, ${fmtTime(d)}`;
 }
 
 export function timeAgo(iso) {

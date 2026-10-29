@@ -1,5 +1,6 @@
 import { CATEGORIES, NO_COVER, STATUS, colorIndex, coversOn, dialog, fmtRange, html, initials, roleNeedsCoverage, scheduleText, todayStr, $ } from '../lib.js';
 import { appIcon } from '../branding.js';
+import { LANGUAGES, getLang, setLang } from '../i18n.js';
 import { icon } from '../icons.js';
 import { canPromptInstall, isIos, isStandalone, promptInstall } from '../pwa.js';
 
@@ -121,4 +122,35 @@ export function showEmailPreview(subject, page) {
       dlg.querySelector('iframe').srcdoc = page.replaceAll('cid:leap-logo', logo);
     },
   });
+}
+
+/** Español | English (each name in its own language, never translated). */
+export function languageSwitch() {
+  const lang = getLang();
+  return html`<div class="segmented lang-switch" role="group" aria-label="Idioma · Language" translate="no">
+    ${LANGUAGES.map((l) => html`<button type="button" class="seg ${lang === l.code ? 'active' : ''}" data-lang="${l.code}"
+      aria-pressed="${lang === l.code}">${l.name}</button>`)}
+  </div>`;
+}
+
+/** Switches this device at once; save(code) keeps it on the account (it runs before, and a failure undoes nothing). */
+export function bindLanguageSwitch(root, save = null) {
+  for (const btn of root.querySelectorAll('[data-lang]')) {
+    btn.addEventListener('click', async () => {
+      const code = btn.dataset.lang;
+      if (code === getLang()) return;
+      for (const b of root.querySelectorAll('[data-lang]')) {
+        b.classList.toggle('active', b === btn);
+        b.setAttribute('aria-pressed', String(b === btn));
+      }
+      if (save) {
+        try {
+          await save(code);
+        } catch {
+          // Offline: this device switches anyway; the account keeps the old one until next time.
+        }
+      }
+      setLang(code, { beforeSignIn: !save });
+    });
+  }
 }

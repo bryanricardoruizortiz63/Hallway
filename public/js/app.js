@@ -7,6 +7,7 @@ import { navItems } from './nav.js';
 import { blinkTitle, showAlarm, unlockAudio } from './alarm.js';
 import { adoptSchoolFromUrl, changePasswordView, loginView, rememberSchool } from './views/auth.js';
 import { appIcon, applyBranding, restoreBranding } from './branding.js';
+import { initLanguage } from './i18n.js';
 import { absenceView, coverView, editAbsenceView, homeView, reportView } from './views/absences.js';
 import { absencesListView, dashboardView } from './views/staff.js';
 import { dataView, employeeFormView, employeesView, mfaAdminView, settingsView } from './views/admin.js';
@@ -363,6 +364,7 @@ function sessionEnded() {
 }
 
 async function boot() {
+  initLanguage();
   initPwa();
   unlockAudio();
   restoreBranding();
@@ -384,6 +386,8 @@ async function boot() {
   window.addEventListener('lah:unauthorized', sessionEnded);
   window.addEventListener('lah:signed-out', sessionEnded);
   window.addEventListener('lah:push', onPush);
+  // Another language: the screen draws again (dates and times too).
+  window.addEventListener('lah:language', () => router());
   window.addEventListener('lah:open-notice', onOpenNotice);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshUnread();
