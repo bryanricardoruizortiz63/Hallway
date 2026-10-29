@@ -45,7 +45,7 @@ export async function platformView(ctx) {
         <div class="grid2">
           <label class="field"><span>Código <em class="optional">vacío = automático</em></span>
             <input name="code" maxlength="20" autocapitalize="characters" spellcheck="false" placeholder="Ej. ESC-01"></label>
-          <label class="field"><span>Contraseña de administración</span>
+          <label class="field"><span>Contraseña de Admin</span>
             <span class="pw"><input name="admin_password" type="text" required minlength="8" value="${randomPassword()}" autocomplete="off">
             <button type="button" class="pw-toggle" data-pw>Ocultar</button></span></label>
         </div>
@@ -97,14 +97,14 @@ export async function platformView(ctx) {
     busy(form.querySelector('[type=submit]'), async () => {
       const v = formValues(form);
       const { school } = await call('create_school', v);
-      const text = `Hallway\nEnlace: ${APP_URL}?escuela=${encodeURIComponent(school.code)}\nEscuela: ${school.name}\nCódigo de escuela: ${school.code}\nContraseña de administración: ${v.admin_password}`;
+      const text = `Hallway\nEnlace: ${APP_URL}?escuela=${encodeURIComponent(school.code)}\nEscuela: ${school.name}\nCódigo de escuela: ${school.code}\nContraseña de Admin: ${v.admin_password}`;
       const pending = dialog({
         title: 'Escuela creada ✅',
         body: html`<div class="credentials">
             <div><span>Código de escuela</span><strong class="mono">${school.code}</strong></div>
-            <div><span>Contraseña de administración</span><strong class="mono">${v.admin_password}</strong></div>
+            <div><span>Contraseña de Admin</span><strong class="mono">${v.admin_password}</strong></div>
           </div>
-          <p class="hint">La dirección entra en la pestaña “Administración” con estos datos.</p>
+          <p class="hint">La dirección entra en la pestaña “Admin” con estos datos.</p>
           <button type="button" class="btn btn-secondary btn-sm" data-copy>${icon('copy', 16)} Copiar</button>`,
         confirmText: 'Listo',
         cancelText: '',
@@ -119,7 +119,7 @@ export async function platformView(ctx) {
     btn.addEventListener('click', async () => {
       const password = randomPassword();
       const ok = await dialog({
-        title: '¿Generar nueva contraseña de administración?',
+        title: '¿Generar nueva contraseña de Admin?',
         message: `La nueva contraseña será: ${password}. Cópiala antes de confirmar.`,
         confirmText: 'Cambiar',
       });

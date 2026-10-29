@@ -47,7 +47,7 @@ export async function composeView({ el, query }) {
   const people = allEmployees.filter((e) => e.active && e.id !== me.id);
   const preselected = new Set(query.get('to') ? [query.get('to')] : []);
   const emailReady = !!school.email_provider;
-  const inGroup = (g) => (g === 'all' ? people : people.filter((p) => p.role === g));
+  const inGroup = (g) => (g === 'all' ? people : people.filter((p) => p.role === g || p.extra_roles?.includes(g)));
   // Everyone, each role that has someone, or specific people.
   const groups = [
     ['all', 'Todo el personal'],

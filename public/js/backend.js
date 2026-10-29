@@ -1,6 +1,6 @@
 // All data access for the app: Supabase Auth, database (RLS + RPC functions), Storage and Edge Functions.
 import { MAX_UPLOAD_MB, SUPABASE_KEY, SUPABASE_URL } from './config.js';
-import { CATEGORIES, NO_COVER, STATUS, addDays, coversOn, fmtDate, roleLabel, roleNeedsCoverage, scheduleText, setSchoolRoles, todayStr, weekdays } from './lib.js';
+import { CATEGORIES, NO_COVER, STATUS, addDays, coversOn, fmtDate, roleLabel, roleNeedsCoverage, rolesLabel, scheduleText, setSchoolRoles, todayStr, weekdays } from './lib.js';
 import { buildXlsx, xDate, xDateTime } from './xlsx.js';
 import { zip } from './zip.js';
 
@@ -480,7 +480,7 @@ export const testPush = () => rpc('test_push');
 // ---- Personal (dirección) ------------------------------------------------------
 
 function withRoleLabel(e) {
-  return e && { ...e, role_label: roleLabel(e.role) };
+  return e && { ...e, role_label: rolesLabel(e) };
 }
 
 export async function listEmployees() {

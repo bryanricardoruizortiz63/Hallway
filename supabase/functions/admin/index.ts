@@ -26,7 +26,7 @@ const db = serviceClient();
 const DUPLICATE = 'Ese usuario ya existe en esta escuela.';
 const NO_PERMISSION = 'No tienes permiso para realizar esta acción.';
 const EMPLOYEE_FIELDS =
-  'id, role, username, full_name, email, phone, employee_number, position, active, must_change_password, last_login_at, created_at, updated_at, room, groups';
+  'id, role, extra_roles, username, full_name, email, phone, employee_number, position, active, must_change_password, last_login_at, created_at, updated_at, room, groups';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** What a role can do besides reporting its own absences (see the roles migration). */
@@ -43,6 +43,8 @@ type Me = {
   id: string;
   school_id: string;
   role: string;
+  /** Other roles besides the main one (Admin among them). */
+  extra_roles: string[];
   full_name: string;
   email: string | null;
   school: { code: string; name: string; icon_version: number | null };
@@ -57,7 +59,7 @@ async function currentUser(req: Request): Promise<Me> {
   if (!data.user) throw new HttpError(401, 'Tu sesión expiró. Vuelve a iniciar sesión.');
   const { data: me } = await db
     .from('profiles')
-    .select('id, school_id, role, full_name, email, active, must_change_password, school:schools(code, name, active, icon_version)')
+    .select('id, school_id, role, extra_roles, full_name, email, active, must_change_password, school:schools(code, name, active, icon_version)')
     .eq('id', data.user.id)
     .maybeSingle();
   // deno-lint-ignore no-explicit-any
@@ -70,21 +72,28 @@ async function currentUser(req: Request): Promise<Me> {
     .eq('school_id', me.school_id);
   if (error) throw new Error(error.message);
   const roles = new Map((rows as Role[]).map((r) => [r.key, r]));
-  const permissions = me.role === 'admin' ? PERMISSIONS : roles.get(me.role)?.permissions || [];
-  return { ...me, school, permissions, roles } as Me;
+  const extra = (me.extra_roles || []) as string[];
+  // Whatever any of their roles can do; the admin account and whoever also has Admin, everything.
+  const permissions = me.role === 'admin' || extra.includes('admin')
+    ? PERMISSIONS
+    : PERMISSIONS.filter((p) => [me.role, ...extra].some((k) => roles.get(k)?.permissions.includes(p)));
+  return { ...me, extra_roles: extra, school, permissions, roles } as Me;
 }
+
+/** The school's admin account, or someone who also has the Admin role: can do everything in their school. */
+const isAdmin = (me: Me) => me.role === 'admin' || me.extra_roles.includes('admin');
 
 function need(me: Me, ...anyOf: string[]) {
   if (!anyOf.some((p) => me.permissions.includes(p))) throw new HttpError(403, NO_PERMISSION);
 }
 
 function needAdmin(me: Me, message = NO_PERMISSION) {
-  if (me.role !== 'admin') throw new HttpError(403, message);
+  if (!isAdmin(me)) throw new HttpError(403, message);
 }
 
-/** Nobody can manage, or give, a role that can do things they can't (Administración can do everything). */
+/** Nobody can manage, or give, a role that can do things they can't (an Admin can do everything). */
 function canHandleRole(me: Me, key: string): boolean {
-  if (me.role === 'admin') return true;
+  if (isAdmin(me)) return true;
   const role = me.roles.get(key);
   return !!role && !role.system && role.permissions.every((p) => DUTIES.includes(p) || me.permissions.includes(p));
 }
@@ -98,8 +107,8 @@ async function loadEmployee(me: Me, id: unknown) {
     .neq('role', 'admin')
     .maybeSingle();
   if (!data) throw new HttpError(404, 'Empleado no encontrado.');
-  if (!canHandleRole(me, data.role)) {
-    throw new HttpError(403, 'Esta persona tiene un rol con más permisos que el tuyo. Pídeselo a la cuenta de Administración.');
+  if (![data.role, ...(data.extra_roles || [])].every((k: string) => canHandleRole(me, k))) {
+    throw new HttpError(403, 'Esta persona tiene un rol con más permisos que el tuyo. Pídeselo a un Admin.');
   }
   return data;
 }
@@ -123,6 +132,27 @@ function parseRole(me: Me, value: unknown): string {
   if (!role || role.system) throw new HttpError(400, 'Rol no válido.');
   if (!canHandleRole(me, role.key)) throw new HttpError(403, 'No puedes dar un rol con más permisos que el tuyo.');
   return role.key;
+}
+
+/**
+ * Other roles of a person besides the main one: roles of this school that this person may give. Admin (the admin
+ * account's role) can be one of them, given only by an Admin.
+ */
+function parseExtraRoles(me: Me, value: unknown, main: string): string[] {
+  const list = Array.isArray(value) ? [...new Set(value.map(String))].filter((k) => k && k !== main) : [];
+  if (list.length > 10) throw new HttpError(400, 'Una persona puede tener hasta 10 roles más.');
+  for (const key of list) {
+    const role = me.roles.get(key);
+    if (!role) throw new HttpError(400, 'Uno de los otros roles no existe.');
+    if (key === 'admin') {
+      if (!isAdmin(me)) throw new HttpError(403, 'Solo un Admin puede dar el rol Admin.');
+    } else if (role.system) {
+      throw new HttpError(400, 'Rol no válido.');
+    } else if (!canHandleRole(me, key)) {
+      throw new HttpError(403, 'No puedes dar un rol con más permisos que el tuyo.');
+    }
+  }
+  return list;
 }
 
 function parsePermissions(value: unknown): string[] {
@@ -264,6 +294,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
     const role = parseRole(me, b.role);
     // Everything is checked before the login account exists, so a bad field can't leave it half-created.
     const details = {
+      extra_roles: parseExtraRoles(me, b.extra_roles, role),
       phone: optText(b.phone, 40, 'El teléfono'),
       employee_number: optText(b.employee_number, 40, 'El número de empleado'),
       position: optText(b.position, 120, 'El puesto'),
@@ -317,11 +348,19 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
       room: 'room' in b ? parseRoom(b.room) : employee.room,
       groups: 'groups' in b ? await parseGroups(me, b.groups) : employee.groups,
       role: 'role' in b && b.role !== employee.role ? parseRole(me, b.role) : employee.role,
+      extra_roles: employee.extra_roles || [],
       active: 'active' in b ? b.active === true || b.active === 'true' : employee.active,
       updated_at: new Date().toISOString(),
     };
-    if (isSelf && (next.role !== employee.role || !next.active)) {
-      throw new HttpError(400, 'No puedes cambiar tu propio rol ni desactivar tu propia cuenta.');
+    if ('extra_roles' in b) {
+      const given = parseExtraRoles(me, b.extra_roles, next.role);
+      // Roles they already had that this person couldn't give stay as they were.
+      const kept = (employee.extra_roles || []).filter((k: string) => !given.includes(k) && k !== next.role && !canHandleRole(me, k));
+      next.extra_roles = [...given, ...kept];
+    }
+    const sameRoles = (a: string[], b: string[]) => a.length === b.length && a.every((k) => b.includes(k));
+    if (isSelf && (next.role !== employee.role || !next.active || !sameRoles(next.extra_roles, employee.extra_roles || []))) {
+      throw new HttpError(400, 'No puedes cambiar tus propios roles ni desactivar tu propia cuenta.');
     }
     const authChanges: Record<string, unknown> = {};
     if (next.username !== employee.username) {
@@ -414,13 +453,13 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
       .eq('school_id', me.school_id)
       .eq('role', 'admin')
       .maybeSingle();
-    if (!admin) throw new HttpError(404, 'No se encontró la cuenta de administración.');
+    if (!admin) throw new HttpError(404, 'No se encontró la cuenta admin.');
     const client = anonClient();
     const { error: loginError } = await client.auth.signInWithPassword({
       email: await authEmail(me.school.code, 'admin'),
       password: String(b.current_password || ''),
     });
-    if (loginError) throw new HttpError(400, 'La contraseña de administración actual no es correcta.');
+    if (loginError) throw new HttpError(400, 'La contraseña de Admin actual no es correcta.');
     await client.auth.signOut();
     const { error } = await db.auth.admin.updateUserById(admin.id, { password: next });
     check(error, 'No se pudo cambiar la contraseña.');
@@ -522,7 +561,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
       if (!ids.length) throw new HttpError(400, 'Elige al menos una persona.');
       q = q.in('id', ids);
     } else if (group && !group.system) {
-      q = q.eq('role', group.key);
+      q = q.or(`role.eq.${group.key},extra_roles.cs.{${group.key}}`);
     } else if (b.to !== 'all') {
       throw new HttpError(400, 'Elige a quién enviar el mensaje.');
     }
@@ -623,7 +662,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
    * code (all or nothing), the old code is kept so old links keep working, and everyone is told.
    */
   async change_school_code(me, b) {
-    needAdmin(me, 'Solo la cuenta de Administración puede cambiar el código.');
+    needAdmin(me, 'Solo un Admin puede cambiar el código.');
     const code = String(b.code || '').trim().toUpperCase();
     if (!/^[A-Z0-9][A-Z0-9-]{2,19}$/.test(code)) {
       throw new HttpError(400, 'El código debe tener de 3 a 20 letras (sin acentos), números o guiones, sin espacios.');
@@ -746,7 +785,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
 
   /** Creates (no key) or changes a role: its name, what it can do and whether its absences need coverage. */
   async save_role(me, b) {
-    needAdmin(me, 'Solo la cuenta de Administración puede administrar los roles.');
+    needAdmin(me, 'Solo un Admin puede administrar los roles.');
     const name = reqText(b.name, 40, 'El nombre del rol').replace(/\s+/g, ' ');
     const permissions = parsePermissions(b.permissions);
     const coverage = b.coverage !== false;
@@ -790,7 +829,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
 
   /** Deletes a role nobody has (people are moved to another role first). */
   async delete_role(me, b) {
-    needAdmin(me, 'Solo la cuenta de Administración puede administrar los roles.');
+    needAdmin(me, 'Solo un Admin puede administrar los roles.');
     const role = me.roles.get(String(b.key || ''));
     if (!role || role.system) throw new HttpError(404, 'No se encontró el rol.');
     const inUse = (n: number) =>
@@ -799,7 +838,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
       .from('profiles')
       .select('id', { count: 'exact', head: true })
       .eq('school_id', me.school_id)
-      .eq('role', role.key);
+      .or(`role.eq.${role.key},extra_roles.cs.{${role.key}}`);
     if (count) throw inUse(count);
     if ([...me.roles.values()].filter((r) => !r.system).length <= 1) throw new HttpError(400, 'Debe quedar al menos un rol.');
     const { error } = await db.from('school_roles').delete().eq('school_id', me.school_id).eq('key', role.key);
@@ -830,7 +869,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
    * Only received and cancelled absences go; pending ones stay until someone handles them.
    */
   async archive_purge(me, b) {
-    needAdmin(me, 'Solo la cuenta de Administración puede liberar espacio.');
+    needAdmin(me, 'Solo un Admin puede liberar espacio.');
     if (b.confirm !== 'BORRAR') throw new HttpError(400, 'Escribe BORRAR para confirmar.');
     const from = parseDate(b.from, 'La fecha inicial');
     const to = parseDate(b.to, 'La fecha final');
@@ -875,8 +914,8 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
 
   /**
    * At the end of the school year a service (Enfermería, Trabajo Social…) downloads its history and closes it:
-   * the finished turns of the period are deleted; open ones stay. Only whoever attends the service (or the
-   * Administración account) can do it. from_ts / to_ts: the period's start and end on the phone's clock.
+   * the finished turns of the period are deleted; open ones stay. Only whoever attends the service (or an
+   * Admin) can do it. from_ts / to_ts: the period's start and end on the phone's clock.
    */
   async close_service_year(me, b) {
     if (b.confirm !== 'BORRAR') throw new HttpError(400, 'Escribe BORRAR para confirmar.');
@@ -892,7 +931,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
       .maybeSingle();
     check(error, 'No se pudo leer el servicio.');
     if (!service) throw new HttpError(404, 'No se encontró el servicio.');
-    if (me.role !== 'admin' && !(service.roles as string[]).includes(me.role)) {
+    if (!isAdmin(me) && ![me.role, ...me.extra_roles].some((k) => (service.roles as string[]).includes(k))) {
       throw new HttpError(403, 'Solo quien atiende el servicio puede cerrar su historial.');
     }
     const { error: deleteError, count } = await db

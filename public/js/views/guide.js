@@ -33,7 +33,7 @@ function tabText(path, user) {
     case '/home':
       return 'Reporta que vas a faltar y mira si la dirección la recibió.';
     case '/dashboard':
-      return user.role === 'admin'
+      return !reportsOwn(user)
         ? 'Quién falta hoy, quién lo cubre y lo que falta por confirmar. Aquí registras la ausencia de un empleado.'
         : 'Quién falta hoy, quién lo cubre y lo que falta por confirmar. Aquí también reportas las tuyas.';
     case '/alerts':

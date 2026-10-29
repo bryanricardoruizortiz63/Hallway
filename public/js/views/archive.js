@@ -1,5 +1,5 @@
 // "Archivo anual" (Datos y reportes): save a finished school year to Excel (+ documents ZIP),
-// then free the space in the app. Only the Administración account can delete.
+// then free the space in the app. Only an Admin can delete.
 import {
   archiveData,
   archivePurge,
@@ -8,7 +8,7 @@ import {
   exportArchiveZip,
   firstAbsenceDate,
 } from '../backend.js';
-import { $, busy, dialog, fileSize, html, toast, todayStr } from '../lib.js';
+import { $, busy, dialog, fileSize, html, isAdmin, toast, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
 
@@ -29,7 +29,7 @@ function schoolYears(first, today) {
 }
 
 export async function archiveSection(slot) {
-  const isAdmin = state.me.user.role === 'admin';
+  const admin = isAdmin(state.me.user);
   const { school } = state.me;
   const today = todayStr();
   const [first, runs] = await Promise.all([firstAbsenceDate(), archiveRuns().catch(() => [])]);
@@ -42,7 +42,7 @@ export async function archiveSection(slot) {
     <section class="card stack">
       <h2 class="card-title">${icon('archive')} Archivo anual</h2>
       <p class="muted">Al terminar cada año escolar, guarda sus ausencias en Excel y sus documentos en un ZIP.
-        ${isAdmin ? 'Después puedes borrarlas de la app para liberar espacio.' : ''}</p>
+        ${admin ? 'Después puedes borrarlas de la app para liberar espacio.' : ''}</p>
       <label class="field"><span>Año escolar (1 de agosto – 31 de julio)</span>
         <select data-year>${years.map(
           (y) => html`<option value="${y.from}" ${y === year ? 'selected' : ''}>${y.label}${y.to >= today ? ' (en curso)' : ''}</option>`,
@@ -51,7 +51,7 @@ export async function archiveSection(slot) {
       <div class="stack-sm">
         <button type="button" class="btn btn-secondary btn-block" data-xlsx>${icon('download', 18)} 1. Descargar Excel del año</button>
         <button type="button" class="btn btn-secondary btn-block" data-zip>${icon('download', 18)} 2. Descargar documentos (ZIP)</button>
-        ${isAdmin ? html`<button type="button" class="btn btn-ghost-danger btn-block" data-purge>${icon('trash', 18)} 3. Liberar espacio</button>` : ''}
+        ${admin ? html`<button type="button" class="btn btn-ghost-danger btn-block" data-purge>${icon('trash', 18)} 3. Liberar espacio</button>` : ''}
       </div>
       <p class="hint" data-purge-hint></p>
       <p class="hint">Las ausencias canceladas se borran solas 15 días después de cancelarse.</p>

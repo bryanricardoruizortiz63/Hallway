@@ -1,4 +1,4 @@
-// Roles y permisos: the Administración account adds, renames and deletes the school's roles (Maestro(a),
+// Roles y permisos: an Admin adds, renames and deletes the school's roles (Maestro(a),
 // Enfermería, Seguridad…), chooses what each one can do and whether its absences need someone to cover them.
 import { deleteRole, getMe, listEmployees, saveRole } from '../backend.js';
 import { $, PERMISSIONS, busy, dialog, formValues, getSchoolRoles, html, toast } from '../lib.js';
@@ -109,7 +109,8 @@ export async function roleDialog(role = null) {
 export async function rolesView({ el }) {
   const render = async () => {
     const employees = await listEmployees();
-    const count = (key) => employees.filter((e) => e.role === key).length;
+    // With it as their main role or as one of their other roles.
+    const count = (key) => employees.filter((e) => e.role === key || e.extra_roles?.includes(key)).length;
     const roles = getSchoolRoles();
     el.innerHTML = String(html`
       <div class="stack">
@@ -117,7 +118,16 @@ export async function rolesView({ el }) {
           <p class="muted grow">Elige qué puede hacer cada rol, también si reporta sus propias ausencias.</p>
           <button class="btn btn-primary" data-new>${icon('plus', 18)} Nuevo rol</button>
         </div>
-        <div class="list">${roles.map((r) => {
+        <div class="list">
+          <div class="item role-item">
+            <span class="item-icon">${icon('shield')}</span>
+            <span class="item-main">
+              <strong>Admin</strong>
+              <span class="item-sub">Puede hacer todo en la escuela: personal, roles, configuración y todos los módulos</span>
+              <span class="item-tags"><span class="tag">${icon('users', 14)} La cuenta admin + ${count('admin')} persona(s)</span></span>
+            </span>
+          </div>
+          ${roles.map((r) => {
           const n = count(r.key);
           return html`<div class="item role-item">
             <span class="item-icon">${icon(r.permissions.length ? 'shield' : 'user')}</span>
@@ -134,8 +144,10 @@ export async function rolesView({ el }) {
               <button class="icon-btn" data-delete="${r.key}" aria-label="Borrar ${r.name}">${icon('trash', 18)}</button>
             </span>
           </div>`;
-        })}</div>
-        <p class="hint">La cuenta de <b>Administración</b> puede hacer todo y no aparece aquí. Para borrar un rol, primero cambia
+        })}
+        </div>
+        <p class="hint"><b>Admin</b> puede hacer todo en la escuela y no se edita aquí: es el rol de la cuenta admin de la escuela,
+          y se le puede dar a cualquier persona además del suyo desde su ficha en Personal (<b>Otros roles</b>). Para borrar un rol, primero cambia
           de rol a las personas que lo tienen (también las desactivadas). Nadie puede dar un rol con más permisos que el suyo.</p>
       </div>`);
 

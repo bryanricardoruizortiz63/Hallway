@@ -129,7 +129,7 @@ export async function loginView({ el, query }) {
             <button type="button" role="tab" class="seg ${mode === 'staff' ? 'active' : ''}" data-mode="staff"
               aria-selected="${mode === 'staff'}">${icon('user', 18)} Personal</button>
             <button type="button" role="tab" class="seg ${mode === 'admin' ? 'active' : ''}" data-mode="admin"
-              aria-selected="${mode === 'admin'}">${icon('shield', 18)} Administración</button>
+              aria-selected="${mode === 'admin'}">${icon('shield', 18)} Admin</button>
           </div>
           <form class="stack" data-login novalidate>
             ${showCodeInput
@@ -149,7 +149,7 @@ export async function loginView({ el, query }) {
                     value="${draft.username ?? recall('lah:username')}">
                 </label>`
               : ''}
-            ${passwordField('password', mode === 'admin' ? 'Contraseña de administración' : 'Contraseña', 'current-password')}
+            ${passwordField('password', mode === 'admin' ? 'Contraseña de Admin' : 'Contraseña', 'current-password')}
             <button class="btn btn-primary btn-block btn-lg" type="submit">Entrar</button>
           </form>
           ${mode === 'admin'

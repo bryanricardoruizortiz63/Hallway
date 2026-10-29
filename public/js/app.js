@@ -1,5 +1,5 @@
 import { getMe, markAlertsRead } from './backend.js';
-import { can, html, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, toast } from './lib.js';
+import { can, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -46,7 +46,8 @@ import { composeView, messageView, messagesView } from './views/messages.js';
 // Their own absences: everyone but the Administración account and the roles that don't report theirs.
 const PEOPLE = (u) => reportsOwn(u);
 const STAFF = (u) => isStaff(u);
-const ADMIN = (u) => u.role === 'admin';
+// The school's admin account, or anyone who also has the Admin role.
+const ADMIN = (u) => isAdmin(u);
 const may = (perm) => (u) => can(u, perm);
 
 const ROUTES = [
