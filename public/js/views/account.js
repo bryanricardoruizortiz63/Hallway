@@ -544,7 +544,7 @@ export async function verifyCodeView({ el }) {
 }
 
 /** Six glass boxes over one real input (so autofill from SMS/keyboard and paste work). */
-function otpField() {
+export function otpField() {
   return html`<label class="otp" data-otp>
     <input class="otp-input" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"
       pattern="[0-9]*" aria-label="Código de 6 números" autofocus>
@@ -556,7 +556,7 @@ function otpField() {
  * The boxes fill as the code is typed (each digit pops in) and the next one glows. With 6 digits, onComplete(code,
  * otp) runs once: otp.fail(message) shakes the boxes and clears them; otp.succeed() turns them green, one by one.
  */
-function bindOtp(root, onComplete) {
+export function bindOtp(root, onComplete) {
   const input = root.querySelector('.otp-input');
   const boxes = [...root.querySelectorAll('.otp-box')];
   let busyNow = false;

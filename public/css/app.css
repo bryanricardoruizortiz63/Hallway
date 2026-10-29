@@ -4183,6 +4183,10 @@ body.tv-mode {
 
 .otp-card .btn-secondary { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.14); color: #fff; }
 .otp-card .btn-ghost-danger { color: #fecaca; }
+.otp-card .btn-ghost { color: #fff; }
+.otp-card .btn-ghost:hover, .otp-card .btn-ghost:focus-visible, .otp-card .btn-ghost.is-busy { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.otp-card .hint { color: rgba(255, 255, 255, 0.85); }
+.otp-card .hint .mono { color: #fff; font-weight: 700; letter-spacing: 0.04em; }
 
 @media (prefers-reduced-motion: reduce) {
   .otp-blob, .otp-card, .otp-box, .otp.is-error, .otp.is-success .otp-box, .otp-box.is-active:empty::after { animation: none; }
@@ -4360,3 +4364,31 @@ button.side-brand:hover { background: var(--surface-2); }
 .usage-grid strong { font-size: 18px; }
 .usage-grid small { color: var(--muted); font-size: 12px; }
 .muted.small { font-size: 13px; margin: 0 0 8px; }
+
+/* ---- Panel de plataforma: seguridad ------------------------------------------------ */
+
+.recovery-codes {
+  display: grid;
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+p.small {
+  font-size: 13px;
+  margin: 0;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+[data-security] details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
