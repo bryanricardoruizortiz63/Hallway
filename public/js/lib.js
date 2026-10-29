@@ -54,7 +54,7 @@ export const STATUS = {
 
 /** Names for when the school's roles aren't loaded (and for roles deleted since). */
 export const ROLE_LABELS = {
-  admin: 'Administración',
+  admin: 'Admin',
   director: 'Director(a)',
   secretary: 'Secretaría',
   teacher: 'Maestro(a)',
@@ -98,11 +98,15 @@ export const NO_COVER = {
 /** Absences of this role need someone to cover them (teachers); nursing or maintenance don't. */
 export const roleNeedsCoverage = (key) => findRole(key)?.coverage ?? key !== 'admin';
 
-/** Whether this user may do something (the Administración account can do everything). */
-export const can = (u, perm) => u?.role === 'admin' || !!u?.permissions?.includes(perm);
+/** The school's admin account, or someone who also has the Admin role: can do everything in their school. */
+export const isAdmin = (u) => u?.role === 'admin' || !!u?.extra_roles?.includes('admin');
+/** Whether this user may do something (an Admin can do everything). */
+export const can = (u, perm) => isAdmin(u) || !!u?.permissions?.includes(perm);
+/** «Coordinador(a) de IT · Admin»: the main role and the others. */
+export const rolesLabel = (u) => [u?.role, ...(u?.extra_roles || [])].filter(Boolean).map(roleLabel).filter(Boolean).join(' · ');
 /** Sees and confirms everyone's absences. */
 export const isStaff = (u) => can(u, 'absences');
-/** Reports their own absences (Roles y permisos can turn it off; the Administración account never does). */
+/** Reports their own absences (Roles y permisos can turn it off; the school's admin account never does). */
 export const reportsOwn = (u) => !!u && u.role !== 'admin' && u.own_absences !== false;
 /** Has some management permission. */
 export const isManager = (u) => ['staff', 'settings', 'services', 'messages', 'reports', 'calendar', 'rooms'].some((p) => can(u, p));

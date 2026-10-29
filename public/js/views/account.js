@@ -8,7 +8,7 @@ import {
   updateAdminProfile,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, formValues, html, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, roleLabel, timeAgo, toast } from '../lib.js';
+import { $, busy, can, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
@@ -147,7 +147,7 @@ export async function profileView({ el }) {
       <section class="card profile-head">
         ${avatar(user.full_name, 'xl')}
         <h2>${user.full_name}</h2>
-        <p class="muted">${user.position && user.role === 'admin' ? `${user.position} · ${roleLabel('admin')}` : user.position || roleLabel(user.role)}</p>
+        <p class="muted">${user.position ? `${user.position} · ${rolesLabel(user)}` : rolesLabel(user)}</p>
         <div class="profile-meta">
           <span>${icon('school', 16)} ${school.name}</span>
           <span>${icon('key', 16)} ${school.code} · ${user.username}</span>
@@ -169,9 +169,9 @@ export async function profileView({ el }) {
       ${user.role === 'admin'
         ? html`<form class="card stack" data-admin-profile>
             <h2 class="card-title">${icon('user')} Mis datos</h2>
-            <p class="hint">La cuenta de Administración es tuya: con este nombre te ven los demás en los mensajes, las ausencias
+            <p class="hint">La cuenta Admin de la escuela es tuya: con este nombre te ven los demás en los mensajes, las ausencias
               que registras y los avisos.</p>
-            <label class="field"><span>Nombre</span><input name="full_name" required maxlength="120" value="${user.full_name === 'Administración' ? '' : user.full_name}" placeholder="Ej. María Rivera" autocomplete="name"></label>
+            <label class="field"><span>Nombre</span><input name="full_name" required maxlength="120" value="${['Administración', 'Admin'].includes(user.full_name) ? '' : user.full_name}" placeholder="Ej. María Rivera" autocomplete="name"></label>
             <label class="field"><span>Puesto</span><input name="position" maxlength="120" value="${user.position || ''}" placeholder="Ej. Directora"></label>
             <label class="field"><span>Correo</span><input name="email" type="email" value="${user.email || ''}" autocapitalize="none"></label>
             <label class="field"><span>Teléfono</span><input name="phone" type="tel" value="${user.phone || ''}"></label>
@@ -269,7 +269,7 @@ function linkOn(href) {
 
 export async function moreView({ el }) {
   const { user } = state.me;
-  const admin = user.role === 'admin';
+  const admin = isAdmin(user);
   // Whatever the bottom bar doesn't already have (see nav.js), in groups so each thing is easy to find.
   const groups = [
     ['Ausencias', [
@@ -297,7 +297,7 @@ export async function moreView({ el }) {
       can(user, 'staff') ? ['#/employees', 'users', 'Personal', 'Empleados, contraseñas, roles, salón y grupos'] : null,
       can(user, 'calendar') ? ['#/groups', 'grid', 'Grados y grupos', 'Los grupos de la escuela (7-A, 7-B…) para el personal'] : null,
       can(user, 'messages') ? ['#/messages', 'mail', 'Mensajes', 'Escribe al personal: aviso en la app y por correo'] : null,
-      can(user, 'settings') ? ['#/settings', 'teams', 'Escuela y Teams', 'Nombre, código, Teams, correo y contraseña de administración'] : null,
+      can(user, 'settings') ? ['#/settings', 'teams', 'Escuela y Teams', 'Nombre, código, Teams, correo y contraseña de Admin'] : null,
       admin ? ['#/roles', 'shield', 'Roles y permisos', 'Crea roles como Enfermería o Seguridad y elige qué puede hacer cada uno'] : null,
       can(user, 'services') ? ['#/services', 'sliders', 'Servicios', 'Enfermería, Trabajo Social: quién atiende, motivos y tiempo para llegar'] : null,
       can(user, 'reports')
@@ -307,7 +307,7 @@ export async function moreView({ el }) {
           : null,
     ]],
     ['Tu cuenta', [
-      canAddAccount(user) ? ['#/accounts/add', 'plus', 'Agregar otra cuenta', 'Si tienes otro rol (p. ej. Administración y tu cuenta de IT): cambias sin salir'] : null,
+      canAddAccount(user) ? ['#/accounts/add', 'plus', 'Agregar otra cuenta', 'Si tienes otra cuenta (p. ej. la de Admin de la escuela y la tuya): cambias sin salir'] : null,
       ['#/notifications', 'bell', 'Avisos', state.unread ? `${state.unread} sin leer` : 'Lo que te ha llegado: ausencias, turnos, alertas y mensajes'],
       ['#/profile', 'user', 'Mi perfil', 'Notificaciones, contraseña, tu salón e instalar la app'],
       ['#/guide', 'sparkle', 'Cómo usar Hallway', 'Dónde está cada cosa'],
@@ -390,7 +390,7 @@ export function openAccountMenu(trigger) {
       <div class="acct-me">
         ${avatar(user.full_name, 'xl')}
         <strong>¡Hola, ${user.full_name.split(' ')[0]}!</strong>
-        <small>${[roleLabel(user.role), school.name].filter(Boolean).join(' · ')}</small>
+        <small>${[rolesLabel(user), school.name].filter(Boolean).join(' · ')}</small>
         <a class="btn btn-secondary btn-sm acct-profile" href="#/profile">${icon('user', 16)} Mi perfil</a>
       </div>
       <div class="acct-list">
@@ -402,7 +402,7 @@ export function openAccountMenu(trigger) {
         ${canAddAccount(user)
           ? html`<a class="acct-row" href="#/accounts/add">
               <span class="acct-add">${icon('plus', 20)}</span>
-              <span class="acct-row-text"><strong>Agregar otra cuenta</strong><small>Ej. Administración y tu cuenta de IT</small></span>
+              <span class="acct-row-text"><strong>Agregar otra cuenta</strong><small>Ej. la de Admin de la escuela y la tuya</small></span>
             </a>`
           : ''}
         <button type="button" class="acct-row" data-logout>
@@ -434,7 +434,7 @@ export function openAccountMenu(trigger) {
 }
 
 /** Whoever manages the school (and whoever already has two accounts here) can add one. */
-const canAddAccount = (user) => user.role === 'admin' || isManager(user) || savedAccounts().length > 1;
+const canAddAccount = (user) => isAdmin(user) || isManager(user) || savedAccounts().length > 1;
 
 export async function addAccountView({ el, query }) {
   const me = state.me;
@@ -449,7 +449,7 @@ export async function addAccountView({ el, query }) {
                 configura o pasa la verificación en dos pasos en otro equipo. Escribe su contraseña <strong>una sola vez</strong>;
                 desde ahí queda guardada otra vez y solo te pide el código del día.</p>`
           : html`<h2 class="card-title">${icon('plus')} Agregar otra cuenta</h2>
-              <p class="hint">Para quien tiene dos cuentas en Hallway, por ejemplo la de Administración y la suya de IT. Las dos quedan
+              <p class="hint">Para quien tiene dos cuentas en Hallway, por ejemplo la de Admin de la escuela y la suya. Las dos quedan
                 en este teléfono y cambias desde <strong>Más</strong> con un toque, sin salir. Cada día, cada cuenta te pide el código
                 de una app de autenticación (Google Authenticator o Microsoft Authenticator); la primera vez te ayudamos a configurarla.</p>`}
         <form class="stack" data-add-account novalidate>

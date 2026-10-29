@@ -10,7 +10,9 @@ import {
   formValues,
   getSchoolRoles,
   html,
+  isAdmin,
   isStaff,
+  roleLabel,
   schoolCalendar,
   schoolYearStart,
   timeAgo,
@@ -53,16 +55,17 @@ import { permissionSummary, roleDialog } from './roles.js';
 
 const NEW_ROLE = '__new';
 
-/** Nobody can manage a role that can do things they can't (Administración can do everything). */
+/** Nobody can manage a role that can do things they can't (an Admin can do everything). */
 const canHandle = (me, roleKey) => {
-  if (me.role === 'admin') return true;
+  if (isAdmin(me)) return true;
   const role = getSchoolRoles().find((r) => r.key === roleKey);
   return !!role && role.permissions.every((p) => DUTIES.includes(p) || can(me, p));
 };
 
 /** Active people who have never signed in, whose access this person can renew (see Accesos para repartir). */
 export const neverSignedIn = (employees, me) =>
-  employees.filter((e) => e.active && !e.last_login_at && e.role !== 'admin' && e.id !== me.id && canHandle(me, e.role));
+  employees.filter((e) => e.active && !e.last_login_at && e.role !== 'admin' && e.id !== me.id
+    && [e.role, ...(e.extra_roles || [])].every((k) => canHandle(me, k)));
 
 /** Asked for a new password from the login screen in the last 3 days. */
 function recentHelp(e) {
@@ -208,7 +211,7 @@ export async function employeeFormView({ el, params, setTitle }) {
   const me = state.me.user;
   const roles = [...getSchoolRoles()];
   // Nobody can give a role that can do more than they can.
-  const canGive = (r) => me.role === 'admin' || r.permissions.every((p) => DUTIES.includes(p) || can(me, p));
+  const canGive = (r) => isAdmin(me) || r.permissions.every((p) => DUTIES.includes(p) || can(me, p));
   const firstRole = roles.find((r) => r.key === 'teacher' && canGive(r)) || roles.find(canGive);
   const [employee, school] = await Promise.all([
     isNew ? { role: firstRole?.key, active: true } : getEmployee(params[0]),
@@ -263,11 +266,26 @@ export async function employeeFormView({ el, params, setTitle }) {
             ${roles.map(
               (r) => html`<option value="${r.key}" ${employee.role === r.key ? 'selected' : ''} ${canGive(r) ? '' : 'disabled'}>${r.name}</option>`,
             )}
-            ${me.role === 'admin' && !self ? html`<option value="${NEW_ROLE}">+ Nuevo rol…</option>` : ''}
+            ${isAdmin(me) && !self ? html`<option value="${NEW_ROLE}">+ Nuevo rol…</option>` : ''}
           </select>
         </label>
         <p class="hint role-summary" data-role-summary></p>
-        ${me.role === 'admin' ? html`<a class="btn btn-ghost btn-sm" href="#/roles">${icon('shield', 16)} Roles y permisos</a>` : ''}
+        <div class="field"><span>Otros roles <em class="optional">opcional</em></span>
+          <div class="chips extra-roles" data-extra-roles>
+            ${isAdmin(me) || employee.extra_roles?.includes('admin')
+              ? html`<label class="chip"><input type="checkbox" value="admin" ${employee.extra_roles?.includes('admin') ? 'checked' : ''}
+                  ${self || !isAdmin(me) ? 'disabled' : ''}><span>${roleLabel('admin')}</span></label>`
+              : ''}
+            ${roles.map(
+              (r) => html`<label class="chip" data-extra="${r.key}"><input type="checkbox" value="${r.key}"
+                  ${employee.extra_roles?.includes(r.key) ? 'checked' : ''} ${self || !canGive(r) ? 'disabled' : ''}><span>${r.name}</span></label>`,
+            )}
+          </div>
+          <p class="hint">Si además tiene otro puesto (por ejemplo, Directora y Admin, o Coordinador de IT y Admin). Puede hacer
+            lo de todos sus roles y atiende sus servicios; <strong>Admin</strong> puede hacer todo en la escuela. Si sus ausencias
+            necesitan cobertura lo dice su rol principal.</p>
+        </div>
+        ${isAdmin(me) ? html`<a class="btn btn-ghost btn-sm" href="#/roles">${icon('shield', 16)} Roles y permisos</a>` : ''}
         ${isNew
           ? html`<label class="field"><span>Contraseña temporal <em class="optional">opcional</em></span>
               <span class="pw"><input name="password" type="password" minlength="8" autocomplete="new-password"
@@ -307,6 +325,15 @@ export async function employeeFormView({ el, params, setTitle }) {
       ? `Puede: reportar sus ausencias${role.permissions.length ? ` · ${permissionSummary(role)}` : ''}.${role.coverage ? ' Sus ausencias necesitan cobertura.' : ''}`
       : '';
   };
+  // The main role isn't one of the others.
+  const syncExtra = () => {
+    for (const chip of el.querySelectorAll('[data-extra]')) {
+      const main = chip.dataset.extra === roleSelect.value;
+      chip.hidden = main;
+      if (main) chip.querySelector('input').checked = false;
+    }
+  };
+  syncExtra();
   roleSelect.addEventListener('change', async () => {
     if (roleSelect.value === NEW_ROLE) {
       const role = await roleDialog();
@@ -321,6 +348,7 @@ export async function employeeFormView({ el, params, setTitle }) {
     }
     lastRole = roleSelect.value;
     describeRole();
+    syncExtra();
   });
   describeRole();
 
@@ -332,6 +360,7 @@ export async function employeeFormView({ el, params, setTitle }) {
       if (v.role === NEW_ROLE) throw new Error('Elige un rol.');
       const picker = $('[data-groups]', el);
       if (picker) v.groups = [...picker.querySelectorAll('input:checked')].map((c) => c.value);
+      v.extra_roles = [...el.querySelectorAll('[data-extra-roles] input:checked:not(:disabled)')].map((c) => c.value);
       if (isNew) {
         if (!v.username.trim() && !v.email.trim()) throw new Error('Escribe un usuario o un correo.');
         if (!v.password) delete v.password;
@@ -342,6 +371,7 @@ export async function employeeFormView({ el, params, setTitle }) {
         if (self) {
           delete v.role;
           delete v.active;
+          delete v.extra_roles;
         }
         await updateEmployee(employee.id, v);
         toast('Cambios guardados', 'ok');
@@ -415,10 +445,10 @@ export async function settingsView({ el, reload }) {
         <div class="field"><span>Código de escuela</span>
           <div class="code-box"><strong class="mono">${school.code}</strong>
             <button type="button" class="btn btn-ghost btn-sm" data-copy-code>${icon('copy', 16)} Copiar</button>
-            ${state.me.user.role === 'admin'
+            ${isAdmin(state.me.user)
               ? html`<button type="button" class="btn btn-ghost btn-sm" data-change-code>${icon('edit', 16)} Cambiar</button>`
               : ''}</div>
-          <small class="hint">El personal usa este código para entrar. La dirección entra con el código y la contraseña de administración.</small>
+          <small class="hint">El personal usa este código para entrar. La dirección entra con el código y la contraseña de Admin.</small>
         </div>
         <button class="btn btn-secondary" type="submit">Guardar</button>
       </form>
@@ -527,9 +557,9 @@ export async function settingsView({ el, reload }) {
       </form>
 
       <form class="card stack" data-admin-pw>
-        <h2 class="card-title">${icon('shield')} Contraseña de administración</h2>
-        <p class="muted">Es la contraseña que se usa junto al código de escuela en la pestaña “Administración”. Dásela solo a la dirección.</p>
-        <label class="field"><span>Contraseña actual de administración</span>
+        <h2 class="card-title">${icon('shield')} Contraseña de Admin</h2>
+        <p class="muted">Es la contraseña que se usa junto al código de escuela en la pestaña “Admin”. Dásela solo a la dirección.</p>
+        <label class="field"><span>Contraseña actual de Admin</span>
           <span class="pw"><input name="current_password" type="password" required autocomplete="off"><button type="button" class="pw-toggle" data-pw>Ver</button></span></label>
         <label class="field"><span>Nueva contraseña (mín. 8)</span>
           <span class="pw"><input name="new_password" type="password" required minlength="8" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw>Ver</button></span></label>
@@ -728,7 +758,7 @@ export async function settingsView({ el, reload }) {
       const v = formValues(pw);
       await setAdminPassword(v.current_password, v.new_password);
       pw.reset();
-      toast('Contraseña de administración actualizada', 'ok');
+      toast('Contraseña de Admin actualizada', 'ok');
     });
   });
 }
@@ -896,7 +926,7 @@ export async function mfaAdminView({ el }) {
     const rows = active.filter((e) => !needle || `${e.full_name} ${e.role_label} ${e.username}`.toLowerCase().includes(needle));
     const on = active.filter((e) => e.require_mfa).length;
     const byRole = roles
-      .map((r) => ({ ...r, people: active.filter((e) => e.role === r.key) }))
+      .map((r) => ({ ...r, people: active.filter((e) => e.role === r.key || e.extra_roles?.includes(r.key)) }))
       .filter((r) => r.people.length);
     el.innerHTML = String(html`
       <div class="stack">
@@ -961,7 +991,7 @@ export async function mfaAdminView({ el }) {
         render();
       });
     }
-    const people = (key) => active.filter((e) => e.role === key).map((e) => e.id);
+    const people = (key) => active.filter((e) => e.role === key || e.extra_roles?.includes(key)).map((e) => e.id);
     for (const b of el.querySelectorAll('[data-role-on]')) b.addEventListener('click', () => change(b, people(b.dataset.roleOn), true));
     for (const b of el.querySelectorAll('[data-role-off]')) b.addEventListener('click', () => change(b, people(b.dataset.roleOff), false));
     $('[data-pick-on]', el)?.addEventListener('click', (e) => change(e.currentTarget, [...picked], true));
