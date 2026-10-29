@@ -13,6 +13,9 @@ import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
 import { addAccount, authenticator, cancelCode, checkCode, codeGiven, savedAccounts, startAuthenticator, switchAccount } from '../accounts.js';
+
+/** Under a saved account whose session Supabase closed. */
+const REOPEN_HINT = 'Toca para escribir su contraseña otra vez';
 import { inTabBar } from '../nav.js';
 import { appIcon } from '../branding.js';
 import { bindPasswordToggles } from './auth.js';
@@ -322,7 +325,7 @@ export async function moreView({ el }) {
             <div class="list">${others.map(
               (a) => html`<button type="button" class="item" data-switch="${a.id}">
                 <span class="item-icon">${icon('user')}</span>
-                <span class="item-main"><strong>${a.name}</strong><span class="item-sub">${[a.role, a.school].filter(Boolean).join(' · ')}</span></span>
+                <span class="item-main"><strong>${a.name}</strong><span class="item-sub">${a.expired ? REOPEN_HINT : [a.role, a.school].filter(Boolean).join(' · ')}</span></span>
                 ${icon('swap', 18)}
               </button>`,
             )}</div>
@@ -393,7 +396,7 @@ export function openAccountMenu(trigger) {
       <div class="acct-list">
         ${others.map((a) => html`<button type="button" class="acct-row" data-switch="${a.id}">
           ${avatar(a.name)}
-          <span class="acct-row-text"><strong>${a.name}</strong><small>${[a.role, a.school].filter(Boolean).join(' · ')}</small></span>
+          <span class="acct-row-text"><strong>${a.name}</strong><small>${a.expired ? REOPEN_HINT : [a.role, a.school].filter(Boolean).join(' · ')}</small></span>
           ${icon('swap', 18)}
         </button>`)}
         ${canAddAccount(user)
@@ -414,7 +417,11 @@ export function openAccountMenu(trigger) {
     if (e.target === menu || e.target.closest('[data-close]')) closeAccountMenu();
   });
   for (const btn of menu.querySelectorAll('[data-switch]')) {
-    btn.addEventListener('click', () => busy(btn, () => switchAccount(btn.dataset.switch, state.me)));
+    btn.addEventListener('click', () => busy(btn, async () => {
+      await switchAccount(btn.dataset.switch, state.me);
+      // Still here: it went to type that account's password again.
+      closeAccountMenu();
+    }));
   }
   menu.querySelector('[data-logout]').addEventListener('click', () => {
     closeAccountMenu();
@@ -429,29 +436,38 @@ export function openAccountMenu(trigger) {
 /** Whoever manages the school (and whoever already has two accounts here) can add one. */
 const canAddAccount = (user) => user.role === 'admin' || isManager(user) || savedAccounts().length > 1;
 
-export async function addAccountView({ el }) {
+export async function addAccountView({ el, query }) {
   const me = state.me;
+  // An account already on this phone whose session Supabase closed: only its password, once.
+  const again = savedAccounts().find((a) => a.id === query.get('cuenta') && a.expired);
   el.innerHTML = String(html`
     <div class="stack">
       <section class="card stack">
-        <h2 class="card-title">${icon('plus')} Agregar otra cuenta</h2>
-        <p class="hint">Para quien tiene dos cuentas en Hallway, por ejemplo la de Administración y la suya de IT. Las dos quedan
-          en este teléfono y cambias desde <strong>Más</strong> con un toque, sin salir. Cada día, cada cuenta te pide el código
-          de una app de autenticación (Google Authenticator o Microsoft Authenticator); la primera vez te ayudamos a configurarla.</p>
+        ${again
+          ? html`<h2 class="card-title">${icon('user')} Volver a abrir «${again.name}»</h2>
+              <p class="hint">Supabase cerró la sesión guardada de esta cuenta. Pasa, por ejemplo, la primera vez que la misma cuenta
+                configura o pasa la verificación en dos pasos en otro equipo. Escribe su contraseña <strong>una sola vez</strong>;
+                desde ahí queda guardada otra vez y solo te pide el código del día.</p>`
+          : html`<h2 class="card-title">${icon('plus')} Agregar otra cuenta</h2>
+              <p class="hint">Para quien tiene dos cuentas en Hallway, por ejemplo la de Administración y la suya de IT. Las dos quedan
+                en este teléfono y cambias desde <strong>Más</strong> con un toque, sin salir. Cada día, cada cuenta te pide el código
+                de una app de autenticación (Google Authenticator o Microsoft Authenticator); la primera vez te ayudamos a configurarla.</p>`}
         <form class="stack" data-add-account novalidate>
           <label class="field"><span>Código de escuela</span>
-            <input name="school_code" required autocapitalize="characters" spellcheck="false" value="${me.school.code}"></label>
+            <input name="school_code" required autocapitalize="characters" spellcheck="false" value="${again?.code || me.school.code}"></label>
           <label class="field"><span>Usuario de la otra cuenta</span>
-            <input name="username" required autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Ej. admin"></label>
+            <input name="username" required autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Ej. admin" value="${again?.username || ''}"></label>
           <label class="field"><span>Contraseña</span>
             <span class="pw"><input name="password" type="password" required autocomplete="off">
               <button type="button" class="pw-toggle" data-pw>Ver</button></span></label>
-          <button type="submit" class="btn btn-primary btn-block btn-lg">${icon('plus', 18)} Agregar y abrir</button>
+          <button type="submit" class="btn btn-primary btn-block btn-lg">${again ? html`${icon('user', 18)} Abrir` : html`${icon('plus', 18)} Agregar y abrir`}</button>
         </form>
       </section>
     </div>`);
   bindPasswordToggles(el);
   const form = $('[data-add-account]', el);
+  // School and user already there: straight to the password.
+  if (again?.username) form.password.focus();
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const v = formValues(form);

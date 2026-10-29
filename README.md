@@ -129,6 +129,7 @@ Funciona con servicios gratuitos:
   - **Tu foto arriba** (donde estaba el logo; en computadora, tu nombre en la barra de la izquierda) abre el menú de tu cuenta, como el de Google. Ahí están quién eres, *Mi perfil*, las otras cuentas del teléfono (un toque para cambiar), *Agregar otra cuenta* y *Cerrar sesión*.
   - Se agrega la otra cuenta en *Más → Agregar otra cuenta*, con su usuario y contraseña.
   - Desde entonces se cambia en *Más → Cambiar de cuenta* con un toque, sin salir.
+  - Las cuentas guardadas no se borran solas. Si Supabase cierra la sesión guardada de una (pasa, por ejemplo, la primera vez que esa misma cuenta configura o pasa la verificación en dos pasos en otro equipo mientras aquí estaba sin verificar), sigue en la lista con «Toca para escribir su contraseña otra vez»: el código de escuela y el usuario ya están puestos, se escribe la contraseña una vez y desde ahí solo pide el código del día. Si falla el internet al cambiar, la cuenta tampoco se pierde.
   - **La dirección también puede activarlo a quien quiera**, en *Personal → Verificación en dos pasos*:
     - Por rol («Activar» o «Quitar» para todo el rol), o marcando a una o varias personas.
     - A quien se lo active le llega un aviso, y Hallway le pide el código una vez al día en cualquier teléfono.

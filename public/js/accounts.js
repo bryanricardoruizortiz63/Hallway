@@ -23,7 +23,11 @@ function write(list) {
   }
 }
 
-/** [{ id, name, school, role, refresh }] in the order they were added. */
+/**
+ * [{ id, name, school, role, code, username, refresh, expired }] in the order they were added. expired: Supabase
+ * closed its session (for example, when the same account set up or passed the two-step code on another device while
+ * this one hadn't yet): it stays here and opens again with its password once, then the daily code.
+ */
 export const savedAccounts = () => read();
 
 /** Saves (or updates) the open account with its current session. */
@@ -31,7 +35,10 @@ async function remember(me) {
   const { data } = await sb.auth.getSession();
   const s = data.session;
   if (!s || !me) return;
-  const entry = { id: s.user.id, name: me.user.full_name, school: me.school.name, role: roleLabel(me.user.role), refresh: s.refresh_token };
+  const entry = {
+    id: s.user.id, name: me.user.full_name, school: me.school.name, role: roleLabel(me.user.role),
+    code: me.school.code, username: me.user.username, refresh: s.refresh_token,
+  };
   const list = read();
   const i = list.findIndex((a) => a.id === entry.id);
   if (i >= 0) list[i] = entry;
@@ -44,13 +51,31 @@ export function forgetAccount(id) {
   write(read().filter((a) => a.id !== id));
 }
 
+/** Its session was closed: keep it on the list (name, school, user) so it opens again with only the password. */
+function markExpired(id) {
+  const list = read();
+  const a = list.find((x) => x.id === id);
+  if (a) {
+    a.expired = true;
+    a.refresh = null;
+    write(list);
+  }
+}
+
+/** Supabase answered that the saved session no longer exists (not a network problem). */
+const sessionGone = (error) => !!error && error.status >= 400 && error.status < 500;
+
+/** Where an account whose session was closed opens again (its password, prefilled school and user). */
+export const reopenLink = (id) => `#/accounts/add?cuenta=${encodeURIComponent(id)}`;
+
 // The refresh token changes every hour: keep the saved one current for the open account.
 sb.auth.onAuthStateChange((event, session) => {
   if (!session) return;
   const list = read();
   const a = list.find((x) => x.id === session.user.id);
-  if (a && a.refresh !== session.refresh_token) {
+  if (a && (a.refresh !== session.refresh_token || a.expired)) {
     a.refresh = session.refresh_token;
+    delete a.expired;
     write(list);
   }
 });
@@ -80,11 +105,11 @@ export async function cancelCode(me) {
   const back = cameFrom();
   cameFrom(null);
   const previous = back && read().find((a) => a.id === back.from && a.id !== me.user.id);
-  if (!previous) return false;
+  if (!previous || previous.expired) return false;
   if (back.added === me.user.id) forgetAccount(me.user.id);
   const { error } = await sb.auth.refreshSession({ refresh_token: previous.refresh });
   if (error) {
-    forgetAccount(previous.id);
+    if (sessionGone(error)) markExpired(previous.id);
     return false;
   }
   restart();
@@ -102,13 +127,21 @@ export async function switchAccount(id, me, link) {
   await remember(me);
   const target = read().find((a) => a.id === id);
   if (!target) throw new Error('No se encontró esa cuenta en este teléfono.');
+  // Its session was closed: its password once (school and user already filled in), then the daily code.
+  if (target.expired) {
+    location.hash = reopenLink(id);
+    return;
+  }
   const previous = read().find((a) => a.id === me?.user.id);
   cameFrom({ from: me?.user.id });
   const { data, error } = await sb.auth.refreshSession({ refresh_token: target.refresh });
   if (error || !data.session) {
-    forgetAccount(id);
+    cameFrom(null);
     if (previous) await sb.auth.refreshSession({ refresh_token: previous.refresh }).catch(() => {});
-    throw new Error(`La sesión de ${target.name} venció. Agrégala otra vez con su usuario y contraseña.`);
+    if (!sessionGone(error)) throw new Error('No se pudo cambiar de cuenta. Revisa tu internet e inténtalo de nuevo.');
+    markExpired(id);
+    location.hash = reopenLink(id);
+    return;
   }
   restart(link);
 }
@@ -138,8 +171,12 @@ export async function adoptAccountFromUrl() {
   if (!target || !mine) return;
   mine.refresh = current.refresh_token;
   write(list);
+  if (target.expired) return;
   const { error } = await sb.auth.refreshSession({ refresh_token: target.refresh });
-  if (error) await sb.auth.refreshSession({ refresh_token: mine.refresh }).catch(() => {});
+  if (error) {
+    if (sessionGone(error)) markExpired(target.id);
+    await sb.auth.refreshSession({ refresh_token: mine.refresh }).catch(() => {});
+  }
 }
 
 /** Signs in to one more account, keeping the open one. */
@@ -154,23 +191,25 @@ export async function addAccount(me, schoolCode, username, password) {
     throw err;
   }
   if (added.user.id === me.user.id) throw new Error('Esa es la cuenta que ya tienes abierta.');
+  // Opening again one that was already here (its session had been closed): «Cancelar» doesn't forget it.
+  const known = read().some((a) => a.id === added.user.id);
   await remember(added);
-  cameFrom({ from: me.user.id, added: added.user.id });
+  cameFrom({ from: me.user.id, added: known ? null : added.user.id });
   restart();
 }
 
 /** After signing out of the open account: the next saved one, if any (it reloads), or false. */
 export async function afterSignOut(id) {
   forgetAccount(id);
-  const next = read()[0];
-  if (!next) return false;
-  const { data, error } = await sb.auth.refreshSession({ refresh_token: next.refresh });
-  if (error || !data.session) {
-    forgetAccount(next.id);
-    return false;
+  for (const next of read().filter((a) => !a.expired)) {
+    const { data, error } = await sb.auth.refreshSession({ refresh_token: next.refresh });
+    if (!error && data.session) {
+      restart();
+      return true;
+    }
+    if (sessionGone(error)) markExpired(next.id);
   }
-  restart();
-  return true;
+  return false;
 }
 
 // ---- The daily code ------------------------------------------------------------------------------
