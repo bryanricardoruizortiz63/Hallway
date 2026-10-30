@@ -4,7 +4,7 @@ import { $, busy, dialog, formValues, html, toast } from '../lib.js';
 import { icon } from '../icons.js';
 import { syncPush } from '../pwa.js';
 import { go, homePath, logout, state } from '../store.js';
-import { installHint } from './common.js';
+import { bindLanguageSwitch, installHint, languageSwitch } from './common.js';
 
 function remember(key, value) {
   try {
@@ -157,8 +157,11 @@ export async function loginView({ el, query }) {
             : html`<button type="button" class="btn btn-ghost btn-block" data-forgot>${icon('key', 18)} ¿Olvidaste tu contraseña?</button>`}
         </div>
         <div data-install-slot></div>
+        <div class="auth-lang">${icon('globe', 16)} ${languageSwitch()}</div>
       </div>`);
 
+    // Before signing in, only this device (the account's own choice comes with it).
+    bindLanguageSwitch(el);
     const form = $('[data-login]', el);
     const keepDraft = () => {
       const v = formValues(form);

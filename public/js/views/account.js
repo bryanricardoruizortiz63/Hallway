@@ -3,6 +3,7 @@ import {
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  setMyLanguage,
   setMyRoom,
   testPush,
   updateAdminProfile,
@@ -19,7 +20,7 @@ const REOPEN_HINT = 'Toca para escribir su contraseña otra vez';
 import { inTabBar } from '../nav.js';
 import { appIcon } from '../branding.js';
 import { bindPasswordToggles } from './auth.js';
-import { avatar, empty, installHint } from './common.js';
+import { avatar, bindLanguageSwitch, empty, installHint, languageSwitch } from './common.js';
 
 // ---- Push toggle card ----------------------------------------------------------
 
@@ -158,6 +159,12 @@ export async function profileView({ el }) {
         ? html`<a class="card link-card" href="#/home">${icon('calendar')}<span><strong>Mis ausencias</strong><small>Tus propias ausencias y su estado</small></span>${icon('chevron', 18)}</a>`
         : ''}
 
+      <section class="card stack">
+        <h2 class="card-title" translate="no">${icon('globe')} Idioma · Language</h2>
+        ${languageSwitch()}
+        <p class="hint">Se guarda en tu cuenta: Hallway se abre en este idioma en cualquier teléfono.</p>
+      </section>
+
       <div data-push-slot></div>
       <div data-install-slot></div>
 
@@ -202,6 +209,10 @@ export async function profileView({ el }) {
     </div>`);
 
   bindPasswordToggles(el);
+  bindLanguageSwitch(el, async (code) => {
+    await setMyLanguage(code);
+    user.language = code;
+  });
   pushCard($('[data-push-slot]', el));
   installHint($('[data-install-slot]', el), { dismissible: false });
   $('[data-logout]', el).addEventListener('click', logout);
@@ -309,7 +320,7 @@ export async function moreView({ el }) {
     ['Tu cuenta', [
       canAddAccount(user) ? ['#/accounts/add', 'plus', 'Agregar otra cuenta', 'Si tienes otra cuenta (p. ej. la de Admin de la escuela y la tuya): cambias sin salir'] : null,
       ['#/notifications', 'bell', 'Avisos', state.unread ? `${state.unread} sin leer` : 'Lo que te ha llegado: ausencias, turnos, alertas y mensajes'],
-      ['#/profile', 'user', 'Mi perfil', 'Notificaciones, contraseña, tu salón e instalar la app'],
+      ['#/profile', 'user', 'Mi perfil', 'Idioma, notificaciones, contraseña, tu salón e instalar la app'],
       ['#/guide', 'sparkle', 'Cómo usar Hallway', 'Dónde está cada cosa'],
     ]],
   ]

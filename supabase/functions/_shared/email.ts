@@ -36,17 +36,22 @@ export function schoolIconUrl(school: { id: string; icon_version?: number | null
 }
 
 export async function loadBranding(appUrl: string, iconUrl?: string | null): Promise<Branding> {
-  // The site is served from public/, so the icons hang from the app's root (app_url/icons/…).
-  const url = iconUrl || new URL('icons/icon-192.png', appUrl || 'https://invalid.local/').href;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (res.ok && (res.headers.get('content-type') || '').startsWith('image/')) {
-      return { logo: new Uint8Array(await res.arrayBuffer()), logoSrc: `cid:${LOGO_CID}` };
+  // The app lives in public/: app_url may be the site root (which redirects there) or public/ itself.
+  const base = appUrl || 'https://invalid.local/';
+  const urls = iconUrl
+    ? [iconUrl]
+    : [new URL('public/icons/icon-192.png', base).href, new URL('icons/icon-192.png', base).href];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (res.ok && (res.headers.get('content-type') || '').startsWith('image/')) {
+        return { logo: new Uint8Array(await res.arrayBuffer()), logoSrc: `cid:${LOGO_CID}` };
+      }
+    } catch {
+      // Try the next one, then fall back to the public URL of the icon.
     }
-  } catch {
-    // Fall back to the public URL of the icon.
   }
-  return { logo: null, logoSrc: url };
+  return { logo: null, logoSrc: urls[0] };
 }
 
 /** The school's account, or null when none is set up. */

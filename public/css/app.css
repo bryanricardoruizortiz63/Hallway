@@ -4392,3 +4392,22 @@ p.small {
   cursor: pointer;
   font-weight: 600;
 }
+
+/* Español | English on the sign-in screen: small, under everything. */
+.auth-lang {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: var(--muted);
+}
+
+.auth-lang .segmented {
+  flex: 0 1 220px;
+}
+
+.auth-lang .seg {
+  min-height: 32px;
+  font-size: 13px;
+}
