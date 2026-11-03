@@ -50,6 +50,7 @@ import {
   OUTCOMES,
   SEVERITY,
   STAFF_STATUS,
+  absentNow,
   SUPPORT_OUTCOMES,
   TIMED,
   countdown,
@@ -747,7 +748,12 @@ function liveTurn(t, service) {
 
 /** Who attends a service and how they are now (Disponible, En reunión hasta…). */
 const staffTags = (s) => html`<div class="chips">${s.staff.length
-  ? s.staff.map((p) => html`<span class="tag ${p.status === 'available' ? 'tag-ok' : 'tag-warn'}">${p.name} · ${STAFF_STATUS[p.status] || p.status}${p.until ? ` hasta ${fmtTime(new Date(p.until))}` : ''}</span>`)
+  ? s.staff.map((p) => {
+    // An absence reported for now wins over the status the person set.
+    const out = absentNow(p);
+    if (out) return html`<span class="tag tag-danger">${p.name} · Ausente ${out.until}</span>`;
+    return html`<span class="tag ${p.status === 'available' ? 'tag-ok' : 'tag-warn'}">${p.name} · ${STAFF_STATUS[p.status] || p.status}${p.until ? ` hasta ${fmtTime(new Date(p.until))}` : ''}</span>`;
+  })
   : html`<span class="muted">Nadie tiene un rol que atienda este servicio.</span>`}</div>`;
 
 /** The services, to open one's turns of today; the one open is marked. */
@@ -768,6 +774,10 @@ function liveService(s, { filtered = false, link = true } = {}) {
     s.mode === 'visit' && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
     d.referred ? (s.mode === 'support' ? `${d.referred} con seguimiento` : `${d.referred} referido${d.referred === 1 ? '' : 's'}`) : null,
     d.late ? `${d.late} no ${d.late === 1 ? 'llegó' : 'llegaron'} a tiempo` : null,
+    // Like the Resumen del día: every turn of the day is counted somewhere.
+    d.cancelled ? `${d.cancelled} ${d.cancelled === 1 ? 'cancelado' : 'cancelados'}` : null,
+    d.expired ? `${d.expired} sin atender (se ${d.expired === 1 ? 'cerró' : 'cerraron'} al final del día)` : null,
+    s.active.length ? `${s.active.length} en curso` : null,
   ].filter(Boolean).join(' · ');
   return html`<section class="card stack live-service" data-live-service="${s.id}">
     <div class="card-head">

@@ -16,7 +16,7 @@ import {
   setMyServiceStatus,
   turnHistory,
 } from '../backend.js';
-import { $, busy, can, dialog, moduleOn, schoolIcon, serviceOn, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast } from '../lib.js';
+import { $, busy, can, dialog, moduleOn, schoolIcon, serviceOn, fmtDate, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
 import { go, state } from '../store.js';
 import { empty } from './common.js';
@@ -118,13 +118,62 @@ export function tickCountdowns(ctx) {
   ctx.onLeave(() => clearInterval(timer));
 }
 
-/** Whether someone of the service is available, or when they're back. */
+/** "HH:MM:SS" of this phone's clock. */
+const clock = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+
+/**
+ * The absence that has this person out right now (the phone's date and time), as «hoy», «hasta la 1:00 p. m.» or
+ * «hasta el vie 7 nov»; null when they're in.
+ */
+export function absentNow(person, now = new Date()) {
+  const day = todayStr(now);
+  const time = clock(now);
+  const a = (person.absences || []).find((x) => x.start_date <= day && day <= x.end_date
+    && (!x.partial || ((x.start_time || '00:00') <= time && (!x.end_time || time < x.end_time))));
+  if (!a) return null;
+  if (a.partial && a.end_time) return { until: `hasta la${Number(a.end_time.slice(0, 2)) % 12 === 1 ? '' : 's'} ${fmtTime(a.end_time)}` };
+  return { until: a.end_date > day ? `hasta el ${fmtDate(a.end_date)}` : 'hoy' };
+}
+
+/** A sentence ends with one period, also after «p. m.». */
+const end = (text) => (text.endsWith('.') ? text : `${text}.`);
+
+/** «Ana» · «Ana y Luis» · «Ana, Luis y Marta». */
+const names = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} y ${list.at(-1)}` : list[0] || '');
+
+/**
+ * Whether someone of the service is available, or when they're back. closed: everyone who attends it is absent (no
+ * turns); absent: those who are out while the rest attend.
+ */
 function availability(service) {
   const staff = service.staff || [];
   if (!staff.length) return { text: 'Nadie asignado', ok: false };
-  if (staff.some((p) => p.status === 'available')) return { text: 'Disponible', ok: true };
-  const next = [...staff].sort((a, b) => String(a.until || '~').localeCompare(String(b.until || '~')))[0];
-  return { text: `${STAFF_STATUS[next.status] || 'No disponible'}${next.until ? ` hasta ${timeOf(next.until)}` : ''}`, ok: false };
+  const out = staff.map((p) => ({ ...p, absent: absentNow(p) }));
+  const absent = out.filter((p) => p.absent);
+  const present = out.filter((p) => !p.absent);
+  if (!present.length) return { text: 'No disponible en este momento', ok: false, closed: true, absent };
+  if (present.some((p) => p.status === 'available')) return { text: 'Disponible', ok: true, absent };
+  const next = [...present].sort((a, b) => String(a.until || '~').localeCompare(String(b.until || '~')))[0];
+  return { text: `${STAFF_STATUS[next.status] || 'No disponible'}${next.until ? ` hasta ${timeOf(next.until)}` : ''}`, ok: false, absent };
+}
+
+/** What whoever asks for a turn should know when part (or all) of the service's staff is absent. */
+function absenceNotice(service) {
+  const a = availability(service);
+  if (!a.absent?.length) return '';
+  if (a.closed) {
+    const who = a.absent.length === 1
+      ? `${a.absent[0].name} se encuentra ausente ${a.absent[0].absent.until}`
+      : 'El personal del servicio se encuentra ausente';
+    return html`<p class="status-note warn" data-absence-notice>${icon('alert', 16)} <span>${service.name} no está disponible en este
+      momento. ${end(who)} Para una situación urgente, comunícate con la oficina.</span></p>`;
+  }
+  // «Luis Torres no está disponible hasta las 2:00 p. m.» · «Luis Torres (hasta las 2:00 p. m.) y Ana Rivera (hoy) no están…».
+  const who = a.absent.length === 1
+    ? `${a.absent[0].name} no está disponible ${a.absent[0].absent.until}`
+    : `${names(a.absent.map((p) => `${p.name} (${p.absent.until})`))} no están disponibles`;
+  return html`<p class="status-note warn" data-absence-notice>${icon('clock', 16)} <span>${end(who)} ${service.name} cuenta con menos
+    personal en este momento, por lo que el tiempo de atención podría ser mayor.</span></p>`;
 }
 
 function availabilityText(service) {
@@ -526,11 +575,17 @@ export async function turnsView(ctx) {
               <div class="alert-actions service-rows">
                 ${toRequest.map((s) => {
                   const a = availability(s);
-                  return html`<a class="alert-action" href="#/turns/new?service=${s.id}">
-                    <span class="service-icon">${icon(s.mode === 'support' ? 'wrench' : 'pulse', 22)}</span>
+                  const why = a.closed
+                    ? a.absent.length === 1 ? `${a.absent[0].name} se encuentra ausente ${a.absent[0].absent.until}` : 'Personal ausente'
+                    : a.absent.length ? `Personal reducido: el tiempo de atención podría ser mayor` : '';
+                  const inner = html`<span class="service-icon">${icon(s.mode === 'support' ? 'wrench' : 'pulse', 22)}</span>
                     <span class="service-text"><strong>${s.name}</strong>
-                      <small class="${a.ok ? '' : 'is-off'}"><i class="service-dot" aria-hidden="true"></i>${availabilityText(s)}</small></span>
-                    ${icon('chevron', 18)}</a>`;
+                      <small class="${a.ok ? '' : 'is-off'}"><i class="service-dot" aria-hidden="true"></i>${availabilityText(s)}</small>
+                      ${why ? html`<small class="service-why">${why}</small>` : ''}</span>`;
+                  // Nobody to attend it: no turns until someone is back.
+                  return a.closed
+                    ? html`<div class="alert-action is-disabled" aria-disabled="true">${inner}</div>`
+                    : html`<a class="alert-action" href="#/turns/new?service=${s.id}">${inner}${icon('chevron', 18)}</a>`;
                 })}
                 ${moduleOn(state.me.school, 'maintenance') ? html`<a class="alert-action" href="#/maintenance/new">
                   <span class="service-icon">${icon('wrench', 22)}</span>
@@ -639,15 +694,18 @@ export async function newTurnView(ctx) {
             ? html`<section class="card stack" data-chosen>
                 <h2 class="card-title">${icon(support() ? 'wrench' : 'pulse')} Turno para ${service.name}</h2>
                 <p class="hint">${modeText(service)} · ${availabilityText(service)}</p>
+                ${service.serves ? '' : absenceNotice(service)}
               </section>`
             : html`<section class="card stack" data-pick-service>
                 <h2 class="card-title">${icon('pulse')} ¿A qué servicio?</h2>
                 <div class="choices">
                   ${services.map(
-                    (s) => html`<label class="choice"><input type="radio" name="service" value="${s.id}">
+                    (s) => html`<label class="choice ${availability(s).closed && !s.serves ? 'is-disabled' : ''}">
+                      <input type="radio" name="service" value="${s.id}" ${availability(s).closed && !s.serves ? 'disabled' : ''}>
                       <span><strong>${s.name}</strong><small>${modeText(s)} · ${availabilityText(s)}</small></span></label>`,
                   )}
                 </div>
+                <div data-service-notice></div>
               </section>`}`}
       <section class="card stack" data-student>
         <h2 class="card-title">${icon('user')} ¿Para quién?</h2>
@@ -678,7 +736,12 @@ export async function newTurnView(ctx) {
     </form>`);
 
   const form = $('[data-form]', el);
+  // Everyone who attends it is absent: the form stays, but it can't be sent.
+  const closed = () => !!service && !service.serves && !!availability(service).closed;
   const showService = () => {
+    const notice = $('[data-service-notice]', el);
+    if (notice) notice.innerHTML = service && !service.serves ? String(absenceNotice(service)) : '';
+    form.querySelector('[type=submit]').disabled = closed();
     const reasons = service?.reasons || [];
     const box = $('[data-reasons]', el);
     box.hidden = !reasons.length;
@@ -714,6 +777,7 @@ export async function newTurnView(ctx) {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
       if (!service) throw new Error('Elige el servicio.');
+      if (closed()) throw new Error(`${service.name} no está disponible en este momento: el personal del servicio se encuentra ausente.`);
       const help = support();
       const typed = help ? null : studentFrom(form);
       const severity = Number(form.querySelector('[name=severity]:checked')?.value || 0);

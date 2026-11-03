@@ -736,6 +736,12 @@ export const turnHistory = (t) =>
  * student: { id } of one noted today, or { name, group } ({} for support services such as Soporte IT, where the room
  * is where the help is needed). here: the professional notes a student already in the office.
  */
+/** «2026-11-03T10:15:00»: this phone's local date and time, without a time zone. */
+function localNow(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${todayStr(d)}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 export const requestService = ({ serviceId, student, room, severity, reason, note, here }) =>
   rpc('request_service', {
     p_service_id: serviceId,
@@ -747,6 +753,8 @@ export const requestService = ({ serviceId, student, room, severity, reason, not
     p_reason: reason || null,
     p_note: note || null,
     p_here: !!here,
+    // The phone's date and time: the service can't take turns while everyone who attends it is absent.
+    p_local: localNow(),
   });
 
 /** step: call · go · sent · arrived · return · back · finish (value: the outcome) · cancel · take (value: the room). */
