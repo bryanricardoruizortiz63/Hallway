@@ -1292,6 +1292,12 @@ export const VIEWS = {
   'Tus solicitudes de mantenimiento': 'Your maintenance requests',
   'Tus estudiantes': 'Your students',
   'opcional': 'optional',
+  'Elegir otro día': 'Choose another day',
+  'Turnos del día': 'Turns of the day',
+  'Cancelados o sin atender': 'Cancelled or not attended',
+  'No hubo turnos ese día.': 'There were no turns that day.',
+  'Volver al resumen': 'Back to the summary',
+  'No tienes permiso para ver este turno.': 'You don’t have permission to see this turn.',
 };
 
 /** Messages that come from the server (database and functions), word for word. */

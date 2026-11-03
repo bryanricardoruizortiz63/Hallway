@@ -10,6 +10,7 @@
 //     teacher's note.
 import {
   bookingsBetween,
+  dayTurns,
   closeServiceYear,
   downloadXlsx,
   getLiveTurn,
@@ -29,6 +30,7 @@ import {
   can,
   dialog,
   fmtDateTime,
+  fmtLongDate,
   fmtTime,
   html,
   isoWeekday,
@@ -1370,6 +1372,41 @@ function liveSteps(t) {
  * En vivo › a turn (tapping it on the board, in «Fuera del salón ahora» or in a service's day): who, what is happening
  * now, how long it took, every detail (also the teacher's note) and every step with its time. It refreshes by itself.
  */
+// ---- Resumen del día › a service's turns of that day ----------------------------------------------
+
+/** #/summary/2026-11-03/service/3: each turn of that day, as in En vivo; each one opens with everything about it. */
+export async function summaryServiceView({ el, params, setTitle }) {
+  const [day, id] = [params[0], Number(params[1])];
+  const [services, turns] = await Promise.all([servicesOverview(), dayTurns(id, day)]);
+  const s = services.find((x) => x.id === id);
+  if (!s) {
+    el.innerHTML = String(html`<div class="card">${empty('pulse', 'No se encontró el servicio.', '')}</div>`);
+    return;
+  }
+  setTitle(s.name);
+  const open = turns.filter(isLiveOpen);
+  const done = turns.filter((t) => !isLiveOpen(t));
+  const finished = done.filter((t) => t.status === 'done');
+  el.innerHTML = String(html`<div class="stack">
+    <h2 class="capitalize summary-sub">${fmtLongDate(day)}</h2>
+    <div class="stats">
+      ${tile(turns.length, 'Pedidos')}
+      ${tile(finished.length, s.mode === 'support' ? 'Resueltos' : 'Atendidos')}
+      ${tile(done.length - finished.length, 'Cancelados o sin atender')}
+    </div>
+    ${open.length ? html`<section class="section">
+        <h3 class="section-title">En curso <span class="count warn">${open.length}</span></h3>
+        <div class="list">${open.map((t) => dayTurn(t, s))}</div>
+      </section>` : ''}
+    <section class="section">
+      <h3 class="section-title">Turnos del día <span class="count">${done.length}</span></h3>
+      ${done.length ? html`<div class="list">${done.map((t) => dayTurn(t, s))}</div>` : html`<p class="muted pad">No hubo turnos ese día.</p>`}
+    </section>
+    <p class="hint">Cada turno dice su motivo, quién lo pidió, quién lo atendió y la hora de cada paso. Toca uno para ver todo, también la nota del maestro.</p>
+    <a class="btn btn-ghost btn-block" href="#/summary/${day}">${icon('back', 18)} Volver al resumen</a>
+  </div>`);
+}
+
 export async function liveTurnView(ctx) {
   const { el, params, isCurrent } = ctx;
   const id = Number(params[0]);

@@ -948,6 +948,13 @@ export const liveTurns = async (serviceId) => (await rpc('live_turns', { p_servi
  * One turn, with everything about it, also the teacher's note: the student (or who asked and where), reason, how
  * serious, place in line, who asked, has the student and attends, every step with its time and how it ended.
  */
+/** A service's turns of one day (the phone's day, 'YYYY-MM-DD'), for the Resumen del día. */
+export function dayTurns(serviceId, day) {
+  const from = new Date(`${day}T00:00:00`);
+  const to = new Date(from);
+  to.setDate(to.getDate() + 1);
+  return rpc('day_turns', { p_service_id: serviceId, p_from: from.toISOString(), p_to: to.toISOString() }).then((r) => r || []);
+}
 export const getLiveTurn = (id) => rpc('live_turn', { p_id: id });
 /** How many turns a service had at each hour of the day over the 4 weeks before today: { days, hours: [{ hour, turns }] }. */
 export const liveHours = (serviceId) => rpc('live_hours', { p_service_id: serviceId, p_since: startOfToday() });

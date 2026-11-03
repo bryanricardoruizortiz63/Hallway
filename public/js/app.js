@@ -29,6 +29,7 @@ import { bookingDetailView, bookingHistoryView, newBookingView, roomsView } from
 import {
   liveServiceView,
   liveTurnView,
+  summaryServiceView,
   liveTvView,
   liveView,
   maintenancePanelView,
@@ -102,9 +103,10 @@ const ROUTES = [
   { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso del salón', allow: may('rooms'), back: true },
   { re: /^\/live$/, view: liveView, title: 'En vivo', allow: may('live') },
   { re: /^\/live\/service\/(\d+)$/, view: liveServiceView, title: 'En vivo', allow: may('live'), back: true },
-  { re: /^\/live\/turn\/(\d+)$/, view: liveTurnView, title: 'Turno', allow: may('live'), back: true },
+  { re: /^\/live\/turn\/(\d+)$/, view: liveTurnView, title: 'Turno', allow: (u) => can(u, 'live') || can(u, 'summary'), back: true },
   // For a TV in the office: without the app's bars.
   { re: /^\/live\/tv$/, view: liveTvView, title: 'En vivo', allow: may('live'), bare: true },
+  { re: /^\/summary\/(\d{4}-\d{2}-\d{2})\/service\/(\d+)$/, view: summaryServiceView, title: 'Turnos del día', allow: may('summary'), back: true },
   { re: /^\/summary(?:\/(\d{4}-\d{2}-\d{2}))?$/, view: summaryView, title: 'Resumen del día', allow: may('summary'), back: true },
   // Enfermería, Trabajo Social…: only their own service's panel.
   { re: /^\/data$/, view: dataView, title: 'Datos y reportes', allow: (u) => can(u, 'reports') || !!u.serves?.length, back: true },

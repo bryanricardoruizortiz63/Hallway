@@ -4,7 +4,7 @@
 import { dailySummary } from '../backend.js';
 import { CATEGORIES, NO_COVER, addDays, fmtLongDate, fmtTime, html, scheduleText, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
-import { state } from '../store.js';
+import { go, state } from '../store.js';
 import { avatar, statusBadge } from './common.js';
 
 const tile = (value, label, cls = '') => html`<div class="stat ${cls}"><strong>${value}</strong><span>${label}</span></div>`;
@@ -74,7 +74,11 @@ export async function summaryView({ el, params }) {
   el.innerHTML = String(html`<div class="stack summary">
     <div class="summary-nav">
       ${older >= addDays(today, -60) ? html`<a class="icon-btn" href="#/summary/${older}" aria-label="Día anterior" data-summary-prev>${icon('back', 20)}</a>` : html`<span></span>`}
-      <h2 class="capitalize" data-summary-day>${fmtLongDate(day)}</h2>
+      <label class="summary-day" data-summary-day>
+        <h2 class="capitalize">${fmtLongDate(day)}</h2>
+        <small>${icon('calendar', 14)} Elegir otro día</small>
+        <input type="date" data-summary-pick value="${day}" min="${addDays(today, -60)}" max="${today}" aria-label="Elegir otro día">
+      </label>
       ${day < today ? html`<a class="icon-btn" href="#/summary/${addDays(day, 1)}" aria-label="Día siguiente" data-summary-next>${icon('chevron', 20)}</a>` : html`<span></span>`}
     </div>
     ${s.school_day ? '' : html`<p class="status-note muted" data-summary-closed>${icon('calendar', 16)} ${s.closure ? `No hubo clases: ${s.closure}.` : 'No es día de clases.'}</p>`}
@@ -93,10 +97,16 @@ export async function summaryView({ el, params }) {
     ${s.services.length
       ? html`<section class="section" data-summary-services>
           <h3 class="section-title">Turnos <span class="count">${turns}</span></h3>
-          <div class="list">${s.services.map((x) => html`<div class="item" data-summary-service="${x.id}">
-              <span class="item-icon">${icon(x.mode === 'support' ? 'wrench' : 'pulse')}</span>
-              <span class="item-main"><strong>${x.name}</strong><span class="item-sub">${serviceLine(x)}</span></span>
-            </div>`)}</div>
+          <div class="list">${s.services.map((x) => x.requested
+            ? html`<a class="item" href="#/summary/${day}/service/${x.id}" data-summary-service="${x.id}">
+                <span class="item-icon">${icon(x.mode === 'support' ? 'wrench' : 'pulse')}</span>
+                <span class="item-main"><strong>${x.name}</strong><span class="item-sub">${serviceLine(x)}</span></span>
+                ${icon('chevron', 18)}
+              </a>`
+            : html`<div class="item" data-summary-service="${x.id}">
+                <span class="item-icon">${icon(x.mode === 'support' ? 'wrench' : 'pulse')}</span>
+                <span class="item-main"><strong>${x.name}</strong><span class="item-sub">${serviceLine(x)}</span></span>
+              </div>`)}</div>
         </section>`
       : ''}
 
@@ -138,4 +148,10 @@ export async function summaryView({ el, params }) {
       ? 'A quienes tienen el permiso «Resumen del día» les llega un aviso con este resumen al terminar las clases. '
       : `Te llega un aviso con este resumen al terminar las clases (${fmtTime(s.day_end)}). `}Las ausencias dicen quién cubrió, nunca el motivo; los turnos, las alertas y las visitas van solo en números.</p>
   </div>`);
+
+  // Straight to any day of the last 60.
+  el.querySelector('[data-summary-pick]').addEventListener('change', (e) => {
+    const v = e.target.value;
+    if (v && v !== day && v >= addDays(today, -60) && v <= today) go(`/summary/${v}`);
+  });
 }
