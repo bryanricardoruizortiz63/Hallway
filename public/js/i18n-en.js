@@ -1,7 +1,11 @@
 // English for every Spanish text of the app, word for word as the screens write it (on one line). A text missing here
 // stays in Spanish. EN_PATTERNS cover texts with a name, number or date inside.
 
+import { SERVER, VIEWS } from './i18n-en-views.js';
+
 export const EN = {
+  ...SERVER,
+  ...VIEWS,
   // ---- Navigation and screen titles ----
   'Agregar otra cuenta': 'Add another account',
   'Mis ausencias': 'My absences',
@@ -299,6 +303,12 @@ export const EN = {
   '¡Listo!': 'Done!',
 };
 
+/** One part of a line «a · b · c»: the dictionary or a pattern (filled in below). */
+let t2 = (x) => x;
+export function setPartTranslator(fn) {
+  t2 = fn;
+}
+
 /** «hoy» · «hasta las 2:00 PM» · «hasta el Fri, Nov 7» (the absence of someone who attends a service). */
 const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until ').replace(/^hasta el /, 'until ');
 
@@ -316,6 +326,43 @@ export const EN_PATTERNS = [
     (people, service) => `${people.replace(/\((hoy|hasta [^)]+)\)/g, (m, u) => `(${until(u)})`).replace(/ y /g, ' and ')} are not available. ${service} has fewer staff at the moment, so the wait may be longer.`],
   [/^(.+) se encuentra ausente (hoy|hasta .+)$/, (name, u) => `${name} is out ${until(u)}`],
   [/^Ausente (hoy|hasta .+)$/, (u) => `Out ${until(u)}`],
+  [/^Hola, (.+) 👋$/, 'Hi, $1 👋'],
+  [/^Yo \((.+)\)$/, 'Me ($1)'],
+  [/^Hola (.+)$/, 'Hi $1'],
+  [/^Tu cuenta: (.+)$/, 'Your account: $1'],
+  [/^La cuenta admin \+ (\d+) persona\(s\)$/, 'The admin account + $1 person(s)'],
+  [/^de (\d+) personas?\.$/, 'of $1 people.'],
+  [/^Horario del salón: (.+), de lunes a viernes\.$/, 'Room schedule: $1, Monday to Friday.'],
+  [/^Horario del salón: (.+)$/, 'Room schedule: $1'],
+  [/^Se actualiza solo\. Última vez: (.+)$/, 'Updates by itself. Last time: $1'],
+  [/^(\d+) en fila$/, '$1 in line'],
+  [/^(\d+) pedidos?$/, (n) => `${n} request${n === '1' ? '' : 's'}`],
+  [/^(\d+) terminados?$/, '$1 finished'],
+  [/^(\d+) atendidos?$/, '$1 attended'],
+  [/^(\d+) resueltos?$/, '$1 resolved'],
+  [/^(\d+) referidos?$/, '$1 referred'],
+  [/^(\d+) recogidos?$/, '$1 picked up'],
+  [/^(\d+) con seguimiento$/, '$1 with follow-up'],
+  [/^(\d+) no llegó a tiempo$/, '$1 didn’t arrive in time'],
+  [/^(\d+) no llegaron a tiempo$/, '$1 didn’t arrive in time'],
+  [/^Hoy: (.+)\.$/, (x) => `Today: ${x.split(' · ').map((p) => t2(p)).join(' · ')}.`],
+  [/^Hoy, en todo el servicio: (.+)\.$/, (x) => `Today, across the service: ${x.split(' · ').map((p) => t2(p)).join(' · ')}.`],
+  [/^Esperando (\d+) min$/, 'Waiting $1 min'],
+  [/^Esperando menos de 1 min$/, 'Waiting less than 1 min'],
+  [/^Atrasado (\d+) min$/, '$1 min late'],
+  [/^Quedan (.+)$/, '$1 left'],
+  [/^Turno para (.+)$/, 'Turn for $1'],
+  [/^Panel de (.+)$/, '$1 panel'],
+  [/^El motivo y la nota solo los ven tú, (.+) y la dirección\.$/, 'Only you, $1 and the office see the reason and the note.'],
+  [/^Te avisamos cuando alguien de (.+) vaya en camino y cuando quede resuelto\.$/, 'We’ll let you know when someone from $1 is on the way and when it’s resolved.'],
+  [/^Pedido enviado\. Le avisamos a (.+)\.$/, 'Request sent. We notified $1.'],
+  [/^Turno pedido\. Le avisamos a (.+)\.$/, 'Turn requested. We notified $1.'],
+  [/^Ya pediste ayuda a (.+) por «(.+)» en (.+): sigue abierto\.$/, 'You already asked $1 for help with “$2” in $3: it’s still open.'],
+  [/^Ya hay un turno abierto para (.+) \((.+)\) en (.+), pedido por (.+)\.$/, 'There’s already an open turn for $1 ($2) in $3, requested by $4.'],
+  [/^Mensaje enviado a (.+)$/, 'Message sent to $1'],
+  [/^Enviado a (.+)$/, 'Sent to $1'],
+  [/^Correo de prueba enviado a (.+)$/, 'Test email sent to $1'],
+  [/^Código cambiado a (.+)$/, 'Code changed to $1'],
   [/^(\d+) cancelados?$/, '$1 cancelled'],
   [/^(\d+) sin atender \(se cerró al final del día\)$/, '$1 not attended (closed at the end of the day)'],
   [/^(\d+) sin atender \(se cerraron al final del día\)$/, '$1 not attended (closed at the end of the day)'],
