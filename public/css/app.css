@@ -4411,3 +4411,19 @@ p.small {
   min-height: 32px;
   font-size: 13px;
 }
+
+/* Turnos: a service whose staff is absent (no turns), and why under its availability. */
+.alert-action.is-disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.service-why {
+  display: block;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.choice.is-disabled {
+  opacity: 0.6;
+}

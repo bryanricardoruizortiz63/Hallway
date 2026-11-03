@@ -113,6 +113,11 @@ export const EN = {
   'En camino': 'On the way',
   'Sin confirmar': 'Not confirmed',
 
+  // ---- Services: staff out ----
+  'No disponible en este momento': 'Not available at the moment',
+  'Personal ausente': 'Staff out',
+  'Personal reducido: el tiempo de atención podría ser mayor': 'Fewer staff: the wait may be longer',
+
   // ---- Roles and permissions (built-in names) ----
   'Director(a)': 'Principal',
   'Secretaría': 'Front office',
@@ -294,8 +299,27 @@ export const EN = {
   '¡Listo!': 'Done!',
 };
 
+/** «hoy» · «hasta las 2:00 PM» · «hasta el Fri, Nov 7» (the absence of someone who attends a service). */
+const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until ').replace(/^hasta el /, 'until ');
+
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^(.+) no está disponible en este momento\. (.+) se encuentra ausente (hoy|hasta .+?)\.? Para una situación urgente, comunícate con la oficina\.$/,
+    (service, name, u) => `${service} is not available at the moment. ${name} is out ${until(u)}. For an urgent matter, please contact the office.`],
+  [/^(.+) no está disponible en este momento\. El personal del servicio se encuentra ausente\. Para una situación urgente, comunícate con la oficina\.$/,
+    (service) => `${service} is not available at the moment. The service’s staff is out. For an urgent matter, please contact the office.`],
+  [/^(.+) no está disponible en este momento: el personal del servicio se encuentra ausente\.(?: Para una situación urgente, comunícate con la oficina\.)?$/,
+    (service) => `${service} is not available at the moment: the service’s staff is out. For an urgent matter, please contact the office.`],
+  [/^(.+) no está disponible (hoy|hasta .+)\. (.+) cuenta con menos personal en este momento, por lo que el tiempo de atención podría ser mayor\.$/,
+    (name, u, service) => `${name} is not available ${until(u)}. ${service} has fewer staff at the moment, so the wait may be longer.`],
+  [/^(.+) no están disponibles\. (.+) cuenta con menos personal en este momento, por lo que el tiempo de atención podría ser mayor\.$/,
+    (people, service) => `${people.replace(/\((hoy|hasta [^)]+)\)/g, (m, u) => `(${until(u)})`).replace(/ y /g, ' and ')} are not available. ${service} has fewer staff at the moment, so the wait may be longer.`],
+  [/^(.+) se encuentra ausente (hoy|hasta .+)$/, (name, u) => `${name} is out ${until(u)}`],
+  [/^Ausente (hoy|hasta .+)$/, (u) => `Out ${until(u)}`],
+  [/^(\d+) cancelados?$/, '$1 cancelled'],
+  [/^(\d+) sin atender \(se cerró al final del día\)$/, '$1 not attended (closed at the end of the day)'],
+  [/^(\d+) sin atender \(se cerraron al final del día\)$/, '$1 not attended (closed at the end of the day)'],
+  [/^(\d+) en curso$/, '$1 in progress'],
   [/^(.+) · Hallway$/, (title) => `${title} · Hallway`],
   [/^(\d+) sin leer$/, '$1 unread'],
   [/^hace (\d+) min$/, '$1 min ago'],
