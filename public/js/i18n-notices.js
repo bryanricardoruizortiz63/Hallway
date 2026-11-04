@@ -219,9 +219,9 @@ export const NOTICE_PATTERNS = [
   [/^(.+) te quitó la verificación en dos pasos: Hallway ya no te pedirá el código\.$/, '$1 turned off two-step verification for you: Hallway won’t ask for the code anymore.'],
   [/^Nuevo código de escuela: (.+)$/, 'New school code: $1'],
   [/^Tu usuario y tu contraseña no cambian\. Si la app te pide el código, escribe (.+)\.$/, 'Your username and password don’t change. If the app asks for the code, type $1.'],
-  [/^Descarga el historial del año escolar$/, 'Download the school year’s history'],
-  [/^(Falta 1 mes|Faltan 2 semanas|Falta 1 semana|Falta 1 día): el 30 de junio termina el año escolar y el 1 de julio se borra el historial del personal y el récord de los turnos, para no llenar la base de datos\. Descárgalo antes como respaldo \(backup\) en Más › Historial del personal\.$/,
-    (left) => `${{ 'Falta 1 mes': '1 month left', 'Faltan 2 semanas': '2 weeks left', 'Falta 1 semana': '1 week left', 'Falta 1 día': '1 day left' }[left] || left}: the school year ends on June 30 and on July 1 the staff history and the turns’ records are deleted, so the database doesn’t fill up. Download them first as a backup in More › Staff history.`],
+  [/^Descarga el respaldo del año escolar$/, 'Download the school year’s backup'],
+  [/^(Falta 1 mes|Faltan 2 semanas|Falta 1 semana|Falta 1 día): el 30 de junio termina el año escolar y el 1 de julio se borran sus ausencias, turnos, avisos e historial del personal, para no llenar la base de datos\. Descarga antes el respaldo \(backup\) en Más › Datos y reportes y en Más › Historial del personal\.$/,
+    (left) => `${{ 'Falta 1 mes': '1 month left', 'Faltan 2 semanas': '2 weeks left', 'Falta 1 semana': '1 week left', 'Falta 1 día': '1 day left' }[left] || left}: the school year ends on June 30 and on July 1 its absences, turns, notices and staff history are deleted, so the database doesn’t fill up. Download the backup first in More › Data and reports and in More › Staff history.`],
   // ---- Daily summary ----
   [/^Resumen del día · (.+)$/, 'Daily summary · $1'],
   [/^(\d+) ausencias?(?: \((\d+) sin cubrir\))?$/, (k, u) => `${n(k, 'absence', 'absences')}${u ? ` (${u} not covered)` : ''}`],

@@ -1809,4 +1809,10 @@ export const SERVER = {
   'Las horas son de Puerto Rico. El récord de los turnos con los estudiantes solo lo ven Admin y Director(a).': 'Times are Puerto Rico time. Only the Admin and Director(a) see the turns’ records with the students.',
   'Excel': 'Excel',
   'Ve, imprime y descarga el historial de cada empleado: lo que hizo en la app, el día y la hora (hora de Puerto Rico) y los detalles. El récord de los turnos con los estudiantes solo lo ven Admin y Director(a).': 'See, print and download each employee’s history: what they did in the app, the day and time (Puerto Rico time) and the details. Only the Admin and Director(a) see the turns’ records with the students.',
+  'Hallway guarda cada año escolar (1 de agosto al 30 de junio). El 1 de julio se borran las ausencias, los turnos, los avisos y este historial del año que terminó, para no llenar la base de datos; las cuentas del personal se quedan. Descarga antes el respaldo (backup): aquí el historial, y en Más › Datos y reportes las ausencias y los turnos. Admin y Dirección reciben un aviso 1 mes, 2 semanas, 1 semana y 1 día antes.':
+    'Hallway keeps each school year (August 1 to June 30). On July 1 the absences, turns, notices and this history of the year that ended are deleted, so the database doesn’t fill up; staff accounts stay. Download the backup first: the history here, and the absences and turns in More › Data and reports. The Admin and the administration get a notice 1 month, 2 weeks, 1 week and 1 day before.',
+  'Este turno ya no está disponible.': 'This turn is no longer available.',
+  'El 1 de julio Hallway borra solo las ausencias, los turnos, los avisos y el historial del año que terminó, para no llenar la base de datos. Las cuentas del personal se quedan. Descarga antes este archivo, el Excel de cada servicio y el historial del personal.':
+    'On July 1 Hallway deletes the absences, turns, notices and history of the year that ended by itself, so the database doesn’t fill up. Staff accounts stay. Download this archive, each service’s Excel and the staff history first.',
+  'Año escolar (1 de agosto – 30 de junio)': 'School year (August 1 – June 30)',
 };

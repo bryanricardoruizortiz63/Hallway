@@ -23,7 +23,7 @@ function yearStart() {
   return new Date(Date.UTC(m >= 7 ? y : y - 1, 6, 1, 4)).toISOString();
 }
 
-const KEEP_HINT = 'El historial se guarda durante el año escolar (1 de agosto al 30 de junio). El 1 de julio se borra el del año que terminó, para no llenar la base de datos: descárgalo antes como respaldo (backup). Te avisamos 1 mes, 2 semanas, 1 semana y 1 día antes.';
+const KEEP_HINT = 'Hallway guarda cada año escolar (1 de agosto al 30 de junio). El 1 de julio se borran las ausencias, los turnos, los avisos y este historial del año que terminó, para no llenar la base de datos; las cuentas del personal se quedan. Descarga antes el respaldo (backup): aquí el historial, y en Más › Datos y reportes las ausencias y los turnos. Admin y Dirección reciben un aviso 1 mes, 2 semanas, 1 semana y 1 día antes.';
 
 const dayKey = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
 const dayTitle = (iso) => {
