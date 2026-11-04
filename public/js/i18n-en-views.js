@@ -1293,6 +1293,12 @@ export const VIEWS = {
   'Tus estudiantes': 'Your students',
   'opcional': 'optional',
   'Elegir otro día': 'Choose another day',
+  'Llamar a la oficina': 'Call to the office',
+  'Voy al salón': 'Going to the room',
+  'El servicio decide si lo llama a la oficina o va al salón': 'The service decides whether to call them to the office or go to the room',
+  'Decide quien atiende, en cada turno': 'Whoever attends decides, turn by turn',
+  'Al recibir el turno, el profesional elige: «Llamar a la oficina» (como Enfermería) o «Voy al salón» (como Trabajo Social).':
+    'When the turn arrives, the professional chooses: “Call to the office” (like Nursing) or “Going to the room” (like Social Work).',
   'Turnos del día': 'Turns of the day',
   'Cancelados o sin atender': 'Cancelled or not attended',
   'No hubo turnos ese día.': 'There were no turns that day.',

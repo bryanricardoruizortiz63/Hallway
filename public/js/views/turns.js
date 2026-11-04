@@ -306,6 +306,14 @@ function turnActions(t, service, me) {
   };
   if (!isOpen(t)) return out;
   const teacher = teacherSide(t, me);
+  // «Decide quien atiende»: until someone chooses, both ways (call to the office, or go to the room).
+  const either = t.service_mode === 'either';
+  if (service.serves && either && t.status === 'waiting') {
+    add('call', 'Llamar a la oficina', 'primary');
+    add('go', 'Voy al salón', 'primary');
+    add('arrived', 'Ya está aquí');
+    add('finish', 'Ya lo atendí', 'secondary', 'attended');
+  }
   if (service.serves && t.service_mode === 'visit') {
     if (t.status === 'waiting') add('call', 'Llamar', 'primary');
     if (['called', 'sent'].includes(t.status)) add('arrived', 'Llegó', 'primary');
@@ -560,7 +568,7 @@ export async function turnsView(ctx) {
               ? html`<div class="list">${waiting.map((t) => queueItem(t, me, service))}</div>`
               : html`<p class="hint">No hay nadie en fila${active.length ? '' : ' ni en curso'}.</p>`}
             <div class="button-row">
-              ${service.mode === 'visit'
+              ${['visit', 'either'].includes(service.mode)
                 ? html`<a class="btn btn-ghost btn-sm" href="#/turns/new?service=${service.id}&here=1">${icon('plus', 18)} Llegó sin turno</a>`
                 : ''}
               <a class="btn btn-ghost btn-sm" href="#/turns/panel/${service.id}">${icon('chart', 18)} Panel y Excel</a>
@@ -679,11 +687,16 @@ export async function newTurnView(ctx) {
   }
   let service = services.find((s) => s.id === Number(query.get('service'))) || (services.length === 1 ? services[0] : null);
   // The professional notes a student who came on their own.
-  const here = query.get('here') === '1' && !!service?.serves && service.mode === 'visit';
+  const here = query.get('here') === '1' && !!service?.serves && ['visit', 'either'].includes(service.mode);
   if (here) ctx.setTitle('Llegó sin turno');
   // Already chosen on Turnos (or the only one): don't ask again, just show it. To change it, go back.
   const chosen = !here && !!service;
-  const modeText = (s) => ({ visit: 'El estudiante va a la oficina', room: 'Va al salón', support: 'Ayuda para ti o tu salón' }[s.mode]);
+  const modeText = (s) => ({
+    visit: 'El estudiante va a la oficina',
+    room: 'Va al salón',
+    either: 'El servicio decide si lo llama a la oficina o va al salón',
+    support: 'Ayuda para ti o tu salón',
+  }[s.mode]);
   const support = () => service?.mode === 'support';
 
   el.innerHTML = String(html`
@@ -814,10 +827,12 @@ function steps(t) {
           [`Llegó a ${t.service_name}`, null, t.arrived_at],
           ['Regresa al salón', null, t.returning_at],
         ]
-      : [
-          ['Pedido', t.created_by_name, t.created_at],
-          [`${t.service_name} va ${isSupport(t) ? 'en camino' : 'al salón'}`, t.on_the_way_at ? t.handled_by_name : null, t.on_the_way_at],
-        ];
+      : t.service_mode === 'either'
+        ? [['Pedido', t.created_by_name, t.created_at]]
+        : [
+            ['Pedido', t.created_by_name, t.created_at],
+            [`${t.service_name} va ${isSupport(t) ? 'en camino' : 'al salón'}`, t.on_the_way_at ? t.handled_by_name : null, t.on_the_way_at],
+          ];
   if (t.status === 'done') list.push([outcomeLabel(t), t.closed_by_name, t.closed_at]);
   if (t.status === 'cancelled') list.push(['Cancelado', t.closed_by_name, t.closed_at]);
   return html`<ol class="timeline steps">
@@ -946,7 +961,7 @@ export async function servicesView({ el }) {
               <span class="item-icon">${icon(s.mode === 'support' ? 'wrench' : 'pulse')}</span>
               <span class="item-main">
                 <strong>${s.name}</strong>
-                <span class="item-sub">${{ visit: `El estudiante va · ${s.arrive_minutes} min para llegar`, room: 'El profesional va al salón', support: 'Ayuda al personal' }[s.mode]}
+                <span class="item-sub">${{ visit: `El estudiante va · ${s.arrive_minutes} min para llegar`, room: 'El profesional va al salón', either: `Decide quien atiende · ${s.arrive_minutes} min para llegar`, support: 'Ayuda al personal' }[s.mode]}
                   · ${s.roles.map(roleName).join(', ')}</span>
                 <span class="item-tags">
                   ${s.active ? '' : html`<span class="tag">Desactivado</span>`}
@@ -984,12 +999,14 @@ export async function serviceFormView(ctx) {
             <span><strong>El estudiante va a la oficina</strong><small>Como Enfermería: lo llaman, el maestro lo envía y corre el tiempo para llegar.</small></span></label>
           <label class="choice"><input type="radio" name="mode" value="room" ${s.mode === 'room' ? 'checked' : ''}>
             <span><strong>El profesional va al salón</strong><small>Como Trabajo Social: «Voy en camino» y luego «Atendido».</small></span></label>
+          <label class="choice"><input type="radio" name="mode" value="either" ${s.mode === 'either' ? 'checked' : ''}>
+            <span><strong>Decide quien atiende, en cada turno</strong><small>Al recibir el turno, el profesional elige: «Llamar a la oficina» (como Enfermería) o «Voy al salón» (como Trabajo Social).</small></span></label>
           <label class="choice"><input type="radio" name="mode" value="support" ${s.mode === 'support' ? 'checked' : ''}>
             <span><strong>Ayuda al personal</strong><small>Como Soporte IT: sin estudiante; el maestro pide ayuda para su salón, «Voy en camino» y luego «Resuelto».</small></span></label>
         </div>
-        <label class="field" data-minutes ${s.mode === 'visit' ? '' : 'hidden'}><span>Minutos para llegar</span>
+        <label class="field" data-minutes ${['visit', 'either'].includes(s.mode) ? '' : 'hidden'}><span>Minutos para llegar</span>
           <input type="number" name="minutes" min="1" max="30" value="${s.arrive_minutes}" inputmode="numeric"></label>
-        <p class="hint" data-minutes ${s.mode === 'visit' ? '' : 'hidden'}>El tiempo empieza cuando el maestro toca «Ya salió». Si no llega en ese tiempo, se avisa al servicio, al maestro y a Seguridad.</p>
+        <p class="hint" data-minutes ${['visit', 'either'].includes(s.mode) ? '' : 'hidden'}>El tiempo empieza cuando el maestro toca «Ya salió». Si no llega en ese tiempo, se avisa al servicio, al maestro y a Seguridad.</p>
       </section>
       <section class="card stack">
         <h2 class="card-title">${icon('users')} ¿Quién lo atiende?</h2>
@@ -1018,7 +1035,7 @@ export async function serviceFormView(ctx) {
   const form = $('[data-form]', el);
   for (const input of el.querySelectorAll('[name=mode]')) {
     input.addEventListener('change', () => {
-      for (const node of el.querySelectorAll('[data-minutes]')) node.hidden = form.mode.value !== 'visit';
+      for (const node of el.querySelectorAll('[data-minutes]')) node.hidden = !['visit', 'either'].includes(form.mode.value);
     });
   }
   form.addEventListener('submit', (e) => {

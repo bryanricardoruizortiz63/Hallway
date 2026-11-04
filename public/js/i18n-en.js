@@ -328,6 +328,7 @@ export const EN_PATTERNS = [
   [/^Ausente (hoy|hasta .+)$/, (u) => `Out ${until(u)}`],
   [/^Hola, (.+) 👋$/, 'Hi, $1 👋'],
   [/^Yo \((.+)\)$/, 'Me ($1)'],
+  [/^Decide quien atiende · (\d+) min para llegar$/, 'Whoever attends decides · $1 min to arrive'],
   [/^Hola (.+)$/, 'Hi $1'],
   [/^Tu cuenta: (.+)$/, 'Your account: $1'],
   [/^La cuenta admin \+ (\d+) persona\(s\)$/, 'The admin account + $1 person(s)'],

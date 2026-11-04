@@ -241,7 +241,8 @@ export async function servicePanelView(ctx) {
   if (!service) throw new Error('No se encontró el servicio.');
   if (!service.serves && !can(state.me.user, 'reports')) throw new Error('Solo quien atiende este servicio y la dirección ven su panel.');
   setTitle(`Panel de ${service.name}`);
-  const visit = service.mode === 'visit';
+  // «Decide quien atiende» counts like Enfermería; each turn's own time comes from the way it went.
+  const visit = ['visit', 'either'].includes(service.mode);
   // Soporte IT and other help for the staff: no students; who asked, where, and what was done.
   const support = service.mode === 'support';
   const today = todayStr();
@@ -258,7 +259,7 @@ export async function servicePanelView(ctx) {
 
   const walkIn = (t) => visit && !t.called_at && !t.sent_at && !!t.arrived_at;
   const waitOf = (t) => (walkIn(t) ? null : minutesBetween(t.created_at, t.called_at || t.on_the_way_at || t.arrived_at));
-  const careOf = (t) => (visit ? minutesBetween(t.arrived_at, t.returning_at || t.closed_at) : minutesBetween(t.on_the_way_at, t.closed_at));
+  const careOf = (t) => (visit && !t.on_the_way_at ? minutesBetween(t.arrived_at, t.returning_at || t.closed_at) : minutesBetween(t.on_the_way_at, t.closed_at));
   const resultOf = (t) =>
     t.status === 'cancelled' ? 'Cancelado' : (support && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'En curso';
   const totalOf = (t) => minutesBetween(t.created_at, t.closed_at);
@@ -773,7 +774,7 @@ function liveService(s, { filtered = false, link = true } = {}) {
   const summary = [
     `${d.requested} ${d.requested === 1 ? 'pedido' : 'pedidos'}`,
     `${d.done} ${d.done === 1 ? 'terminado' : 'terminados'}`,
-    s.mode === 'visit' && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
+    s.mode !== 'support' && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
     d.referred ? (s.mode === 'support' ? `${d.referred} con seguimiento` : `${d.referred} referido${d.referred === 1 ? '' : 's'}`) : null,
     d.late ? `${d.late} no ${d.late === 1 ? 'llegó' : 'llegaron'} a tiempo` : null,
     // Like the Resumen del día: every turn of the day is counted somewhere.
