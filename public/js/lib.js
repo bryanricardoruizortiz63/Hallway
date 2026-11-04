@@ -77,7 +77,7 @@ export const PERMISSIONS = [
   { key: 'reports', label: 'Datos y reportes', hint: 'Estadísticas, paneles de los servicios con sus motivos, exportar a Excel, respaldo y archivo anual.' },
   { key: 'settings', label: 'Configurar la escuela', hint: 'Nombre, Teams, correo y mensaje de bienvenida.' },
   { key: 'services', label: 'Configurar Turnos', hint: 'Los servicios de Turnos (Enfermería, Trabajo Social, Soporte IT…): quién los atiende, sus motivos y el tiempo para llegar.' },
-  { key: 'history', label: 'Historial del personal', hint: 'Ve e imprime el historial de cada empleado: lo que hizo en la app, el día y la hora (hora de Puerto Rico) y los detalles.' },
+  { key: 'history', label: 'Historial del personal', hint: 'Ve, imprime y descarga el historial de cada empleado: lo que hizo en la app, el día y la hora (hora de Puerto Rico) y los detalles. El récord de los turnos con los estudiantes solo lo ven Admin y Director(a).' },
   { key: 'summary', label: 'Resumen del día', hint: 'Al terminar las clases le llega un aviso con el resumen del día: quién faltó y si se cubrió, los turnos, las alertas, el mantenimiento y quién falta mañana. Incluye ver las ausencias de todos.' },
 ];
 
@@ -104,6 +104,8 @@ export const roleNeedsCoverage = (key) => findRole(key)?.coverage ?? key !== 'ad
 /** The school's admin account, or someone who also has the Admin role: can do everything in their school. */
 export const isAdmin = (u) => u?.role === 'admin' || !!u?.extra_roles?.includes('admin');
 /** Whether this user may do something (an Admin can do everything). */
+/** The history with the students' records (turns): only the Admin and Director(a). */
+export const historyFull = (u) => isAdmin(u) || [u?.role, ...(u?.extra_roles || [])].includes('director');
 export const can = (u, perm) => isAdmin(u) || !!u?.permissions?.includes(perm);
 /** «Coordinador(a) de IT · Admin»: the main role and the others. */
 export const rolesLabel = (u) => [u?.role, ...(u?.extra_roles || [])].filter(Boolean).map(roleLabel).filter(Boolean).join(' · ');

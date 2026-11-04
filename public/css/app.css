@@ -4619,3 +4619,18 @@ p.small {
   font-weight: 400;
   color: var(--muted);
 }
+
+/* Historial: the turn's record (student and turn), only for Admin and Director(a). */
+.history-record {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(30, 79, 216, 0.06));
+  white-space: normal;
+}
+.history-row .item-main strong,
+.history-row .item-sub {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}

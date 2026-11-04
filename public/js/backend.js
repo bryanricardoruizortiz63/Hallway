@@ -706,12 +706,74 @@ export const setServiceKeepOpen = (id, keep) => rpc('set_service_keep_open', { p
 export const myCarriedTurns = () => rpc('my_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
 /** keep / close: ids of those turns. */
 export const reviewCarriedTurns = (keep, close) => rpc('review_carried_turns', { p_keep: keep, p_close: close });
+/** Turns I asked for that are still open from earlier days, not looked at today. */
+export const myRequestedCarriedTurns = () => rpc('my_requested_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
+/** keep / close (delete): ids of the turns I asked for. */
+export const reviewRequestedTurns = (keep, close) => rpc('review_requested_turns', { p_keep: keep, p_close: close });
 /** Someone's history (newest first), for the permission «history». from/to: ISO (optional). */
 export const activityHistory = (userId, from, to) =>
   rpc('activity_history', { p_user: userId, p_from: from || null, p_to: to || null }).then((r) => r || []);
 
 /** Everyone whose history can be opened, with how many actions they have. */
 export const historyPeople = () => rpc('history_people').then((r) => r || []);
+/** The whole school's history of a period (ISO from/to), oldest first, for the Excel. */
+export const activityHistoryAll = (from, to) =>
+  rpc('activity_history_all', { p_from: from, p_to: to }).then((r) => r || []);
+
+const PR = 'America/Puerto_Rico';
+const prDay = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: PR });
+const prTime = (iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: PR, hour: 'numeric', minute: '2-digit', hour12: true });
+const HISTORY_COLUMNS = (full, who) => [
+  { header: 'Fecha', width: 12 }, { header: 'Hora (PR)', width: 11 },
+  ...(who ? [{ header: 'Persona', width: 26 }] : []),
+  { header: 'Acción', width: 50, wrap: true }, { header: 'Detalles', width: 50, wrap: true }, { header: 'Sobre', width: 24 },
+  ...(full ? [{ header: 'Récord (estudiante y turno)', width: 80, wrap: true }] : []),
+];
+const historyRow = (r, full, who) => [
+  xDate(prDay(r.at)), prTime(r.at), ...(who ? [r.actor_name] : []), r.action, r.details,
+  r.subject_name || (r.about ? '' : null), ...(full ? [r.record] : []),
+];
+
+/** One person's history in Excel (what is on screen). full: with the turns' records. */
+export function exportPersonHistoryXlsx(person, rows, full) {
+  const list = [...rows].sort((a, b) => a.at.localeCompare(b.at));
+  downloadXlsx(`historial_${slugName(person.full_name)}_${todayIso()}.xlsx`, [{
+    name: 'Historial',
+    columns: HISTORY_COLUMNS(full, true),
+    rows: list.map((r) => historyRow({ ...r, subject_name: r.about ? person.full_name : null }, full, true)),
+  }]);
+}
+
+/** The whole school's history of a period in Excel: everything, by person and (Admin, Director) the turns' records. */
+export function exportSchoolHistoryXlsx(school, rows, full, from) {
+  const byPerson = new Map();
+  for (const r of rows) {
+    const x = byPerson.get(r.actor_name) || [r.actor_name, 0, null];
+    x[1]++;
+    x[2] = r.at;
+    byPerson.set(r.actor_name, x);
+  }
+  const sheets = [
+    { name: 'Historial', columns: HISTORY_COLUMNS(full, true), rows: rows.map((r) => historyRow(r, full, true)) },
+    {
+      name: 'Por persona',
+      columns: [{ header: 'Persona', width: 30 }, { header: 'Acciones', width: 10 }, { header: 'Última', width: 22 }],
+      rows: [...byPerson.values()].sort((a, b) => b[1] - a[1]).map(([n, c, at]) => [n, c, `${prDay(at)} ${prTime(at)}`]),
+    },
+  ];
+  if (full) {
+    sheets.push({
+      name: 'Récord de turnos',
+      columns: [{ header: 'Fecha', width: 12 }, { header: 'Hora (PR)', width: 11 }, { header: 'Persona', width: 26 },
+        { header: 'Acción', width: 50, wrap: true }, { header: 'Récord', width: 90, wrap: true }],
+      rows: rows.filter((r) => r.record).map((r) => [xDate(prDay(r.at)), prTime(r.at), r.actor_name, r.action, r.record]),
+    });
+  }
+  downloadXlsx(`historial_${school.code}_${prDay(from)}_${todayIso()}.xlsx`, sheets);
+}
+
+const slugName = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').toLowerCase();
+const todayIso = () => prDay(new Date().toISOString());
 
 export const saveService = ({ id, name, mode, arriveMinutes, roles, reasons, active }) =>
   rpc('save_service', {

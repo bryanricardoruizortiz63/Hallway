@@ -15,15 +15,18 @@ import { state } from '../store.js';
 const fmtDay = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
 const fmtStamp = (iso) => new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
 
-/** School years run from August 1 to July 31, newest first. */
+/**
+ * School years run from August 1 to June 30, newest first. July belongs to the year that starts: on July 1 the
+ * year that ended is deleted (notify), so its range ends on June 30.
+ */
 function schoolYears(first, today) {
   const startYear = (d) => {
     const [y, m] = d.split('-').map(Number);
-    return m >= 8 ? y : y - 1;
+    return m >= 7 ? y : y - 1;
   };
   const years = [];
   for (let y = startYear(today); y >= startYear(first || today); y--) {
-    years.push({ label: `${y}–${y + 1}`, from: `${y}-08-01`, to: `${y + 1}-07-31` });
+    years.push({ label: `${y}–${y + 1}`, from: `${y}-07-01`, to: `${y + 1}-06-30` });
   }
   return years;
 }
@@ -43,7 +46,10 @@ export async function archiveSection(slot) {
       <h2 class="card-title">${icon('archive')} Archivo anual</h2>
       <p class="muted">Al terminar cada año escolar, guarda sus ausencias en Excel y sus documentos en un ZIP.
         ${admin ? 'Después puedes borrarlas de la app para liberar espacio.' : ''}</p>
-      <label class="field"><span>Año escolar (1 de agosto – 31 de julio)</span>
+      <p class="status-note warn">${icon('calendar', 16)} <span>El 1 de julio Hallway borra solo las ausencias, los turnos, los
+        avisos y el historial del año que terminó, para no llenar la base de datos. Las cuentas del personal se quedan.
+        Descarga antes este archivo, el Excel de cada servicio y el historial del personal.</span></p>
+      <label class="field"><span>Año escolar (1 de agosto – 30 de junio)</span>
         <select data-year>${years.map(
           (y) => html`<option value="${y.from}" ${y === year ? 'selected' : ''}>${y.label}${y.to >= today ? ' (en curso)' : ''}</option>`,
         )}</select></label>

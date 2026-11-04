@@ -173,6 +173,7 @@ export const NOTICE_PATTERNS = [
   [/^(.+): (.+) lo refirió$/, '$1: $2 referred them'],
   [/^(.+) atendió a (.+)$/, '$1 saw $2'],
   [/^Turno cancelado: (.+)$/, 'Turn cancelled: $1'],
+  [/^(.+) borró un turno del día anterior$/, '$1 deleted a turn from an earlier day'],
   [/^Pedido cancelado: (.+)$/, 'Request cancelled: $1'],
   [/^(.+) está ahora en el salón (.+)$/, '$1 is now in room $2'],
   [/^(.+) está ahora con (.+)$/, '$1 is now with $2'],
@@ -219,6 +220,9 @@ export const NOTICE_PATTERNS = [
   [/^(.+) te quitó la verificación en dos pasos: Hallway ya no te pedirá el código\.$/, '$1 turned off two-step verification for you: Hallway won’t ask for the code anymore.'],
   [/^Nuevo código de escuela: (.+)$/, 'New school code: $1'],
   [/^Tu usuario y tu contraseña no cambian\. Si la app te pide el código, escribe (.+)\.$/, 'Your username and password don’t change. If the app asks for the code, type $1.'],
+  [/^Descarga el respaldo del año escolar$/, 'Download the school year’s backup'],
+  [/^(Falta 1 mes|Faltan 2 semanas|Falta 1 semana|Falta 1 día): el 30 de junio termina el año escolar y el 1 de julio se borran sus ausencias, turnos, avisos e historial del personal, para no llenar la base de datos\. Descarga antes el respaldo \(backup\) en Más › Datos y reportes y en Más › Historial del personal\.$/,
+    (left) => `${{ 'Falta 1 mes': '1 month left', 'Faltan 2 semanas': '2 weeks left', 'Falta 1 semana': '1 week left', 'Falta 1 día': '1 day left' }[left] || left}: the school year ends on June 30 and on July 1 its absences, turns, notices and staff history are deleted, so the database doesn’t fill up. Download the backup first in More › Data and reports and in More › Staff history.`],
   // ---- Daily summary ----
   [/^Resumen del día · (.+)$/, 'Daily summary · $1'],
   [/^(\d+) ausencias?(?: \((\d+) sin cubrir\))?$/, (k, u) => `${n(k, 'absence', 'absences')}${u ? ` (${u} not covered)` : ''}`],

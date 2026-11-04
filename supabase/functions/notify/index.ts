@@ -214,6 +214,40 @@ async function cleanMaintenance(): Promise<number> {
 }
 
 /**
+ * July 1 at 00:00 in Puerto Rico (UTC-4 all year) of the school year that is running: what is older belongs to a
+ * school year that ended (August 1 to June 30).
+ */
+function schoolYearCut(now = new Date()): { day: string; at: string } {
+  const pr = new Date(now.getTime() - 4 * 3_600_000);
+  const year = pr.getUTCMonth() >= 6 ? pr.getUTCFullYear() : pr.getUTCFullYear() - 1;
+  return { day: `${year}-07-01`, at: new Date(Date.UTC(year, 6, 1, 4)).toISOString() };
+}
+
+/**
+ * Every school year, on July 1: the absences (with their documents, comments and history), the turns and the
+ * notices of the year that ended are deleted, after the reminders to download them. Accounts and everything
+ * about the people (roles, groups, settings) stay.
+ */
+async function endSchoolYear(): Promise<string> {
+  const cut = schoolYearCut();
+  let absences = 0;
+  let files = 0;
+  for (let round = 0; round < 20; round++) {
+    const { data, error } = await db.from('absences').select('id').lt('end_date', cut.day).limit(1000);
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+    const removed = await deleteAbsences(db, data.map((a) => a.id as number));
+    absences += removed.absences;
+    files += removed.files;
+  }
+  const { count: turns, error: turnError } = await db.from('service_requests').delete({ count: 'exact' }).lt('created_at', cut.at);
+  if (turnError) throw new Error(turnError.message);
+  const { count: notices, error: noticeError } = await db.from('notifications').delete({ count: 'exact' }).lt('created_at', cut.at);
+  if (noticeError) throw new Error(noticeError.message);
+  return `año escolar: ${absences} ausencias, ${files} archivos, ${turns ?? 0} turnos, ${notices ?? 0} avisos`;
+}
+
+/**
  * Daily (pg_cron): cancelled absences are kept 15 days, delivery logs 30 days, notifications 180 days, messages,
  * the services' turns (Enfermería, Trabajo Social), the visits and the conference room reservations a year; see
  * cleanMaintenance for Mantenimiento.
@@ -234,7 +268,8 @@ async function maintenance(jobId: number): Promise<string> {
   await db.from('room_bookings').delete().lt('day', new Date(Date.now() - 365 * DAY).toISOString().slice(0, 10));
   await db.from('visits').delete().lt('created_at', new Date(Date.now() - 365 * DAY).toISOString());
   const photos = await cleanMaintenance();
-  return `maintenance: ${removed.absences} canceladas borradas, ${removed.files} archivos, ${photos} fotos de mantenimiento`;
+  const year = await endSchoolYear();
+  return `maintenance: ${removed.absences} canceladas borradas, ${removed.files} archivos, ${photos} fotos de mantenimiento; ${year}`;
 }
 
 /**
