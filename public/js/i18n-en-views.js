@@ -1815,4 +1815,11 @@ export const SERVER = {
   'El 1 de julio Hallway borra solo las ausencias, los turnos, los avisos y el historial del año que terminó, para no llenar la base de datos. Las cuentas del personal se quedan. Descarga antes este archivo, el Excel de cada servicio y el historial del personal.':
     'On July 1 Hallway deletes the absences, turns, notices and history of the year that ended by itself, so the database doesn’t fill up. Staff accounts stay. Download this archive, each service’s Excel and the staff history first.',
   'Año escolar (1 de agosto – 30 de junio)': 'School year (August 1 – June 30)',
+  'Los pediste antes de hoy y siguen abiertos. Si ya te atendieron o ya no hace falta, bórralo; si todavía lo necesitas, mantenlo. Le avisamos al servicio y queda registrado en el historial.':
+    'You asked for them before today and they’re still open. If you were already attended or it’s no longer needed, delete it; if you still need it, keep it. We let the service know and it stays in the history.',
+  '¿Te atendieron este turno?': 'Were you attended for this turn?',
+  'Mantener todos': 'Keep all',
+  'Borrar todos': 'Delete all',
+  'Mantener': 'Keep',
+  'Listo: mantienes esos turnos.': 'Done: you keep those turns.',
 };

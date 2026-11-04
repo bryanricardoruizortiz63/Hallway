@@ -706,6 +706,10 @@ export const setServiceKeepOpen = (id, keep) => rpc('set_service_keep_open', { p
 export const myCarriedTurns = () => rpc('my_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
 /** keep / close: ids of those turns. */
 export const reviewCarriedTurns = (keep, close) => rpc('review_carried_turns', { p_keep: keep, p_close: close });
+/** Turns I asked for that are still open from earlier days, not looked at today. */
+export const myRequestedCarriedTurns = () => rpc('my_requested_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
+/** keep / close (delete): ids of the turns I asked for. */
+export const reviewRequestedTurns = (keep, close) => rpc('review_requested_turns', { p_keep: keep, p_close: close });
 /** Someone's history (newest first), for the permission «history». from/to: ISO (optional). */
 export const activityHistory = (userId, from, to) =>
   rpc('activity_history', { p_user: userId, p_from: from || null, p_to: to || null }).then((r) => r || []);
