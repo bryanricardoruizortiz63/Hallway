@@ -1822,4 +1822,12 @@ export const SERVER = {
   'Borrar todos': 'Delete all',
   'Mantener': 'Keep',
   'Listo: mantienes esos turnos.': 'Done: you keep those turns.',
+  'Nombre completo del estudiante': 'Student’s full name',
+  'Primer apellido': 'First last name',
+  'Segundo apellido': 'Second last name',
+  'si tiene': 'if any',
+  'Ej. Luis Ángel': 'E.g. Luis Ángel',
+  'Ej. Rivera': 'E.g. Rivera',
+  'Ej. Torres': 'E.g. Torres',
+  'Escribe el primer apellido del estudiante.': 'Type the student’s first last name.',
 };

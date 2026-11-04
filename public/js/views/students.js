@@ -32,8 +32,17 @@ export function studentFields() {
   const { groups } = schoolCalendar(state.me.school);
   const mine = (state.me.user.groups || []).filter((g) => groups.includes(g));
   const others = groups.filter((g) => !mine.includes(g));
-  const name = html`<label class="field"><span>Nombre del estudiante</span>
-      <input name="student" required maxlength="100" autocomplete="off" autocapitalize="words" placeholder="Nombre y apellidos"></label>`;
+  // The full name, in three fields, so nobody notes just «Luis» and two students can't be confused.
+  const name = html`<fieldset class="field student-name"><legend>Nombre completo del estudiante</legend>
+      <div class="grid3">
+        <label class="field"><span>Nombre</span>
+          <input name="student_first" required maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Ej. Luis Ángel"></label>
+        <label class="field"><span>Primer apellido</span>
+          <input name="student_last1" required maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Ej. Rivera"></label>
+        <label class="field"><span>Segundo apellido</span>
+          <input name="student_last2" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Ej. Torres"></label>
+      </div>
+    </fieldset>`;
   if (!mine.length) {
     return html`${name}
       <label class="field"><span>Grado y grupo</span>
@@ -92,12 +101,16 @@ export async function confirmStudent(name, group) {
 
 /** Reads and checks the name and group of a form; the form's own validation shows what's missing. */
 export function studentFrom(form) {
-  const name = form.student.value.trim().replace(/\s+/g, ' ');
+  const part = (n) => (form[n]?.value || '').trim().replace(/\s+/g, ' ');
+  const first = part('student_first');
+  const last1 = part('student_last1');
+  if (!first) throw new Error('Escribe el nombre del estudiante.');
+  if (!last1) throw new Error('Escribe el primer apellido del estudiante.');
+  const name = [first, last1, part('student_last2')].filter(Boolean).join(' ');
   // The teacher's groups are chips (radios); otherwise a list or a text field.
   const chip = form.querySelector('[name=group]:checked');
   const field = form.querySelector('select[name=group], input[name=group]:not([type=radio])');
   const group = (chip ? (chip.hasAttribute('data-other-group') ? form.group_other.value : chip.value) : field?.value || '').trim();
-  if (name.length < 2) throw new Error('Escribe el nombre del estudiante.');
   if (!group) throw new Error('Elige el grado y grupo del estudiante.');
   return { name, group };
 }
