@@ -693,7 +693,7 @@ export async function roomsPanelView({ el, isCurrent }) {
       <div class="stats">
         ${tile(approved.length, 'Reservas aprobadas')}
         ${tile(hoursFmt(hours), 'Horas reservadas')}
-        ${tile(capacity ? `${Math.round((hours / capacity) * 100)} %` : '—', 'Del horario del salón')}
+        ${tile(capacity ? `${Math.round((hours / capacity) * 100)} %` : '—', 'Del horario de reservas')}
         ${tile(rows.filter((b) => b.status === 'rejected').length, 'No aprobadas')}
       </div>
       <section class="card stack">
@@ -705,7 +705,7 @@ export async function roomsPanelView({ el, isCurrent }) {
         .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'es')).slice(0, 10), { format: hoursFmt })}
       ${bars('Horas por día de la semana', 'calendar', byWeekday(approved, (b) => b.day, hoursOf), { format: hoursFmt })}
       ${bars('Estado de las reservas', 'list', countBy(rows, statusOf))}
-      <p class="hint">«Del horario del salón»: horas aprobadas entre las horas que se puede reservar en el período (su horario en días de clases, sin los días sin clases).</p>`;
+      <p class="hint">«Del horario de reservas»: horas aprobadas entre las horas que se puede reservar en el período (su horario en días de clases, sin los días sin clases).</p>`;
   }
 
   async function load() {
@@ -1223,7 +1223,7 @@ export async function liveView(ctx) {
         <div class="quick">${soundButton()}<a class="chip-btn" href="#/live/tv" data-live-tv>${icon('live', 16)} Pantalla grande</a></div>
         ${soundHint()}
       </div>
-      ${f ? html`<p class="hint" data-filter-note>Solo ${filterLabel(f)}: sus turnos, «No ha llegado», las salidas y quién está fuera del salón. Soporte IT, los relevos, el mantenimiento y el salón de conferencias son de toda la escuela.</p>` : ''}
+      ${f ? html`<p class="hint" data-filter-note>Solo ${filterLabel(f)}: sus turnos, «No ha llegado», las salidas y quién está fuera del salón. Soporte IT, los relevos, el mantenimiento y las reservas son de toda la escuela.</p>` : ''}
       <div class="stats">
         ${tile(active.filter((t) => t.status === 'waiting').length, 'En fila')}
         ${tile(active.filter((t) => t.status !== 'waiting').length, 'En atención o en camino')}
@@ -1243,7 +1243,7 @@ export async function liveView(ctx) {
             <span class="item-sub">${[m.status === 'on_the_way' ? `Va ${m.taken_by_name}` : 'Pendiente', timeAgo(m.created_at)].join(' · ')}</span></span>
           <span class="tag ${URGENCY[m.urgency]?.cls || ''}">${URGENCY[m.urgency]?.label}</span>
         </a>`, { note: b.maintenance_done ? `${b.maintenance_done} ${b.maintenance_done === 1 ? 'resuelta' : 'resueltas'} hoy.` : '' })}
-      ${liveSection('Salón de conferencias hoy', b.rooms, (r) => html`<a class="item" href="#/rooms/${r.id}">
+      ${liveSection('Reservas de hoy', b.rooms, (r) => html`<a class="item" href="#/rooms/${r.id}">
           <span class="item-icon">${icon('room')}</span>
           <span class="item-main"><strong>${r.purpose}</strong>
             <span class="item-sub">${fmtTime(r.start_time)} – ${fmtTime(r.end_time)} · ${r.created_by_name}</span></span>

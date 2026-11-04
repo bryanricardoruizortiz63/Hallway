@@ -1,5 +1,5 @@
 import { getMe, markAlertsRead } from './backend.js';
-import { can, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, toast } from './lib.js';
+import { can, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -36,7 +36,7 @@ import {
   roomsPanelView,
   servicePanelView,
 } from './views/panels.js';
-import { addAccountView, moreView, notificationsView, openAccountMenu, profileView, verifyCodeView } from './views/account.js';
+import { addAccountView, moreView, notificationsView, notifySettingsView, openAccountMenu, profileView, verifyCodeView } from './views/account.js';
 import { avatar } from './views/common.js';
 import { adoptAccountFromUrl, needsDailyCode, otherAccount, switchAccount } from './accounts.js';
 import { guideView } from './views/guide.js';
@@ -98,11 +98,11 @@ const ROUTES = [
   { re: /^\/maintenance\/new$/, view: newMaintenanceView, title: 'Pedir mantenimiento', back: true },
   { re: /^\/maintenance\/(\d+)$/, view: maintenanceDetailView, title: 'Mantenimiento', back: true },
   { re: /^\/maintenance\/panel$/, view: maintenancePanelView, title: 'Panel de mantenimiento', allow: (u) => can(u, 'maintenance') || isStaff(u), back: true },
-  { re: /^\/rooms$/, view: roomsView, title: 'Salón de conferencias' },
-  { re: /^\/rooms\/new$/, view: newBookingView, title: 'Reservar el salón', back: true },
+  { re: /^\/rooms$/, view: roomsView, title: () => roomName(state.me?.school) },
+  { re: /^\/rooms\/new$/, view: newBookingView, title: 'Nueva reserva', back: true },
   { re: /^\/rooms\/history$/, view: bookingHistoryView, title: 'Historial de reservas', back: true },
-  { re: /^\/rooms\/(\d+)$/, view: bookingDetailView, title: 'Reserva del salón', back: true },
-  { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso del salón', allow: may('rooms'), back: true },
+  { re: /^\/rooms\/(\d+)$/, view: bookingDetailView, title: 'Reserva', back: true },
+  { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso de las reservas', allow: may('rooms'), back: true },
   { re: /^\/live$/, view: liveView, title: 'En vivo', allow: may('live') },
   { re: /^\/live\/service\/(\d+)$/, view: liveServiceView, title: 'En vivo', allow: may('live'), back: true },
   { re: /^\/live\/turn\/(\d+)$/, view: liveTurnView, title: 'Turno', allow: (u) => can(u, 'live') || can(u, 'summary'), back: true },
@@ -117,6 +117,7 @@ const ROUTES = [
   { re: /^\/message\/(\d+)$/, view: messageView, title: 'Mensaje', back: true },
   { re: /^\/notifications$/, view: notificationsView, title: 'Avisos', back: true },
   { re: /^\/profile$/, view: profileView, title: 'Mi perfil', back: true },
+  { re: /^\/profile\/notifications$/, view: notifySettingsView, title: 'Notificaciones', back: true },
   { re: /^\/more$/, view: moreView, title: 'Más' },
   { re: /^\/history$/, view: historyPeopleView, title: 'Historial del personal', allow: may('history'), back: true },
   { re: /^\/history\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, view: historyView, title: 'Historial', allow: may('history'), back: true },
@@ -199,8 +200,9 @@ function renderShell(route, path) {
     setUnread(state.unread);
   }
   document.body.classList.remove('bare');
-  document.getElementById('page-title').textContent = route.title || '';
-  document.title = `${route.title ? `${route.title} · ` : ''}Hallway`;
+  const title = typeof route.title === 'function' ? route.title() : route.title || '';
+  document.getElementById('page-title').textContent = title;
+  document.title = `${title ? `${title} · ` : ''}Hallway`;
   appRoot.querySelector('.topbar').classList.toggle('has-back', !!route.back);
   for (const tab of appRoot.querySelectorAll('.tab')) {
     const active = tab.dataset.match.split(',').some((m) => path === m || path.startsWith(m.endsWith('/') ? m : `${m}/`));

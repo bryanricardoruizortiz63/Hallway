@@ -846,7 +846,7 @@ export async function dataView({ el, isCurrent }) {
             : ''}
           ${can(user, 'rooms')
             ? html`<a class="item" href="#/rooms/panel"><span class="item-icon">${icon('room')}</span>
-                <span class="item-main"><strong>Salón de conferencias</strong><span class="item-sub">Horas reservadas, por persona y Excel</span></span>${icon('chevron', 18)}</a>`
+                <span class="item-main"><strong>Reservas</strong><span class="item-sub">Horas reservadas, por persona y Excel</span></span>${icon('chevron', 18)}</a>`
             : ''}
         </div>
         <p class="hint">Los paneles de los servicios dicen el motivo de cada turno, nunca las notas de los maestros. Cada servicio ve solo el suyo.</p>

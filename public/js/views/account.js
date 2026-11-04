@@ -10,7 +10,7 @@ import {
   updateAdminProfile,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
+import { $, busy, can, roomName, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
 import { locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
@@ -88,7 +88,7 @@ const CAUSES = [
   { key: 'relief', test: /^#\/alerts\/relief\b/, label: 'Relevos', icon: 'users' },
   { key: 'visits', test: /^#\/alerts\/visit\b/, label: 'Visitas', icon: 'door' },
   { key: 'maintenance', test: /^#\/maintenance\b/, label: 'Mantenimiento', icon: 'wrench' },
-  { key: 'rooms', test: /^#\/rooms\b/, label: 'Salón de conferencias', icon: 'room' },
+  { key: 'rooms', test: /^#\/rooms\b/, label: 'Reservas', icon: 'room' },
   { key: 'messages', test: /^#\/messages?\b/, label: 'Mensajes', icon: 'mail' },
   { key: 'summary', test: /^#\/summary\b/, label: 'Resumen del día', icon: 'chart' },
   { key: 'staff', test: /^#\/employees\b/, label: 'Personal y contraseñas', icon: 'key' },
@@ -225,7 +225,7 @@ function muteKinds(user, school) {
     { key: 'pickups', label: 'Salidas de estudiantes', hint: 'Cuando recogen a un estudiante.', on: moduleOn(school, 'alerts') },
     { key: 'visits', label: 'Visitas', hint: 'Visitas que llegan a la escuela.', on: moduleOn(school, 'visits') },
     { key: 'maintenance', label: 'Mantenimiento', hint: 'Pedidos de mantenimiento y su estado.', on: moduleOn(school, 'maintenance') },
-    { key: 'rooms', label: 'Salón de conferencias', hint: 'Reservas del salón.', on: moduleOn(school, 'rooms') },
+    { key: 'rooms', label: 'Reservas', hint: 'Tus reservas y las que esperan respuesta.', on: moduleOn(school, 'rooms') },
     { key: 'messages', label: 'Mensajes', hint: 'Mensajes de la administración.', on: true },
     { key: 'summary', label: 'Resumen del día', hint: 'El resumen al terminar las clases.', on: can(user, 'summary') },
   ].filter((k) => k.on);
@@ -265,6 +265,18 @@ function bindNotifyCard(el, user) {
   });
 }
 
+/** Mi perfil › Notificaciones: alerts on this phone, and which kinds of notices sound. */
+export async function notifySettingsView({ el }) {
+  const { user, school } = state.me;
+  el.innerHTML = String(html`<div class="stack">
+    <div data-push-slot></div>
+    ${notifyCard(user, school)}
+    <a class="btn btn-ghost btn-block" href="#/notifications">${icon('bell', 18)} Ver mis avisos</a>
+  </div>`);
+  pushCard($('[data-push-slot]', el));
+  bindNotifyCard(el, user);
+}
+
 export async function profileView({ el }) {
   const { user, school } = state.me;
   el.innerHTML = String(html`
@@ -289,8 +301,8 @@ export async function profileView({ el }) {
         <p class="hint">Se guarda en tu cuenta: Hallway se abre en este idioma en cualquier teléfono.</p>
       </section>
 
-      <div data-push-slot></div>
-      ${notifyCard(user, school)}
+      <a class="card link-card" href="#/profile/notifications">${icon('bell')}<span><strong>Notificaciones</strong>
+        <small>Avisos en este teléfono y qué tipos de avisos te llegan</small></span>${icon('chevron', 18)}</a>
       <div data-install-slot></div>
 
       ${user.role !== 'admin' ? roomCard(user) : ''}
@@ -338,8 +350,6 @@ export async function profileView({ el }) {
     await setMyLanguage(code);
     user.language = code;
   });
-  pushCard($('[data-push-slot]', el));
-  bindNotifyCard(el, user);
   installHint($('[data-install-slot]', el), { dismissible: false });
   $('[data-logout]', el).addEventListener('click', logout);
 
@@ -405,7 +415,7 @@ function linkOn(href) {
 }
 
 export async function moreView({ el }) {
-  const { user } = state.me;
+  const { user, school } = state.me;
   const admin = isAdmin(user);
   // Whatever the bottom bar doesn't already have (see nav.js), in groups so each thing is easy to find.
   const groups = [
@@ -424,11 +434,11 @@ export async function moreView({ el }) {
       ['#/turns', 'pulse', 'Turnos', 'Enfermería, Trabajo Social y otros servicios'],
       ['#/maintenance', 'wrench', 'Mantenimiento', 'Pide limpieza y sigue las solicitudes'],
       can(user, 'rooms')
-        ? ['#/rooms', 'room', 'Salón de conferencias', 'Reserva el salón y aprueba las reservas del personal']
-        : ['#/rooms', 'room', 'Salón de conferencias', 'Resérvalo o mira quién lo tiene'],
-      can(user, 'live') ? ['#/live', 'live', 'En vivo', 'Enfermería, Trabajo Social, alertas, mantenimiento y salón ahora mismo'] : null,
+        ? ['#/rooms', 'room', roomName(school), 'Reserva y aprueba las reservas del personal']
+        : ['#/rooms', 'room', roomName(school), 'Resérvalo o mira cuándo está ocupado'],
+      can(user, 'live') ? ['#/live', 'live', 'En vivo', 'Enfermería, Trabajo Social, alertas, mantenimiento y reservas ahora mismo'] : null,
       can(user, 'summary') ? ['#/summary', 'chart', 'Resumen del día', 'Quién faltó y si se cubrió, turnos, alertas, mantenimiento y mañana'] : null,
-      ['#/calendar', 'calendar', 'Calendario escolar', 'Horario de clases, horario del salón y días sin clases'],
+      ['#/calendar', 'calendar', 'Calendario escolar', 'Horario de clases, horario de reservas y días sin clases'],
     ]],
     ['Administración', [
       can(user, 'staff') ? ['#/employees', 'users', 'Personal', 'Empleados, contraseñas, roles, salón y grupos'] : null,

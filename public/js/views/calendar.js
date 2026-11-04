@@ -10,6 +10,7 @@ import {
   renameSchoolGroup,
   saveClosure,
   saveRoomHours,
+  saveRoomSettings,
   saveSchoolHours,
 } from '../backend.js';
 import {
@@ -22,7 +23,9 @@ import {
   fmtDate,
   fmtTime,
   html,
+  isAdmin,
   isStaff,
+  moduleOn,
   schoolCalendar,
   toast,
   todayStr,
@@ -151,24 +154,47 @@ export async function calendarView({ el, isCurrent }) {
     </form>`;
   };
 
-  /** When the conference room can be reserved: its own hours, apart from the classes. */
+  /** The Admin: whether the school reserves a place, and its name. */
+  const roomSettingsCard = () => {
+    if (!isAdmin(user)) return '';
+    const on = moduleOn(state.me.school, 'rooms');
+    const name = state.me.school.calendar?.room_name || '';
+    return html`<form class="card stack" data-room-settings novalidate>
+      <h2 class="card-title">${icon('room')} Reservas</h2>
+      <label class="toggle"><input type="checkbox" name="enabled" ${on ? 'checked' : ''}>
+        <span class="toggle-ui"></span><span>La escuela tiene un lugar que el personal reserva</span></label>
+      <label class="field" ${on ? '' : 'hidden'} data-room-name><span>¿Cómo se llama?</span>
+        <input name="room_name" maxlength="60" value="${name}" placeholder="Salón de conferencias" autocomplete="off"></label>
+      <p class="hint">${on
+        ? 'Así lo ve todo el personal, por ejemplo «Biblioteca» o «Salón de actos». Vacío: «Salón de conferencias».'
+        : 'Las reservas están apagadas: nadie ve la pestaña Reservas. Enciéndelas cuando haya un lugar para reservar.'}</p>
+      <button class="btn btn-secondary" type="submit">Guardar</button>
+    </form>`;
+  };
+
+  /** When the place can be reserved: its own hours, apart from the classes. */
   const roomCard = () => {
+    if (!moduleOn(state.me.school, 'rooms')) return roomSettingsCard();
+    return html`${roomSettingsCard()}${roomHoursCard()}`;
+  };
+
+  const roomHoursCard = () => {
     const cal = schoolCalendar(state.me.school);
     if (!editor) {
       return html`<section class="card stack" data-room-hours>
-        <h2 class="card-title">${icon('room')} Horario del salón de conferencias</h2>
+        <h2 class="card-title">${icon('room')} Horario de reservas</h2>
         <p><strong>${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}</strong></p>
         <p class="muted">Se reserva en ese horario, de ${daysText(cal.school_days)}.</p>
       </section>`;
     }
     return html`<form class="card stack" data-room-hours novalidate>
-      <h2 class="card-title">${icon('room')} Horario del salón de conferencias</h2>
+      <h2 class="card-title">${icon('room')} Horario de reservas</h2>
       <div class="grid2">
         <label class="field"><span>Desde</span><input type="time" name="room_start" required value="${cal.room_start}"></label>
         <label class="field"><span>Hasta</span><input type="time" name="room_end" required value="${cal.room_end}"></label>
       </div>
       <p class="hint">Se puede reservar en este horario, los días de clases. Es aparte del horario de clases: puede empezar antes o terminar más tarde.</p>
-      <button class="btn btn-secondary" type="submit">Guardar horario del salón</button>
+      <button class="btn btn-secondary" type="submit">Guardar horario de reservas</button>
     </form>`;
   };
 
@@ -232,7 +258,38 @@ export async function calendarView({ el, isCurrent }) {
         if (!start || !end) throw new Error('Indica desde qué hora y hasta qué hora se puede reservar.');
         if (end <= start) throw new Error('La hora final debe ser después de la inicial.');
         state.me.school.calendar = await saveRoomHours(start, end);
-        toast('Horario del salón guardado', 'ok');
+        toast('Horario de reservas guardado', 'ok');
+      });
+    });
+
+    const roomSettings = $('[data-room-settings]', el);
+    roomSettings?.enabled.addEventListener('change', () => {
+      $('[data-room-name]', roomSettings).hidden = !roomSettings.enabled.checked;
+    });
+    roomSettings?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      busy(roomSettings.querySelector('[type=submit]'), async () => {
+        const enabled = roomSettings.enabled.checked;
+        const name = roomSettings.room_name.value.trim().replace(/\s+/g, ' ');
+        if (name && name.length < 2) throw new Error('Escribe un nombre más largo.');
+        if (!enabled && moduleOn(state.me.school, 'rooms')) {
+          const ok = await dialog({
+            title: '¿Apagar las reservas?',
+            message: 'Nadie podrá reservar y desaparece la pestaña Reservas. Las reservas que ya hay se guardan.',
+            confirmText: 'Apagar',
+            cancelText: 'Volver',
+            danger: true,
+            doubleCheck: true,
+          });
+          if (!ok) return;
+        }
+        const school = state.me.school;
+        school.calendar = await saveRoomSettings(name, enabled);
+        const off = (school.disabled_modules || []).filter((m) => m !== 'rooms');
+        school.disabled_modules = enabled ? off : [...off, 'rooms'];
+        toast(enabled ? 'Reservas guardadas' : 'Reservas apagadas', 'ok');
+        // The tabs and the menus change.
+        window.dispatchEvent(new Event('hashchange'));
       });
     });
 

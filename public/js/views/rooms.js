@@ -31,6 +31,7 @@ import {
   html,
   isoWeekday,
   roleLabel,
+  roomName,
   schoolCalendar,
   timeAgo,
   toast,
@@ -74,6 +75,18 @@ function statusTag(b) {
   return { label: 'Cancelada', cls: '' };
 }
 
+/** Whether this person sees if a reservation was approved: its owner, and whoever approves. */
+const seesStatus = (b, me) => approvesBookings(me) || b.created_by === me.id;
+
+/** What everyone else sees: only whether the time is taken (approved) or set aside (waiting). */
+function publicTag(b) {
+  if (b.status === 'approved') return { label: 'Ocupado', cls: 'tag-danger' };
+  if (b.status === 'pending') return { label: 'Separado', cls: 'tag-warn' };
+  return { label: 'Libre', cls: '' };
+}
+
+const tagFor = (b, me) => (seesStatus(b, me) ? statusTag(b) : publicTag(b));
+
 /** Why a day can't be reserved: not a school day, or a day without classes. */
 function dayProblem(day, closures, cal) {
   if (!cal.school_days.includes(isoWeekday(day))) return 'Ese día no hay clases.';
@@ -105,7 +118,7 @@ const reserveLink = (day, slot) =>
   `#/rooms/new?day=${day}&start=${slot.start}&end=${fromMin(Math.min(toMin(slot.start) + 60, toMin(slot.end)))}`;
 
 export function bookingItem(b, me, { showDay = true, actions = false } = {}) {
-  const s = statusTag(b);
+  const s = tagFor(b, me);
   const live = isActive(b) && !isPast(b);
   return html`<div class="item alert-item booking-item ${live ? '' : 'is-muted'}">
     <a class="item-link" href="#/rooms/${b.id}">
@@ -210,13 +223,13 @@ export async function roomsView(ctx) {
     ].sort((a, b) => a.at - b.at || (a.s ? 1 : -1));
     return html`<div class="agenda">
       <h3 class="agenda-title">${longDay(day)}${day === today ? ' · hoy' : ''}</h3>
-      ${problem ? html`<p class="status-note warn">${icon('calendar', 16)} ${problem}</p>` : html`<p class="hint" data-room-hours>Horario del salón: ${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}</p>`}
+      ${problem ? html`<p class="status-note warn">${icon('calendar', 16)} ${problem}</p>` : html`<p class="hint" data-room-hours>Horario de reservas: ${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}</p>`}
       ${rows.length
         ? html`<div class="agenda-list">${rows.map(({ b, s }) => (b
             ? html`<a class="agenda-row is-${b.status}" href="#/rooms/${b.id}">
                 <span class="agenda-time">${timeRange(b)}</span>
                 <span class="agenda-main"><strong>${b.purpose}</strong>
-                  <small>${b.created_by === me.id ? 'Tú' : b.created_by_name}${b.status === 'pending' ? ' · esperando aprobación' : ''}</small></span>
+                  <small>${b.created_by === me.id ? 'Tú' : b.created_by_name} · <span class="tag ${tagFor(b, me).cls}">${tagFor(b, me).label}</span></small></span>
               </a>`
             : html`<div class="agenda-row is-free">
                 <span class="agenda-time">${fmtTime(s.start)} – ${fmtTime(s.end)}</span>
@@ -273,7 +286,7 @@ export async function roomsView(ctx) {
     const reserveDay = day >= today && !dayProblem(day, data.closures, cal) ? day : '';
     el.innerHTML = String(html`
       <div class="stack">
-        <a class="btn btn-primary btn-block btn-lg" href="#/rooms/new${reserveDay ? `?day=${reserveDay}` : ''}">${icon('plus')} Reservar el salón</a>
+        <a class="btn btn-primary btn-block btn-lg" href="#/rooms/new${reserveDay ? `?day=${reserveDay}` : ''}">${icon('plus')} Hacer una reserva</a>
 
         ${manager && waiting.length
           ? html`<section class="section">
@@ -307,7 +320,7 @@ export async function roomsView(ctx) {
           ? 'Tus reservas quedan aprobadas al momento. Si eliges una hora que ya tiene otra persona, la app te pregunta antes de reemplazarla.'
           : 'La secretaría o la dirección aprueban las reservas. Te avisamos cuando respondan.'}</p>
         <a class="btn btn-ghost btn-block" href="#/rooms/history">${icon('list', 18)} Historial y canceladas</a>
-        ${manager ? html`<a class="btn btn-ghost btn-block" href="#/rooms/panel">${icon('chart', 18)} Uso del salón y Excel</a>` : ''}
+        ${manager ? html`<a class="btn btn-ghost btn-block" href="#/rooms/panel">${icon('chart', 18)} Uso de las reservas y Excel</a>` : ''}
       </div>`);
 
     for (const btn of el.querySelectorAll('[data-day]')) {
@@ -388,7 +401,7 @@ export async function newBookingView({ el, query }) {
   el.innerHTML = String(html`
     <form class="stack" data-form novalidate>
       <section class="card stack">
-        <h2 class="card-title">${icon('room')} Salón de conferencias</h2>
+        <h2 class="card-title">${icon('room')} <span>${roomName(state.me.school)}</span></h2>
         <label class="field"><span>¿Para qué es?</span>
           <input name="purpose" required maxlength="120" value="${query.get('purpose') || ''}" autocomplete="off" placeholder="Ej. Reunión de padres de 9-B"></label>
         <p class="hint">Todo el personal ve para qué es; no escribas datos privados.</p>
@@ -401,7 +414,7 @@ export async function newBookingView({ el, query }) {
           <label class="field"><span>Hasta</span>
             <input type="time" name="end" required step="300" min="${cal.room_start}" max="${cal.room_end}" value="${end}"></label>
         </div>
-        <p class="hint" data-room-hours>Horario del salón: ${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}, de ${daysText(cal.school_days)}.</p>
+        <p class="hint" data-room-hours>Horario de reservas: ${fmtTime(cal.room_start)} – ${fmtTime(cal.room_end)}, de ${daysText(cal.school_days)}.</p>
         <p class="status-note" data-clash hidden></p>
         <label class="field"><span>${manager ? 'Nota' : 'Nota para la dirección'} <em class="optional">opcional</em></span>
           <textarea name="note" rows="2" maxlength="1000" placeholder="Ej. Necesito el proyector y 30 sillas"></textarea></label>
@@ -459,7 +472,9 @@ export async function newBookingView({ el, query }) {
     const list = TIME_RE.test(s) && TIME_RE.test(e) && e > s ? others(s, e) : [];
     note.hidden = !list.length;
     if (!list.length) return;
-    const who = list.map((b) => `${b.created_by_name} (${timeRange(b)}${b.status === 'pending' ? ', esperando aprobación' : ''})`).join('; ');
+    const who = list
+      .map((b) => `${b.created_by_name} (${timeRange(b)}${b.status === 'pending' ? (manager ? ', esperando aprobación' : ', separado') : ''})`)
+      .join('; ');
     const blocked = list.some((b) => b.status === 'approved' && (b.priority || !manager));
     note.className = `status-note ${blocked ? 'danger' : 'warn'}`;
     note.textContent = blocked
@@ -503,7 +518,7 @@ export async function newBookingView({ el, query }) {
       if (en <= s) throw new Error('La hora de fin debe ser después de la de inicio.');
       if (toMin(en) - toMin(s) < 15) throw new Error('Reserva al menos 15 minutos.');
       if (s < cal.room_start || en > cal.room_end) {
-        throw new Error(`Elige una hora dentro del horario del salón: de ${fmtTime(cal.room_start)} a ${fmtTime(cal.room_end)}`);
+        throw new Error(`Elige una hora dentro del horario de reservas: de ${fmtTime(cal.room_start)} a ${fmtTime(cal.room_end)}`);
       }
       if (d === today && toMin(s) < nowMin() - 5) throw new Error('Esa hora ya pasó.');
 
@@ -526,7 +541,7 @@ export async function newBookingView({ el, query }) {
         }
       }
       const b = await createBooking({ day: d, start: s, end: en, purpose, replace, note: field('note').value.trim() });
-      toast(manager ? 'Salón reservado' : 'Reserva pedida. Te avisamos cuando respondan.', 'ok');
+      toast(manager ? 'Reservado' : 'Reserva pedida. Te avisamos cuando respondan.', 'ok');
       go(`/rooms/${b.id}`, { replace: true });
     });
   });
@@ -554,7 +569,9 @@ export async function bookingDetailView(ctx) {
     if (!isCurrent()) return;
     // What was being written survives a refresh.
     const draft = $('[data-note-form] textarea', el)?.value || '';
-    const s = statusTag(b);
+    // Everyone else only sees whether that time is taken or set aside, not whether it was approved.
+    const full = mine || manager;
+    const s = tagFor(b, me);
     const past = isPast(b);
     const active = isActive(b);
     const clashes = sameDay.filter((x) => x.id !== b.id && isActive(x) && overlaps(x, b.start_time, b.end_time));
@@ -577,25 +594,25 @@ export async function bookingDetailView(ctx) {
     el.innerHTML = String(html`
       <div class="stack">
         <section class="card stack alert-head ${b.status === 'approved' && !past ? 'is-ok' : ''}">
-          <p class="alert-kind">${icon('room', 18)} Salón · <span class="tag ${s.cls}">${s.label}</span></p>
+          <p class="alert-kind">${icon('room', 18)} <span>${roomName(state.me.school)}</span> · <span class="tag ${s.cls}">${s.label}</span></p>
           <h2>${b.purpose}</h2>
           <div class="facts">
             ${fact('Día', longDay(b.day))}
             ${fact('Hora', timeRange(b))}
-            ${fact(b.priority ? 'Reservó' : 'Pidió', `${mine ? 'Tú' : b.created_by_name} · ${fmtDateTime(b.created_at)}`)}
-            ${b.approved_at && !b.priority ? fact('Aprobó', `${b.approved_by_name} · ${fmtDateTime(b.approved_at)}`) : ''}
-            ${b.status === 'replaced' ? fact('La reemplazó', `${b.closed_by_name}, que necesitó el salón a esa hora · ${fmtDateTime(b.closed_at)}`) : ''}
-            ${b.status === 'rejected' ? fact('No la aprobó', `${b.closed_by_name} · ${fmtDateTime(b.closed_at)}`) : ''}
-            ${b.status === 'cancelled' ? fact('La canceló', `${b.closed_by_name} · ${fmtDateTime(b.closed_at)}`) : ''}
-            ${fact('Motivo', b.close_note)}
+            ${full ? fact(b.priority ? 'Reservó' : 'Pidió', `${mine ? 'Tú' : b.created_by_name} · ${fmtDateTime(b.created_at)}`) : fact('Quién', b.created_by_name)}
+            ${!full ? '' : b.approved_at && !b.priority ? fact('Aprobó', `${b.approved_by_name} · ${fmtDateTime(b.approved_at)}`) : ''}
+            ${full && b.status === 'replaced' ? fact('La reemplazó', `${b.closed_by_name}, que lo necesitó a esa hora · ${fmtDateTime(b.closed_at)}`) : ''}
+            ${full && b.status === 'rejected' ? fact('No la aprobó', `${b.closed_by_name} · ${fmtDateTime(b.closed_at)}`) : ''}
+            ${full && b.status === 'cancelled' ? fact('La canceló', `${b.closed_by_name} · ${fmtDateTime(b.closed_at)}`) : ''}
+            ${full ? fact('Motivo', b.close_note) : ''}
           </div>
-          <ol class="timeline steps">
+          ${full ? html`<ol class="timeline steps">
             <li class="is-done"><strong>${b.priority ? 'Reservada' : 'Pedida'}</strong> · ${b.created_by_name}<small>${timeAgo(b.created_at)}</small></li>
             ${!b.priority && (b.approved_at || b.status === 'pending')
               ? html`<li class="${b.approved_at ? 'is-done' : ''}"><strong>Aprobada</strong>${b.approved_at ? html` · ${b.approved_by_name}<small>${timeAgo(b.approved_at)}</small>` : ''}</li>`
               : ''}
             ${closedLabel ? html`<li class="is-done"><strong>${closedLabel}</strong> · ${b.closed_by_name}<small>${timeAgo(b.closed_at)}</small></li>` : ''}
-          </ol>
+          </ol>` : ''}
         </section>
         ${clashes.length
           ? html`<section class="card stack">
@@ -846,6 +863,6 @@ export function waitingCard(pending = []) {
   const n = pending.filter((b) => !isPast(b)).length;
   if (!n) return '';
   return html`<a class="card link-card room-link is-warn" href="#/rooms">${icon('room')}<span>
-    <strong>${n} ${n === 1 ? 'reserva del salón por aprobar' : 'reservas del salón por aprobar'}</strong>
+    <strong>${n} ${n === 1 ? 'reserva por aprobar' : 'reservas por aprobar'}</strong>
     <small>Toca para aprobarlas o no</small></span>${icon('chevron', 18)}</a>`;
 }

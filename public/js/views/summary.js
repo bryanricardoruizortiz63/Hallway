@@ -137,7 +137,7 @@ export async function summaryView({ el, params }) {
               ? html`<div class="list flat">${s.next_absences.map(absenceRow)}</div>`
               : html`<p class="muted">No hay ausencias reportadas.</p>`}
             <p class="hint">${[
-              s.next_rooms ? `Salón de conferencias: ${plural(s.next_rooms, 'reserva', 'reservas')}.` : 'El salón de conferencias está libre.',
+              s.next_rooms ? `Reservas: ${plural(s.next_rooms, 'reserva', 'reservas')}.` : 'No hay reservas.',
               s.rooms_pending ? `${s.rooms_pending} ${s.rooms_pending === 1 ? 'reserva espera' : 'reservas esperan'} aprobación.` : '',
             ].filter(Boolean).join(' ')}</p>
           </div>

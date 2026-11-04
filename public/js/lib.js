@@ -226,6 +226,9 @@ export function schoolCalendar(school) {
   };
 }
 
+/** The place the school reserves (the school names it; «Salón de conferencias» until it does). */
+export const roomName = (school) => school?.calendar?.room_name || 'Salón de conferencias';
+
 /** Days without classes ({ start_date, end_date, name, kind }) that touch the range. */
 export const closuresIn = (closures, from, to = from) =>
   closures.filter((c) => c.start_date <= to && c.end_date >= from);
@@ -318,7 +321,7 @@ export const MODULES = {
   alerts: 'Alertas (No ha llegado, salidas, relevos)',
   visits: 'Visitas',
   maintenance: 'Mantenimiento',
-  rooms: 'Reservas del salón',
+  rooms: 'Reservas',
   live: 'En vivo',
 };
 

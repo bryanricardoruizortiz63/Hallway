@@ -611,6 +611,8 @@ export const deleteClosure = (id) => callFunction('admin', { action: 'delete_clo
 /** Class hours and school days (ISO weekdays). Returns the school calendar. */
 /** When the conference room can be reserved ("HH:MM"), apart from the class hours. Returns the school's calendar. */
 export const saveRoomHours = (start, end) => rpc('save_room_hours', { p_start: start, p_end: end });
+/** The Admin: the place's name (empty = «Salón de conferencias») and whether the school uses reservations. */
+export const saveRoomSettings = (name, enabled) => rpc('save_room_settings', { p_name: name || null, p_enabled: enabled });
 export const saveSchoolHours = (start, end, days) =>
   rpc('save_school_hours', { p_day_start: start, p_day_end: end, p_school_days: days });
 
