@@ -12,6 +12,7 @@ import {
   requestService,
   returningStudents,
   saveService,
+  setServiceKeepOpen,
   servicesOverview,
   setMyServiceStatus,
   turnHistory,
@@ -983,7 +984,7 @@ export async function serviceFormView(ctx) {
   const isNew = params[0] === 'new';
   const services = await servicesOverview();
   const s = isNew
-    ? { name: '', mode: 'visit', arrive_minutes: 5, roles: [], reasons: ['Otro'], active: true }
+    ? { name: '', mode: 'visit', arrive_minutes: 5, roles: [], reasons: ['Otro'], active: true, keep_open: false }
     : services.find((x) => x.id === Number(params[0]));
   if (!s) throw new Error('No se encontró el servicio.');
   ctx.setTitle(isNew ? 'Nuevo servicio' : s.name);
@@ -1007,6 +1008,15 @@ export async function serviceFormView(ctx) {
         <label class="field" data-minutes ${['visit', 'either'].includes(s.mode) ? '' : 'hidden'}><span>Minutos para llegar</span>
           <input type="number" name="minutes" min="1" max="30" value="${s.arrive_minutes}" inputmode="numeric"></label>
         <p class="hint" data-minutes ${['visit', 'either'].includes(s.mode) ? '' : 'hidden'}>El tiempo empieza cuando el maestro toca «Ya salió». Si no llega en ese tiempo, se avisa al servicio, al maestro y a Seguridad.</p>
+      </section>
+      <section class="card stack">
+        <h2 class="card-title">${icon('clock')} ¿Cuánto duran los turnos?</h2>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="life" value="day" ${s.keep_open ? '' : 'checked'}>
+            <span><strong>Se cierran al final del día</strong><small>Como Enfermería: lo que nadie atendió se cierra solo a la hora de salida y no pasa al día siguiente.</small></span></label>
+          <label class="choice"><input type="radio" name="life" value="open" ${s.keep_open ? 'checked' : ''}>
+            <span><strong>Siguen abiertos hasta que alguien los cierre</strong><small>Como Soporte IT o Trabajo Social: pasan al día siguiente. Al entrar, a quien atiende el servicio se le pregunta si sigue con cada uno o lo cierra.</small></span></label>
+        </div>
       </section>
       <section class="card stack">
         <h2 class="card-title">${icon('users')} ¿Quién lo atiende?</h2>
@@ -1035,13 +1045,15 @@ export async function serviceFormView(ctx) {
   const form = $('[data-form]', el);
   for (const input of el.querySelectorAll('[name=mode]')) {
     input.addEventListener('change', () => {
+      // Soporte IT usually carries its requests to the next day.
+      if (isNew) form.querySelector(`[name=life][value=${form.mode.value === 'support' ? 'open' : 'day'}]`).checked = true;
       for (const node of el.querySelectorAll('[data-minutes]')) node.hidden = !['visit', 'either'].includes(form.mode.value);
     });
   }
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
-      await saveService({
+      const saved = await saveService({
         id: isNew ? null : s.id,
         name: form.querySelector('[name=name]').value.trim(),
         mode: form.mode.value,
@@ -1050,6 +1062,8 @@ export async function serviceFormView(ctx) {
         reasons: form.reasons.value.split('\n').map((r) => r.trim()).filter(Boolean),
         active: isNew ? true : form.active.checked,
       });
+      const keep = form.querySelector('[name=life]:checked')?.value === 'open';
+      if (keep !== !!s.keep_open || isNew) await setServiceKeepOpen(saved?.id || s.id, keep);
       toast('Servicio guardado', 'ok');
       go('/services', { replace: true });
     });

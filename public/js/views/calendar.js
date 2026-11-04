@@ -258,7 +258,7 @@ export async function calendarView({ el, isCurrent }) {
     for (const btn of el.querySelectorAll('[data-delete-closure]')) {
       btn.addEventListener('click', async () => {
         const c = closures.find((x) => String(x.id) === btn.dataset.deleteClosure);
-        const ok = await dialog({ title: `¿Borrar «${c.name}»?`, message: closureDates(c), confirmText: 'Borrar', danger: true });
+        const ok = await dialog({ title: `¿Borrar «${c.name}»?`, message: closureDates(c), confirmText: 'Borrar', danger: true, doubleCheck: true });
         if (!ok) return;
         await busy(btn, async () => {
           await deleteClosure(c.id);
@@ -385,6 +385,7 @@ export async function groupsView({ el, isCurrent }) {
                 message: n ? `Se quitará a las ${n} persona(s) que lo tienen.` : 'Se quitará a las personas que lo tengan.',
                 confirmText: 'Borrar',
                 danger: true,
+                doubleCheck: true,
               });
               if (!ok) return;
               try {

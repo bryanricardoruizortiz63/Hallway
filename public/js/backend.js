@@ -514,7 +514,9 @@ export async function getEmployee(id) {
 
 export const createEmployee = (v) => callFunction('admin', { action: 'create_employee', ...v });
 export const updateEmployee = (id, v) => callFunction('admin', { action: 'update_employee', id, ...v });
-export const resetEmployeePassword = (id) => callFunction('admin', { action: 'reset_password', id });
+/** password: the temporary one chosen by whoever resets it (empty: one is generated). */
+export const resetEmployeePassword = (id, password = '') =>
+  callFunction('admin', { action: 'reset_password', id, ...(password ? { password } : {}) });
 export const deleteEmployee = (id) => callFunction('admin', { action: 'delete_employee', id });
 export const setAdminPassword = (current, next) =>
   callFunction('admin', { action: 'set_admin_password', current_password: current, new_password: next });
@@ -693,6 +695,19 @@ export const servicesOverview = () => rpc('services_overview');
 
 /** status: 'available' | 'meeting' | 'lunch' | 'away'; until: ISO time (required for 'away'). */
 export const setMyServiceStatus = (status, until) => rpc('set_my_service_status', { p_status: status, p_until: until || null });
+
+/** Whether the service's turns stay open the next day (true) or close at the end of the school day. */
+export const setServiceKeepOpen = (id, keep) => rpc('set_service_keep_open', { p_id: id, p_keep: !!keep });
+/** Turns still open from earlier days in the services I attend, not looked at today. */
+export const myCarriedTurns = () => rpc('my_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
+/** keep / close: ids of those turns. */
+export const reviewCarriedTurns = (keep, close) => rpc('review_carried_turns', { p_keep: keep, p_close: close });
+/** Someone's history (newest first), for the permission «history». from/to: ISO (optional). */
+export const activityHistory = (userId, from, to) =>
+  rpc('activity_history', { p_user: userId, p_from: from || null, p_to: to || null }).then((r) => r || []);
+
+/** Everyone whose history can be opened, with how many actions they have. */
+export const historyPeople = () => rpc('history_people').then((r) => r || []);
 
 export const saveService = ({ id, name, mode, arriveMinutes, roles, reasons, active }) =>
   rpc('save_service', {

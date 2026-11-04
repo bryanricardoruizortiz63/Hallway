@@ -355,6 +355,7 @@ export async function maintenanceDetailView(ctx) {
               confirmText: 'Cancelar solicitud',
               cancelText: 'Volver',
               danger: true,
+              doubleCheck: true,
               collect: true,
             });
             if (!v) return;

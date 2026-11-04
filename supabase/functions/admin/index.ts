@@ -32,7 +32,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** What a role can do besides reporting its own absences (see the roles migration). */
 const PERMISSIONS = [
   'absences', 'register', 'staff', 'settings', 'services', 'messages', 'reports',
-  'live', 'calendar', 'rooms', 'security', 'visitors', 'maintenance', 'summary',
+  'live', 'calendar', 'rooms', 'security', 'visitors', 'maintenance', 'summary', 'history',
 ];
 /** Duties rather than powers over other people's data: whoever manages the staff can give them. */
 const DUTIES = ['maintenance'];
@@ -950,6 +950,87 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
 /** Actions for roles without permissions (Enfermería, Trabajo Social…): they check who may use them. */
 const SERVICE_ACTIONS = ['close_service_year'];
 
+// ---- The activity history (Historial del personal) ---------------------------------------------------------------
+
+type Person = { id: string; full_name: string; role: string; extra_roles: string[] | null; active: boolean };
+
+const roleName = (me: Me, key: string) => me.roles.get(key)?.name || (key === 'admin' ? 'Admin' : key);
+
+/** What an action did, in a line for the history (null: nothing worth keeping). Student names never go in it. */
+function describe(me: Me, name: string, b: Record<string, unknown>, before: Person | null, out: Record<string, unknown>) {
+  const who = before?.full_name || 'un empleado';
+  const after = out.employee as Person | undefined;
+  switch (name) {
+    case 'create_employee':
+      return { action: `Creó la cuenta de ${after?.full_name || String(b.full_name || '')}`,
+        details: `Rol: ${roleName(me, String(after?.role || b.role || ''))}. ${b.password ? 'Con una contraseña temporal elegida.' : 'Con una contraseña temporal generada.'}`,
+        subject: after?.id || null };
+    case 'update_employee': {
+      if (!after || !before) return null;
+      const changes = [
+        before.active !== after.active ? (after.active ? 'reactivó la cuenta' : 'desactivó la cuenta') : null,
+        before.role !== after.role ? `rol: ${roleName(me, before.role)} → ${roleName(me, after.role)}` : null,
+        (before.extra_roles || []).join() !== (after.extra_roles || []).join()
+          ? `otros roles: ${(after.extra_roles || []).map((k) => roleName(me, k)).join(', ') || 'ninguno'}` : null,
+      ].filter(Boolean);
+      return { action: `Actualizó la ficha de ${after.full_name}`, details: changes.length ? changes.join(' · ') : 'Datos de la ficha.', subject: after.id };
+    }
+    case 'reset_password':
+      return { action: `Restableció la contraseña de ${who}`,
+        details: b.password ? 'Con una contraseña temporal elegida.' : 'Con una contraseña temporal generada.', subject: before?.id || null };
+    case 'reset_never_signed_in': {
+      const people = ((out.people as { full_name: string; error?: string }[]) || []).filter((p) => !p.error);
+      return people.length ? { action: `Creó accesos nuevos para ${people.length} ${people.length === 1 ? 'persona' : 'personas'}`,
+        details: people.map((p) => p.full_name).join(', '), subject: null } : null;
+    }
+    case 'delete_employee':
+      return { action: `Eliminó la cuenta de ${who}`, details: null, subject: null };
+    case 'set_admin_password':
+      return { action: 'Cambió la contraseña de Admin de la escuela', details: null, subject: null };
+    case 'send_credentials':
+      return { action: `Envió por correo el acceso de ${who}`, details: String(out.to || ''), subject: before?.id || null };
+    case 'send_message':
+      return { action: `Envió un mensaje: ${String(b.subject || '').slice(0, 150)}`, details: b.email === true ? 'En la app y por correo.' : 'En la app.', subject: null };
+    case 'change_school_code':
+      return { action: 'Cambió el código de la escuela', details: `${me.school.code} → ${String(b.code || '').trim().toUpperCase()}`, subject: null };
+    case 'save_role': {
+      const role = out.role as { name: string; permissions: string[] } | undefined;
+      return role ? { action: `${b.key ? 'Cambió' : 'Creó'} el rol ${role.name}`, details: `Permisos: ${role.permissions.join(', ') || 'ninguno'}.`, subject: null } : null;
+    }
+    case 'delete_role':
+      return { action: `Borró el rol ${roleName(me, String(b.key || ''))}`, details: null, subject: null };
+    case 'archive_purge':
+      return { action: 'Borró del archivo las ausencias de un año escolar', details: `${out.absences ?? 0} ausencias y ${out.files ?? 0} documentos.`, subject: null };
+    case 'close_service_year':
+      return { action: 'Cerró el historial de turnos de un servicio', details: `${out.removed ?? 0} turnos borrados.`, subject: null };
+    default:
+      return null;
+  }
+}
+
+async function logAction(me: Me, name: string, b: Record<string, unknown>, before: Person | null, res: Response) {
+  let out: Record<string, unknown> = {};
+  try {
+    out = await res.clone().json();
+  } catch {
+    /* no body */
+  }
+  const line = describe(me, name, b, before, out);
+  if (!line) return;
+  const { error } = await db.from('activity_log').insert({
+    school_id: me.school_id,
+    actor_id: me.id,
+    actor_name: me.full_name,
+    action: line.action.slice(0, 200),
+    details: line.details ? String(line.details).slice(0, 1000) : null,
+    subject_id: line.subject && line.subject !== me.id ? line.subject : null,
+  });
+  if (error) console.error('activity_log', error.message);
+}
+
+/** Actions about one person: who they were before the action (a deleted account is gone after it). */
+const ABOUT_SOMEONE = ['update_employee', 'reset_password', 'delete_employee', 'send_credentials'];
+
 serve(async (req) => {
   const me = await currentUser(req);
   const body = await readJson(req);
@@ -957,5 +1038,10 @@ serve(async (req) => {
   const action = actions[name];
   if (!action) throw new HttpError(400, 'Acción no válida.');
   if (!me.permissions.length && !SERVICE_ACTIONS.includes(name)) throw new HttpError(403, NO_PERMISSION);
-  return action(me, body);
+  const before = ABOUT_SOMEONE.includes(name) && UUID_RE.test(String(body.id || ''))
+    ? ((await db.from('profiles').select('id, full_name, role, extra_roles, active').eq('id', String(body.id)).eq('school_id', me.school_id).maybeSingle()).data as Person | null)
+    : null;
+  const res = await action(me, body);
+  if (res.status < 300) await logAction(me, name, body, before, res).catch((err) => console.error('activity_log', err));
+  return res;
 });

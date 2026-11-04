@@ -309,6 +309,7 @@ export async function moreView({ el }) {
       can(user, 'calendar') ? ['#/groups', 'grid', 'Grados y grupos', 'Los grupos de la escuela (7-A, 7-B…) para el personal'] : null,
       can(user, 'messages') ? ['#/messages', 'mail', 'Mensajes', 'Escribe al personal: aviso en la app y por correo'] : null,
       can(user, 'settings') ? ['#/settings', 'teams', 'Escuela y Teams', 'Nombre, código, Teams, correo y contraseña de Admin'] : null,
+      can(user, 'history') ? ['#/history', 'list', 'Historial del personal', 'Lo que hizo cada persona, con día y hora; se puede imprimir'] : null,
       admin ? ['#/roles', 'shield', 'Roles y permisos', 'Crea roles como Enfermería o Seguridad y elige qué puede hacer cada uno'] : null,
       can(user, 'services') ? ['#/services', 'sliders', 'Servicios', 'Enfermería, Trabajo Social: quién atiende, motivos y tiempo para llegar'] : null,
       can(user, 'reports')

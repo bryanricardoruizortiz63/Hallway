@@ -645,6 +645,7 @@ export async function bookingDetailView(ctx) {
               confirmText: 'Cancelar reserva',
               cancelText: 'Volver',
               danger: true,
+              doubleCheck: 'La reserva se cancela y le avisamos a quien la pidió.',
               collect: true,
             });
             if (!v) return;

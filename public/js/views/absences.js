@@ -1210,7 +1210,7 @@ export async function absenceView({ el, params }) {
 
     for (const btn of el.querySelectorAll('[data-del-att]')) {
       btn.addEventListener('click', async () => {
-        const ok = await dialog({ title: '¿Eliminar este archivo?', confirmText: 'Eliminar', danger: true });
+        const ok = await dialog({ title: '¿Eliminar este archivo?', confirmText: 'Eliminar', danger: true, doubleCheck: 'El archivo se borra para siempre.' });
         if (!ok) return;
         await busy(btn, async () => {
           await deleteAttachment(Number(btn.dataset.delAtt));
@@ -1240,6 +1240,7 @@ export async function absenceView({ el, params }) {
         confirmText: 'Cancelar ausencia',
         cancelText: 'Volver',
         danger: true,
+        doubleCheck: 'La ausencia se cancela y a la dirección le llega un aviso. Queda en el historial.',
         onOpen(dlg) {
           const note = dlg.querySelector('[name=note]');
           const submit = dlg.querySelector('[type=submit]');

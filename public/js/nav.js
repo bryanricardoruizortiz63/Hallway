@@ -35,7 +35,7 @@ export function navItems(user) {
   ];
   const moreMatch = [
     '/more', '/guide', '/notifications', '/message/', '/profile', '/calendar', '/employees', '/settings', '/roles',
-    '/services', '/data', '/messages', '/home', '/turns', '/maintenance', '/live',
+    '/services', '/data', '/messages', '/home', '/turns', '/maintenance', '/live', '/history',
   ].filter((p) => !items.some((i) => i.match.includes(p)));
   items.push({ path: '/more', icon: 'menu', label: 'Más', match: moreMatch });
   return items;

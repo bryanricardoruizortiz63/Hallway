@@ -40,6 +40,8 @@ import { addAccountView, moreView, notificationsView, openAccountMenu, profileVi
 import { avatar } from './views/common.js';
 import { adoptAccountFromUrl, needsDailyCode, otherAccount, switchAccount } from './accounts.js';
 import { guideView } from './views/guide.js';
+import { checkCarriedTurns } from './views/carried.js';
+import { historyPeopleView, historyView } from './views/history.js';
 import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
 import { composeView, messageView, messagesView } from './views/messages.js';
@@ -116,6 +118,8 @@ const ROUTES = [
   { re: /^\/notifications$/, view: notificationsView, title: 'Avisos', back: true },
   { re: /^\/profile$/, view: profileView, title: 'Mi perfil', back: true },
   { re: /^\/more$/, view: moreView, title: 'Más' },
+  { re: /^\/history$/, view: historyPeopleView, title: 'Historial del personal', allow: may('history'), back: true },
+  { re: /^\/history\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, view: historyView, title: 'Historial', allow: may('history'), back: true },
   { re: /^\/guide$/, view: guideView, title: 'Cómo usar Hallway', back: true },
 ];
 
@@ -320,7 +324,11 @@ async function router() {
       </div>`);
     el.querySelector('[data-retry]').addEventListener('click', () => router());
   }
-  if (user && !route.bare) refreshUnread();
+  if (user && !route.bare) {
+    refreshUnread();
+    // Turns from earlier days in the services this person attends: asked once per opening.
+    if (seq === navSeq) checkCarriedTurns(user);
+  }
 }
 
 /** An urgent notice while the app is open: alarm on screen (the screen already showing it just refreshes). */

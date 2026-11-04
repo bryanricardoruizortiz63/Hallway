@@ -477,6 +477,7 @@ export async function missingDetailView(ctx) {
           message: 'Úsalo solo si se puso por error: desaparece de las listas y no cuenta en los reportes. No se puede deshacer.',
           confirmText: 'Borrar',
           danger: true,
+          doubleCheck: true,
         });
         if (!ok) return;
         await manageStudentAlert(id, 'delete');
