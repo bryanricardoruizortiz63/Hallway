@@ -4634,3 +4634,19 @@ p.small {
   overflow: visible;
   text-overflow: clip;
 }
+
+/* The student's full name: Nombre, Primer apellido, Segundo apellido. */
+fieldset.student-name {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+fieldset.student-name > legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+fieldset.student-name .grid3 .field {
+  font-size: 13px;
+}
