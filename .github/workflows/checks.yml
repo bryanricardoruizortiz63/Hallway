@@ -35,3 +35,5 @@ jobs:
         run: npx --yes esbuild@0.25 public/js/app.js --bundle --format=esm --outfile=/tmp/bundle.js
       - name: Verificar la versión de la app en el service worker
         run: node scripts/sw-version.mjs --check
+      - name: Verificar que el diccionario del servidor está al día
+        run: node scripts/sync-i18n.mjs --check

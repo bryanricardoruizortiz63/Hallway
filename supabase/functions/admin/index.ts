@@ -17,6 +17,7 @@ import {
   validatePassword,
 } from '../_shared/http.ts';
 import { deleteAbsences } from '../_shared/cleanup.ts';
+import { type Lang, langOf } from '../_shared/lang.ts';
 import { loadBranding, loadEmailAccount, schoolIconUrl, sendEmails } from '../_shared/email.ts';
 import { isEmail, renderTemplate } from '../_shared/email_format.ts';
 import { brandedHtml, LOGO_CID } from '../_shared/email_template.ts';
@@ -47,6 +48,8 @@ type Me = {
   extra_roles: string[];
   full_name: string;
   email: string | null;
+  /** The language the person chose for the app (and their emails). */
+  language: Lang;
   school: { code: string; name: string; icon_version: number | null };
   permissions: string[];
   /** The school's roles by key, including the hidden "admin" one. */
@@ -59,7 +62,7 @@ async function currentUser(req: Request): Promise<Me> {
   if (!data.user) throw new HttpError(401, 'Tu sesión expiró. Vuelve a iniciar sesión.');
   const { data: me } = await db
     .from('profiles')
-    .select('id, school_id, role, extra_roles, full_name, email, active, must_change_password, school:schools(code, name, active, icon_version)')
+    .select('id, school_id, role, extra_roles, full_name, email, language, active, must_change_password, school:schools(code, name, active, icon_version)')
     .eq('id', data.user.id)
     .maybeSingle();
   // deno-lint-ignore no-explicit-any
@@ -77,7 +80,7 @@ async function currentUser(req: Request): Promise<Me> {
   const permissions = me.role === 'admin' || extra.includes('admin')
     ? PERMISSIONS
     : PERMISSIONS.filter((p) => [me.role, ...extra].some((k) => roles.get(k)?.permissions.includes(p)));
-  return { ...me, extra_roles: extra, school, permissions, roles } as Me;
+  return { ...me, language: langOf(me.language), extra_roles: extra, school, permissions, roles } as Me;
 }
 
 /** The school's admin account, or someone who also has the Admin role: can do everything in their school. */
@@ -260,19 +263,22 @@ function welcomeEmail(me: Me, tpl: Template, person: { full_name: string; userna
   return { subject, text, html };
 }
 
-function messageEmail(me: Me, subject: string, body: string, link: string, logoSrc: string) {
+/** A message someone wrote: their words as they wrote them, the layout in the reader's language. */
+function messageEmail(me: Me, subject: string, body: string, link: string, logoSrc: string, lang: Lang = 'es') {
+  const en = lang === 'en';
   return {
     subject,
-    text: `${body}\n\n— ${me.full_name} · ${me.school.name}\n\nVer en Hallway: ${link}`,
+    text: `${body}\n\n— ${me.full_name} · ${me.school.name}\n\n${en ? 'See it in Hallway' : 'Ver en Hallway'}: ${link}`,
     html: brandedHtml({
       title: subject,
-      intro: `De ${me.full_name} · ${me.school.name}`,
+      intro: `${en ? 'From' : 'De'} ${me.full_name} · ${me.school.name}`,
       text: body,
       schoolName: me.school.name,
       logoSrc,
+      lang,
       preheader: body.slice(0, 140),
-      buttonLabel: 'Abrir enlace',
-      cta: { url: link, label: 'Ver en Hallway' },
+      buttonLabel: en ? 'Open link' : 'Abrir enlace',
+      cta: { url: link, label: en ? 'See it in Hallway' : 'Ver en Hallway' },
     }),
   };
 }
@@ -549,7 +555,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
 
     let q = db
       .from('profiles')
-      .select('id, full_name, email')
+      .select('id, full_name, email, language')
       .eq('school_id', me.school_id)
       .eq('active', true)
       .neq('role', 'admin')
@@ -612,10 +618,11 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
     if (account && withEmail.length) {
       const url = await appUrl();
       const branding = await loadBranding(url, schoolIconUrl({ id: me.school_id, icon_version: me.school.icon_version }));
-      const email = messageEmail(me, subject, body, `${url}#/message/${id}`, branding.logoSrc);
+      const emails = { es: messageEmail(me, subject, body, `${url}#/message/${id}`, branding.logoSrc, 'es'),
+        en: messageEmail(me, subject, body, `${url}#/message/${id}`, branding.logoSrc, 'en') };
       const results = await sendEmails(
         account,
-        withEmail.map((p) => ({ ...email, to: p.email!, toName: p.full_name, replyTo: isEmail(me.email) ? me.email : null })),
+        withEmail.map((p) => ({ ...emails[langOf(p.language)], to: p.email!, toName: p.full_name, replyTo: isEmail(me.email) ? me.email : null })),
         branding,
       );
       const statusById = new Map(withEmail.map((p, i) => [p.id, results[i]]));
@@ -636,20 +643,24 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
     const account = await requireEmailAccount(me);
     const url = await appUrl();
     const branding = await loadBranding(url, schoolIconUrl({ id: me.school_id, icon_version: me.school.icon_version }));
-    const text =
-      `Este es un correo de prueba de ${me.school.name}.\n\nSi lo recibiste, el correo está bien configurado: ` +
-      `la app ya puede enviar los accesos del personal y tus mensajes.\n\nEnviado por ${me.full_name}.`;
+    const en = me.language === 'en';
+    const text = en
+      ? `This is a test email from ${me.school.name}.\n\nIf you got it, email is set up correctly: ` +
+        `the app can now send staff their access and your messages.\n\nSent by ${me.full_name}.`
+      : `Este es un correo de prueba de ${me.school.name}.\n\nSi lo recibiste, el correo está bien configurado: ` +
+        `la app ya puede enviar los accesos del personal y tus mensajes.\n\nEnviado por ${me.full_name}.`;
     const [status] = await sendEmails(account, [{
       to: account.from_email,
-      subject: 'Prueba de Hallway',
+      subject: en ? 'Hallway test' : 'Prueba de Hallway',
       text,
       html: brandedHtml({
-        title: 'El correo funciona ✅',
+        title: en ? 'Email works ✅' : 'El correo funciona ✅',
         text,
         schoolName: me.school.name,
         logoSrc: branding.logoSrc,
-        preheader: 'El correo de la escuela está bien configurado.',
-        cta: { url, label: 'Abrir Hallway' },
+        lang: me.language,
+        preheader: en ? 'The school’s email is set up correctly.' : 'El correo de la escuela está bien configurado.',
+        cta: { url, label: en ? 'Open Hallway' : 'Abrir Hallway' },
       }),
     }], branding);
     await recordEmailStatus(me, status);
@@ -677,7 +688,7 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
 
     const { data: people, error } = await db
       .from('profiles')
-      .select('id, role, username, full_name, email, active')
+      .select('id, role, username, full_name, email, language, active')
       .eq('school_id', me.school_id);
     check(error, 'No se pudo leer el personal.');
     const moveTo = async (c: string, list: typeof people) => {
@@ -726,26 +737,35 @@ const actions: Record<string, (me: Me, b: Record<string, unknown>) => Promise<Re
       const url = await appUrl();
       const link = `${url}?escuela=${encodeURIComponent(code)}`;
       const branding = await loadBranding(url, schoolIconUrl({ id: me.school_id, icon_version: me.school.icon_version }));
-      const subject = `Nuevo código de ${me.school.name}: ${code}`;
       const results = await sendEmails(
         account,
         withEmail.map((p) => {
-          const text = `Hola ${p.full_name}:\n\n${me.school.name} tiene un nuevo código para entrar a Hallway.\n\n` +
-            `   Código de escuela: ${code}\n   Tu usuario: ${p.username}\n\n` +
-            'Tu usuario y tu contraseña siguen siendo los mismos. Si ya tienes la sesión abierta, no tienes que hacer nada.\n\n' +
-            `Si la app te pide el código, escribe el nuevo o entra con este enlace, que ya lo trae puesto:\n${link}`;
+          const lang = langOf(p.language);
+          const en = lang === 'en';
+          const text = en
+            ? `Hi ${p.full_name}:\n\n${me.school.name} has a new code to sign in to Hallway.\n\n` +
+              `   School code: ${code}\n   Your username: ${p.username}\n\n` +
+              'Your username and password stay the same. If you’re already signed in, you don’t need to do anything.\n\n' +
+              `If the app asks for the code, type the new one or sign in with this link, which already has it:\n${link}`
+            : `Hola ${p.full_name}:\n\n${me.school.name} tiene un nuevo código para entrar a Hallway.\n\n` +
+              `   Código de escuela: ${code}\n   Tu usuario: ${p.username}\n\n` +
+              'Tu usuario y tu contraseña siguen siendo los mismos. Si ya tienes la sesión abierta, no tienes que hacer nada.\n\n' +
+              `Si la app te pide el código, escribe el nuevo o entra con este enlace, que ya lo trae puesto:\n${link}`;
           return {
             to: p.email!,
             toName: p.full_name,
             replyTo: isEmail(me.email) ? me.email : null,
-            subject,
+            subject: en ? `New code for ${me.school.name}: ${code}` : `Nuevo código de ${me.school.name}: ${code}`,
             text,
             html: brandedHtml({
-              title: 'Cambió el código de la escuela',
+              title: en ? 'The school’s code changed' : 'Cambió el código de la escuela',
               text,
               schoolName: me.school.name,
               logoSrc: branding.logoSrc,
-              preheader: `El nuevo código para entrar es ${code}. Tu usuario y contraseña no cambian.`,
+              lang,
+              preheader: en
+                ? `The new code to sign in is ${code}. Your username and password don’t change.`
+                : `El nuevo código para entrar es ${code}. Tu usuario y contraseña no cambian.`,
               highlights: [code, p.username],
             }),
           };

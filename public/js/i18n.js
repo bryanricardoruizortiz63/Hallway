@@ -3,6 +3,7 @@
 // as it appears, so a screen that isn't translated yet simply stays in Spanish. The choice is saved on the person's
 // profile (it follows them to any device) and on this device (for the sign-in screen).
 import { EN, EN_PATTERNS, setPartTranslator } from './i18n-en.js';
+import { makeTranslator } from './i18n-core.js';
 
 const KEY = 'lah:lang';
 export const LANGUAGES = [
@@ -29,6 +30,8 @@ export const getLang = () => lang;
 /** For dates and numbers. */
 export const locale = () => (lang === 'en' ? 'en-US' : 'es');
 
+const translate = makeTranslator(EN, EN_PATTERNS);
+
 /** One text in the current language (Spanish text in, Spanish or English out). */
 export function t(text) {
   if (lang !== 'en' || !text) return text;
@@ -36,28 +39,7 @@ export function t(text) {
   const trimmed = key.trim();
   if (!trimmed) return key;
   // Templates wrap long texts over several lines: the dictionary has them on one.
-  const norm = trimmed.replace(/[ \t\n\r]+/g, ' ');
-  let out = EN[norm];
-  if (out === undefined) {
-    for (const [re, to] of EN_PATTERNS) {
-      if (re.test(norm)) {
-        out = norm.replace(re, typeof to === 'function' ? (...m) => to(...m.slice(1, -2).map((v) => t(v))) : to);
-        break;
-      }
-    }
-  }
-  // «Maestro · Maestro(a)», «Reservas › Hacer una reserva»: each part on its own.
-  if (out === undefined) {
-    for (const sep of [' · ', ' › ']) {
-      if (!norm.includes(sep)) continue;
-      const parts = norm.split(sep);
-      const done = parts.map((x) => t(x));
-      if (done.some((x, i) => x !== parts[i])) {
-        out = done.join(sep);
-        break;
-      }
-    }
-  }
+  const out = translate(trimmed.replace(/[ \t\n\r]+/g, ' '));
   if (out === undefined) return key;
   // Keep the spaces around it (they separate it from icons and other words).
   return key.slice(0, key.indexOf(trimmed)) + out + key.slice(key.indexOf(trimmed) + trimmed.length);
