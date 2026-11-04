@@ -1828,6 +1828,6 @@ export const SERVER = {
   'si tiene': 'if any',
   'Ej. Luis Ángel': 'E.g. Luis Ángel',
   'Ej. Rivera': 'E.g. Rivera',
-  'Si tiene': 'If any',
+  'Ej. Torres': 'E.g. Torres',
   'Escribe el primer apellido del estudiante.': 'Type the student’s first last name.',
 };

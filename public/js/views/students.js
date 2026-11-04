@@ -40,7 +40,7 @@ export function studentFields() {
         <label class="field"><span>Primer apellido</span>
           <input name="student_last1" required maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Ej. Rivera"></label>
         <label class="field"><span>Segundo apellido</span>
-          <input name="student_last2" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Si tiene"></label>
+          <input name="student_last2" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Ej. Torres"></label>
       </div>
     </fieldset>`;
   if (!mine.length) {
