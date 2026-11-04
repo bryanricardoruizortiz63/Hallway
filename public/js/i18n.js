@@ -46,6 +46,18 @@ export function t(text) {
       }
     }
   }
+  // «Maestro · Maestro(a)», «Reservas › Hacer una reserva»: each part on its own.
+  if (out === undefined) {
+    for (const sep of [' · ', ' › ']) {
+      if (!norm.includes(sep)) continue;
+      const parts = norm.split(sep);
+      const done = parts.map((x) => t(x));
+      if (done.some((x, i) => x !== parts[i])) {
+        out = done.join(sep);
+        break;
+      }
+    }
+  }
   if (out === undefined) return key;
   // Keep the spaces around it (they separate it from icons and other words).
   return key.slice(0, key.indexOf(trimmed)) + out + key.slice(key.indexOf(trimmed) + trimmed.length);
