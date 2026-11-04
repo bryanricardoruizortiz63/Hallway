@@ -208,6 +208,8 @@ export const updateMyContact = (email, phone) => rpc('update_my_contact', { p_em
 /** The Administración account's own name, position, email and phone (it belongs to a person, not just a role). */
 /** Spanish or English: saved on the profile. */
 export const setMyLanguage = (language) => rpc('set_my_language', { p_language: language });
+/** Kinds of notices whose phone alert I turned off. Returns the saved list. */
+export const setMyNotifyOff = (kinds) => rpc('set_my_notify_off', { p_kinds: kinds });
 
 export const updateAdminProfile = ({ full_name: name, position, email, phone }) =>
   rpc('update_admin_profile', { p_full_name: name || null, p_position: position || null, p_email: email || null, p_phone: phone || null });
@@ -514,7 +516,9 @@ export async function getEmployee(id) {
 
 export const createEmployee = (v) => callFunction('admin', { action: 'create_employee', ...v });
 export const updateEmployee = (id, v) => callFunction('admin', { action: 'update_employee', id, ...v });
-export const resetEmployeePassword = (id) => callFunction('admin', { action: 'reset_password', id });
+/** password: the temporary one chosen by whoever resets it (empty: one is generated). */
+export const resetEmployeePassword = (id, password = '') =>
+  callFunction('admin', { action: 'reset_password', id, ...(password ? { password } : {}) });
 export const deleteEmployee = (id) => callFunction('admin', { action: 'delete_employee', id });
 export const setAdminPassword = (current, next) =>
   callFunction('admin', { action: 'set_admin_password', current_password: current, new_password: next });
@@ -607,6 +611,8 @@ export const deleteClosure = (id) => callFunction('admin', { action: 'delete_clo
 /** Class hours and school days (ISO weekdays). Returns the school calendar. */
 /** When the conference room can be reserved ("HH:MM"), apart from the class hours. Returns the school's calendar. */
 export const saveRoomHours = (start, end) => rpc('save_room_hours', { p_start: start, p_end: end });
+/** The Admin: the place's name (empty = «Salón de conferencias») and whether the school uses reservations. */
+export const saveRoomSettings = (name, enabled) => rpc('save_room_settings', { p_name: name || null, p_enabled: enabled });
 export const saveSchoolHours = (start, end, days) =>
   rpc('save_school_hours', { p_day_start: start, p_day_end: end, p_school_days: days });
 
@@ -693,6 +699,19 @@ export const servicesOverview = () => rpc('services_overview');
 
 /** status: 'available' | 'meeting' | 'lunch' | 'away'; until: ISO time (required for 'away'). */
 export const setMyServiceStatus = (status, until) => rpc('set_my_service_status', { p_status: status, p_until: until || null });
+
+/** Whether the service's turns stay open the next day (true) or close at the end of the school day. */
+export const setServiceKeepOpen = (id, keep) => rpc('set_service_keep_open', { p_id: id, p_keep: !!keep });
+/** Turns still open from earlier days in the services I attend, not looked at today. */
+export const myCarriedTurns = () => rpc('my_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
+/** keep / close: ids of those turns. */
+export const reviewCarriedTurns = (keep, close) => rpc('review_carried_turns', { p_keep: keep, p_close: close });
+/** Someone's history (newest first), for the permission «history». from/to: ISO (optional). */
+export const activityHistory = (userId, from, to) =>
+  rpc('activity_history', { p_user: userId, p_from: from || null, p_to: to || null }).then((r) => r || []);
+
+/** Everyone whose history can be opened, with how many actions they have. */
+export const historyPeople = () => rpc('history_people').then((r) => r || []);
 
 export const saveService = ({ id, name, mode, arriveMinutes, roles, reasons, active }) =>
   rpc('save_service', {
@@ -948,6 +967,13 @@ export const liveTurns = async (serviceId) => (await rpc('live_turns', { p_servi
  * One turn, with everything about it, also the teacher's note: the student (or who asked and where), reason, how
  * serious, place in line, who asked, has the student and attends, every step with its time and how it ended.
  */
+/** A service's turns of one day (the phone's day, 'YYYY-MM-DD'), for the Resumen del día. */
+export function dayTurns(serviceId, day) {
+  const from = new Date(`${day}T00:00:00`);
+  const to = new Date(from);
+  to.setDate(to.getDate() + 1);
+  return rpc('day_turns', { p_service_id: serviceId, p_from: from.toISOString(), p_to: to.toISOString() }).then((r) => r || []);
+}
 export const getLiveTurn = (id) => rpc('live_turn', { p_id: id });
 /** How many turns a service had at each hour of the day over the 4 weeks before today: { days, hours: [{ hour, turns }] }. */
 export const liveHours = (serviceId) => rpc('live_hours', { p_service_id: serviceId, p_since: startOfToday() });
@@ -1263,6 +1289,30 @@ export async function exportArchiveZip(school, data, onProgress = () => {}) {
   }
   files.sort((a, b) => a.name.localeCompare(b.name));
   download(`documentos_${school.code}_${data.from}_${data.to}.zip`, zip(files));
+}
+
+/**
+ * Saves files the person can already open (each with its signed url) on the phone or computer: one as it is,
+ * several in one ZIP (zipName). Their own names are kept.
+ */
+export async function downloadFiles(files, zipName = 'archivos.zip') {
+  const got = [];
+  for (const f of files) {
+    if (!f.url) continue;
+    const res = await fetch(f.url).catch(() => null);
+    if (!res?.ok) throw new ApiError(`No se pudo descargar «${f.original_name}». Revisa tu conexión e inténtalo de nuevo.`);
+    got.push({ name: f.original_name, mime: f.mime, data: new Uint8Array(await res.arrayBuffer()) });
+  }
+  if (!got.length) throw new ApiError('No hay archivos para descargar.');
+  if (got.length === 1) return download(got[0].name, new Blob([got[0].data], { type: got[0].mime || 'application/octet-stream' }));
+  // Two files with the same name: «plan.pdf», «plan (2).pdf».
+  const seen = new Map();
+  const named = got.map((g) => {
+    const n = (seen.get(g.name) || 0) + 1;
+    seen.set(g.name, n);
+    return { name: n === 1 ? g.name : g.name.replace(/(\.[^.]+)?$/, ` (${n})$1`), data: g.data };
+  });
+  download(zipName, zip(named));
 }
 
 export const archivePurge = (from, to) => callFunction('admin', { action: 'archive_purge', from, to, confirm: 'BORRAR' });

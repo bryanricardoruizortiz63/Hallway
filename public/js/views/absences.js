@@ -35,6 +35,7 @@ import {
   createAbsence,
   deleteAttachment,
   getAbsence,
+  downloadFiles,
   getCoverFiles,
   getCoverLinks,
   getCoverage,
@@ -904,13 +905,14 @@ export async function coverView({ el, params }) {
           ? html`<section class="card stack" data-cover-material>
               <h3 class="card-title">${icon('clip')} Plan y material de ${first} <span class="count">${files.length + links.length}</span></h3>
               ${links.length ? linkList(links, null) : ''}
-              ${files.length ? fileGrid(files, null) : ''}
-              <p class="hint">Toca un enlace o un archivo para abrirlo.</p>
+              ${files.length ? fileGrid(files, null, `material_${first}.zip`) : ''}
+              <p class="hint">Toca un enlace o un archivo para abrirlo, o «Descargar» para guardarlo en tu teléfono o computadora.</p>
             </section>`
           : ''}
         <p class="hint">Si tienes dudas, pregúntale a la secretaría o a la dirección.</p>
       </div>`);
 
+    bindDownloads(el, files);
     for (const btn of el.querySelectorAll('[data-reply]')) {
       btn.addEventListener('click', () =>
         busy(btn, async () => {
@@ -970,8 +972,10 @@ function linkList(links, me) {
 }
 
 /** Files to open or download; me: who may remove each one (null: nobody, as for whoever covers). */
-function fileGrid(files, me) {
-  return html`<div class="attachments">${files.map(
+function fileGrid(files, me, zipName = 'archivos.zip') {
+  return html`${files.length > 1
+    ? html`<button type="button" class="btn btn-secondary btn-sm" data-dl-all="${zipName}">${icon('download', 16)} Descargar todos (${files.length})</button>`
+    : ''}<div class="attachments" data-files>${files.map(
     (f) => html`<div class="att">
       <a href="${f.url || '#'}" target="_blank" rel="noopener" class="att-link">
         ${IMAGE_MIME.includes(f.mime) && f.url
@@ -980,11 +984,27 @@ function fileGrid(files, me) {
         <span class="att-name">${f.original_name}</span>
         <small>${fileSize(f.size)} · ${f.uploaded_by_name || ''}</small>
       </a>
+      <button type="button" class="btn btn-ghost btn-sm att-dl" data-dl="${f.id}">${icon('download', 14)} Descargar</button>
       ${me && (f.uploaded_by === me.id || can(me, 'staff'))
         ? html`<button class="icon-btn att-del" data-del-att="${f.id}" aria-label="Eliminar archivo">${icon('trash', 16)}</button>`
         : ''}
     </div>`,
   )}</div>`;
+}
+
+/** «Descargar» on each file and «Descargar todos» above them (in one ZIP). */
+function bindDownloads(root, files) {
+  for (const btn of root.querySelectorAll('[data-dl]')) {
+    btn.addEventListener('click', () => busy(btn, () => downloadFiles(files.filter((f) => String(f.id) === btn.dataset.dl))));
+  }
+  for (const btn of root.querySelectorAll('[data-dl-all]')) {
+    const box = btn.nextElementSibling;
+    const ids = new Set([...box.querySelectorAll('[data-dl]')].map((b) => b.dataset.dl));
+    btn.addEventListener('click', () => busy(btn, async () => {
+      await downloadFiles(files.filter((f) => ids.has(String(f.id))), btn.dataset.dlAll);
+      toast('Archivos descargados', 'ok');
+    }));
+  }
 }
 
 export async function absenceView({ el, params }) {
@@ -1208,9 +1228,10 @@ export async function absenceView({ el, params }) {
       });
     }
 
+    bindDownloads(el, data.attachments);
     for (const btn of el.querySelectorAll('[data-del-att]')) {
       btn.addEventListener('click', async () => {
-        const ok = await dialog({ title: '¿Eliminar este archivo?', confirmText: 'Eliminar', danger: true });
+        const ok = await dialog({ title: '¿Eliminar este archivo?', confirmText: 'Eliminar', danger: true, doubleCheck: 'El archivo se borra para siempre.' });
         if (!ok) return;
         await busy(btn, async () => {
           await deleteAttachment(Number(btn.dataset.delAtt));
@@ -1240,6 +1261,7 @@ export async function absenceView({ el, params }) {
         confirmText: 'Cancelar ausencia',
         cancelText: 'Volver',
         danger: true,
+        doubleCheck: 'La ausencia se cancela y a la dirección le llega un aviso. Queda en el historial.',
         onOpen(dlg) {
           const note = dlg.querySelector('[name=note]');
           const submit = dlg.querySelector('[type=submit]');

@@ -10,6 +10,7 @@
 //     teacher's note.
 import {
   bookingsBetween,
+  dayTurns,
   closeServiceYear,
   downloadXlsx,
   getLiveTurn,
@@ -29,6 +30,7 @@ import {
   can,
   dialog,
   fmtDateTime,
+  fmtLongDate,
   fmtTime,
   html,
   isoWeekday,
@@ -239,7 +241,8 @@ export async function servicePanelView(ctx) {
   if (!service) throw new Error('No se encontró el servicio.');
   if (!service.serves && !can(state.me.user, 'reports')) throw new Error('Solo quien atiende este servicio y la dirección ven su panel.');
   setTitle(`Panel de ${service.name}`);
-  const visit = service.mode === 'visit';
+  // «Decide quien atiende» counts like Enfermería; each turn's own time comes from the way it went.
+  const visit = ['visit', 'either'].includes(service.mode);
   // Soporte IT and other help for the staff: no students; who asked, where, and what was done.
   const support = service.mode === 'support';
   const today = todayStr();
@@ -256,7 +259,7 @@ export async function servicePanelView(ctx) {
 
   const walkIn = (t) => visit && !t.called_at && !t.sent_at && !!t.arrived_at;
   const waitOf = (t) => (walkIn(t) ? null : minutesBetween(t.created_at, t.called_at || t.on_the_way_at || t.arrived_at));
-  const careOf = (t) => (visit ? minutesBetween(t.arrived_at, t.returning_at || t.closed_at) : minutesBetween(t.on_the_way_at, t.closed_at));
+  const careOf = (t) => (visit && !t.on_the_way_at ? minutesBetween(t.arrived_at, t.returning_at || t.closed_at) : minutesBetween(t.on_the_way_at, t.closed_at));
   const resultOf = (t) =>
     t.status === 'cancelled' ? 'Cancelado' : (support && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'En curso';
   const totalOf = (t) => minutesBetween(t.created_at, t.closed_at);
@@ -690,7 +693,7 @@ export async function roomsPanelView({ el, isCurrent }) {
       <div class="stats">
         ${tile(approved.length, 'Reservas aprobadas')}
         ${tile(hoursFmt(hours), 'Horas reservadas')}
-        ${tile(capacity ? `${Math.round((hours / capacity) * 100)} %` : '—', 'Del horario del salón')}
+        ${tile(capacity ? `${Math.round((hours / capacity) * 100)} %` : '—', 'Del horario de reservas')}
         ${tile(rows.filter((b) => b.status === 'rejected').length, 'No aprobadas')}
       </div>
       <section class="card stack">
@@ -702,7 +705,7 @@ export async function roomsPanelView({ el, isCurrent }) {
         .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'es')).slice(0, 10), { format: hoursFmt })}
       ${bars('Horas por día de la semana', 'calendar', byWeekday(approved, (b) => b.day, hoursOf), { format: hoursFmt })}
       ${bars('Estado de las reservas', 'list', countBy(rows, statusOf))}
-      <p class="hint">«Del horario del salón»: horas aprobadas entre las horas que se puede reservar en el período (su horario en días de clases, sin los días sin clases).</p>`;
+      <p class="hint">«Del horario de reservas»: horas aprobadas entre las horas que se puede reservar en el período (su horario en días de clases, sin los días sin clases).</p>`;
   }
 
   async function load() {
@@ -771,7 +774,7 @@ function liveService(s, { filtered = false, link = true } = {}) {
   const summary = [
     `${d.requested} ${d.requested === 1 ? 'pedido' : 'pedidos'}`,
     `${d.done} ${d.done === 1 ? 'terminado' : 'terminados'}`,
-    s.mode === 'visit' && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
+    s.mode !== 'support' && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
     d.referred ? (s.mode === 'support' ? `${d.referred} con seguimiento` : `${d.referred} referido${d.referred === 1 ? '' : 's'}`) : null,
     d.late ? `${d.late} no ${d.late === 1 ? 'llegó' : 'llegaron'} a tiempo` : null,
     // Like the Resumen del día: every turn of the day is counted somewhere.
@@ -1220,7 +1223,7 @@ export async function liveView(ctx) {
         <div class="quick">${soundButton()}<a class="chip-btn" href="#/live/tv" data-live-tv>${icon('live', 16)} Pantalla grande</a></div>
         ${soundHint()}
       </div>
-      ${f ? html`<p class="hint" data-filter-note>Solo ${filterLabel(f)}: sus turnos, «No ha llegado», las salidas y quién está fuera del salón. Soporte IT, los relevos, el mantenimiento y el salón de conferencias son de toda la escuela.</p>` : ''}
+      ${f ? html`<p class="hint" data-filter-note>Solo ${filterLabel(f)}: sus turnos, «No ha llegado», las salidas y quién está fuera del salón. Soporte IT, los relevos, el mantenimiento y las reservas son de toda la escuela.</p>` : ''}
       <div class="stats">
         ${tile(active.filter((t) => t.status === 'waiting').length, 'En fila')}
         ${tile(active.filter((t) => t.status !== 'waiting').length, 'En atención o en camino')}
@@ -1240,7 +1243,7 @@ export async function liveView(ctx) {
             <span class="item-sub">${[m.status === 'on_the_way' ? `Va ${m.taken_by_name}` : 'Pendiente', timeAgo(m.created_at)].join(' · ')}</span></span>
           <span class="tag ${URGENCY[m.urgency]?.cls || ''}">${URGENCY[m.urgency]?.label}</span>
         </a>`, { note: b.maintenance_done ? `${b.maintenance_done} ${b.maintenance_done === 1 ? 'resuelta' : 'resueltas'} hoy.` : '' })}
-      ${liveSection('Salón de conferencias hoy', b.rooms, (r) => html`<a class="item" href="#/rooms/${r.id}">
+      ${liveSection('Reservas de hoy', b.rooms, (r) => html`<a class="item" href="#/rooms/${r.id}">
           <span class="item-icon">${icon('room')}</span>
           <span class="item-main"><strong>${r.purpose}</strong>
             <span class="item-sub">${fmtTime(r.start_time)} – ${fmtTime(r.end_time)} · ${r.created_by_name}</span></span>
@@ -1370,6 +1373,41 @@ function liveSteps(t) {
  * En vivo › a turn (tapping it on the board, in «Fuera del salón ahora» or in a service's day): who, what is happening
  * now, how long it took, every detail (also the teacher's note) and every step with its time. It refreshes by itself.
  */
+// ---- Resumen del día › a service's turns of that day ----------------------------------------------
+
+/** #/summary/2026-11-03/service/3: each turn of that day, as in En vivo; each one opens with everything about it. */
+export async function summaryServiceView({ el, params, setTitle }) {
+  const [day, id] = [params[0], Number(params[1])];
+  const [services, turns] = await Promise.all([servicesOverview(), dayTurns(id, day)]);
+  const s = services.find((x) => x.id === id);
+  if (!s) {
+    el.innerHTML = String(html`<div class="card">${empty('pulse', 'No se encontró el servicio.', '')}</div>`);
+    return;
+  }
+  setTitle(s.name);
+  const open = turns.filter(isLiveOpen);
+  const done = turns.filter((t) => !isLiveOpen(t));
+  const finished = done.filter((t) => t.status === 'done');
+  el.innerHTML = String(html`<div class="stack">
+    <h2 class="capitalize summary-sub">${fmtLongDate(day)}</h2>
+    <div class="stats">
+      ${tile(turns.length, 'Pedidos')}
+      ${tile(finished.length, s.mode === 'support' ? 'Resueltos' : 'Atendidos')}
+      ${tile(done.length - finished.length, 'Cancelados o sin atender')}
+    </div>
+    ${open.length ? html`<section class="section">
+        <h3 class="section-title">En curso <span class="count warn">${open.length}</span></h3>
+        <div class="list">${open.map((t) => dayTurn(t, s))}</div>
+      </section>` : ''}
+    <section class="section">
+      <h3 class="section-title">Turnos del día <span class="count">${done.length}</span></h3>
+      ${done.length ? html`<div class="list">${done.map((t) => dayTurn(t, s))}</div>` : html`<p class="muted pad">No hubo turnos ese día.</p>`}
+    </section>
+    <p class="hint">Cada turno dice su motivo, quién lo pidió, quién lo atendió y la hora de cada paso. Toca uno para ver todo, también la nota del maestro.</p>
+    <a class="btn btn-ghost btn-block" href="#/summary/${day}">${icon('back', 18)} Volver al resumen</a>
+  </div>`);
+}
+
 export async function liveTurnView(ctx) {
   const { el, params, isCurrent } = ctx;
   const id = Number(params[0]);

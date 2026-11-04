@@ -175,7 +175,7 @@ export async function rolesView({ el }) {
           toast(`Hay ${n} persona(s) con el rol «${role.name}». Cámbiales el rol antes de borrarlo.`, 'error');
           return;
         }
-        const ok = await dialog({ title: `¿Borrar el rol «${role.name}»?`, confirmText: 'Borrar', danger: true });
+        const ok = await dialog({ title: `¿Borrar el rol «${role.name}»?`, confirmText: 'Borrar', danger: true, doubleCheck: true });
         if (!ok) return;
         await busy(btn, async () => {
           await deleteRole(role.key);

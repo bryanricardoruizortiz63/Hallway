@@ -1,6 +1,6 @@
 // "Así está organizada Hallway": what's behind each tab, for whoever opens the app for the first time,
 // and "Cómo usar Hallway" (from Más) with the usual tasks and where each one is.
-import { $, can, html, isStaff, reportsOwn } from '../lib.js';
+import { $, can, html, isStaff, moduleOn, reportsOwn } from '../lib.js';
 import { icon } from '../icons.js';
 import { fixesOnly, inTabBar, navItems } from '../nav.js';
 import { state } from '../store.js';
@@ -45,11 +45,11 @@ function tabText(path, user) {
     case '/maintenance':
       return 'Los pedidos de limpieza que te tocan.';
     case '/live':
-      return 'Lo que pasa ahora en la escuela: Enfermería, Trabajo Social, alertas, mantenimiento y el salón. Elige un grado o grupo, activa el sonido o ábrelo en pantalla grande.';
+      return 'Lo que pasa ahora en la escuela: Enfermería, Trabajo Social, alertas, mantenimiento y reservas. Elige un grado o grupo, activa el sonido o ábrelo en pantalla grande.';
     case '/rooms':
       return can(user, 'rooms')
-        ? 'El salón de conferencias: resérvalo y aprueba las reservas del personal.'
-        : 'Pide el salón de conferencias para un día y hora, o mira quién lo tiene.';
+        ? 'Las reservas: reserva y aprueba las reservas del personal.'
+        : 'Pide una reserva para un día y hora, o mira cuándo está ocupado.';
     case '/more':
       return moreText(user);
     default:
@@ -119,8 +119,8 @@ function tasks(user) {
       : null,
     isStaff(user) && own ? ['#/home', 'calendar', 'Ver mis ausencias', 'Más › Mis ausencias'] : null,
     isStaff(user) ? ['#/absences', 'list', 'Buscar o exportar las ausencias del personal', `${absences} › Ver todas`] : null,
-    ['#/rooms', 'room', 'Pedir el salón de conferencias', `${where('/rooms', 'Salón de conferencias')} › Reservar el salón`],
-    ['#/rooms/history', 'list', 'Ver las reservas canceladas y su historial', `${where('/rooms', 'Salón de conferencias')} › Historial y canceladas`],
+    moduleOn(state.me.school, 'rooms') ? ['#/rooms', 'room', 'Hacer una reserva', `${where('/rooms', 'Reservas')} › Hacer una reserva`] : null,
+    moduleOn(state.me.school, 'rooms') ? ['#/rooms/history', 'list', 'Ver las reservas canceladas y su historial', `${where('/rooms', 'Reservas')} › Historial y canceladas`] : null,
     ['#/turns', 'pulse', 'Mandar un estudiante a Enfermería o Trabajo Social', `${where('/turns', 'Turnos')} › Pedir turno`],
     can(user, 'visitors') ? ['#/alerts/visit/new', 'door', 'Avisar que llegó un padre', 'Alertas › Llegó una visita'] : null,
     ['#/alerts/new/missing', 'alert', 'Avisar que un estudiante no ha llegado', 'Alertas › No ha llegado'],

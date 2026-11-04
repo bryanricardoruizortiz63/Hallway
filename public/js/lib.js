@@ -77,6 +77,7 @@ export const PERMISSIONS = [
   { key: 'reports', label: 'Datos y reportes', hint: 'Estadísticas, paneles de los servicios con sus motivos, exportar a Excel, respaldo y archivo anual.' },
   { key: 'settings', label: 'Configurar la escuela', hint: 'Nombre, Teams, correo y mensaje de bienvenida.' },
   { key: 'services', label: 'Configurar Turnos', hint: 'Los servicios de Turnos (Enfermería, Trabajo Social, Soporte IT…): quién los atiende, sus motivos y el tiempo para llegar.' },
+  { key: 'history', label: 'Historial del personal', hint: 'Ve e imprime el historial de cada empleado: lo que hizo en la app, el día y la hora (hora de Puerto Rico) y los detalles.' },
   { key: 'summary', label: 'Resumen del día', hint: 'Al terminar las clases le llega un aviso con el resumen del día: quién faltó y si se cubrió, los turnos, las alertas, el mantenimiento y quién falta mañana. Incluye ver las ausencias de todos.' },
 ];
 
@@ -225,6 +226,9 @@ export function schoolCalendar(school) {
   };
 }
 
+/** The place the school reserves (the school names it; «Salón de conferencias» until it does). */
+export const roomName = (school) => school?.calendar?.room_name || 'Salón de conferencias';
+
 /** Days without classes ({ start_date, end_date, name, kind }) that touch the range. */
 export const closuresIn = (closures, from, to = from) =>
   closures.filter((c) => c.start_date <= to && c.end_date >= from);
@@ -317,7 +321,7 @@ export const MODULES = {
   alerts: 'Alertas (No ha llegado, salidas, relevos)',
   visits: 'Visitas',
   maintenance: 'Mantenimiento',
-  rooms: 'Reservas del salón',
+  rooms: 'Reservas',
   live: 'En vivo',
 };
 
@@ -413,6 +417,8 @@ export function dialog({
   collect = false,
   onOpen = null,
   onSubmit = null,
+  // Something that can't be undone (deleting, cancelling): a second window asks once more before it happens.
+  doubleCheck = null,
 }) {
   return new Promise((resolve) => {
     const dlg = document.createElement('dialog');
@@ -449,9 +455,23 @@ export function dialog({
       e.preventDefault();
       done(null);
     });
+    let checking = false;
     dlg.querySelector('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = dlg.querySelector('form');
+      if (doubleCheck) {
+        if (checking) return;
+        checking = true;
+        const sure = await dialog({
+          title: '¿Estás seguro?',
+          message: doubleCheck === true ? 'Esta acción no se puede deshacer.' : doubleCheck,
+          confirmText: `Sí, ${confirmText.charAt(0).toLowerCase()}${confirmText.slice(1)}`,
+          cancelText: 'No, volver',
+          danger: true,
+        });
+        checking = false;
+        if (!sure) return;
+      }
       if (!onSubmit) {
         done(input ? dlg.querySelector('textarea').value.trim() : collect ? formValues(form) : true);
         return;

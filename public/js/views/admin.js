@@ -305,6 +305,7 @@ export async function employeeFormView({ el, params, setTitle }) {
                   Toca “Restablecer contraseña” y compártele la temporal.</p>`
               : ''}
             <a class="btn btn-secondary btn-block" href="#/absences?user_id=${employee.id}&status=all&from=">${icon('calendar', 18)} Ver sus ausencias</a>
+            ${can(me, 'history') ? html`<a class="btn btn-secondary btn-block" href="#/history/${employee.id}">${icon('list', 18)} Ver su historial</a>` : ''}
             ${self ? '' : html`<a class="btn btn-secondary btn-block" href="#/messages/new?to=${employee.id}">${icon('mail', 18)} Enviar mensaje</a>`}
             ${can(me, 'register') && !self && employee.role !== 'admin'
               ? html`<a class="btn btn-secondary btn-block" href="#/report?user_id=${employee.id}">${icon('plus', 18)} Registrar una ausencia</a>`
@@ -382,14 +383,25 @@ export async function employeeFormView({ el, params, setTitle }) {
 
   $('[data-reset]', el)?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
-    const ok = await dialog({
+    const v = await dialog({
       title: '¿Restablecer contraseña?',
-      message: `Se generará una contraseña temporal para ${employee.full_name} y se cerrará su sesión en todos sus dispositivos.`,
+      message: `${employee.full_name} tendrá una contraseña temporal nueva y se cerrará su sesión en todos sus dispositivos. Al entrar, la app le pedirá crear la suya.`,
+      body: html`<label class="field"><span>Contraseña temporal <em class="optional">opcional</em></span>
+        <span class="pw"><input name="password" type="password" minlength="8" maxlength="72" autocomplete="new-password"
+          placeholder="Vacía = se genera automáticamente"><button type="button" class="pw-toggle" data-pw>Ver</button></span></label>
+        <p class="hint">Escribe una (mínimo 8 caracteres) si prefieres elegirla tú.</p>`,
       confirmText: 'Restablecer',
+      collect: true,
+      onOpen: (dlg) => bindPasswordToggles(dlg),
     });
-    if (!ok) return;
+    if (!v) return;
+    const chosen = String(v.password || '').trim();
+    if (chosen && chosen.length < 8) {
+      toast('La contraseña debe tener al menos 8 caracteres.', 'error');
+      return;
+    }
     await busy(btn, async () => {
-      const res = await resetEmployeePassword(employee.id);
+      const res = await resetEmployeePassword(employee.id, chosen);
       await showCredentials(employee, res.temp_password, 'Nueva contraseña temporal', school);
     });
   });
@@ -401,6 +413,7 @@ export async function employeeFormView({ el, params, setTitle }) {
       message: 'Solo se puede eliminar si no tiene ausencias registradas. Si ya tiene historial, desactiva la cuenta.',
       confirmText: 'Eliminar',
       danger: true,
+      doubleCheck: true,
     });
     if (!ok) return;
     await busy(btn, async () => {
@@ -833,7 +846,7 @@ export async function dataView({ el, isCurrent }) {
             : ''}
           ${can(user, 'rooms')
             ? html`<a class="item" href="#/rooms/panel"><span class="item-icon">${icon('room')}</span>
-                <span class="item-main"><strong>Salón de conferencias</strong><span class="item-sub">Horas reservadas, por persona y Excel</span></span>${icon('chevron', 18)}</a>`
+                <span class="item-main"><strong>Reservas</strong><span class="item-sub">Horas reservadas, por persona y Excel</span></span>${icon('chevron', 18)}</a>`
             : ''}
         </div>
         <p class="hint">Los paneles de los servicios dicen el motivo de cada turno, nunca las notas de los maestros. Cada servicio ve solo el suyo.</p>

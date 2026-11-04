@@ -1,5 +1,5 @@
 import { getMe, markAlertsRead } from './backend.js';
-import { can, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, toast } from './lib.js';
+import { can, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -29,16 +29,19 @@ import { bookingDetailView, bookingHistoryView, newBookingView, roomsView } from
 import {
   liveServiceView,
   liveTurnView,
+  summaryServiceView,
   liveTvView,
   liveView,
   maintenancePanelView,
   roomsPanelView,
   servicePanelView,
 } from './views/panels.js';
-import { addAccountView, moreView, notificationsView, openAccountMenu, profileView, verifyCodeView } from './views/account.js';
+import { addAccountView, moreView, notificationsView, notifySettingsView, openAccountMenu, profileView, verifyCodeView } from './views/account.js';
 import { avatar } from './views/common.js';
 import { adoptAccountFromUrl, needsDailyCode, otherAccount, switchAccount } from './accounts.js';
 import { guideView } from './views/guide.js';
+import { checkCarriedTurns } from './views/carried.js';
+import { historyPeopleView, historyView } from './views/history.js';
 import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
 import { composeView, messageView, messagesView } from './views/messages.js';
@@ -95,16 +98,17 @@ const ROUTES = [
   { re: /^\/maintenance\/new$/, view: newMaintenanceView, title: 'Pedir mantenimiento', back: true },
   { re: /^\/maintenance\/(\d+)$/, view: maintenanceDetailView, title: 'Mantenimiento', back: true },
   { re: /^\/maintenance\/panel$/, view: maintenancePanelView, title: 'Panel de mantenimiento', allow: (u) => can(u, 'maintenance') || isStaff(u), back: true },
-  { re: /^\/rooms$/, view: roomsView, title: 'Salón de conferencias' },
-  { re: /^\/rooms\/new$/, view: newBookingView, title: 'Reservar el salón', back: true },
+  { re: /^\/rooms$/, view: roomsView, title: () => roomName(state.me?.school) },
+  { re: /^\/rooms\/new$/, view: newBookingView, title: 'Nueva reserva', back: true },
   { re: /^\/rooms\/history$/, view: bookingHistoryView, title: 'Historial de reservas', back: true },
-  { re: /^\/rooms\/(\d+)$/, view: bookingDetailView, title: 'Reserva del salón', back: true },
-  { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso del salón', allow: may('rooms'), back: true },
+  { re: /^\/rooms\/(\d+)$/, view: bookingDetailView, title: 'Reserva', back: true },
+  { re: /^\/rooms\/panel$/, view: roomsPanelView, title: 'Uso de las reservas', allow: may('rooms'), back: true },
   { re: /^\/live$/, view: liveView, title: 'En vivo', allow: may('live') },
   { re: /^\/live\/service\/(\d+)$/, view: liveServiceView, title: 'En vivo', allow: may('live'), back: true },
-  { re: /^\/live\/turn\/(\d+)$/, view: liveTurnView, title: 'Turno', allow: may('live'), back: true },
+  { re: /^\/live\/turn\/(\d+)$/, view: liveTurnView, title: 'Turno', allow: (u) => can(u, 'live') || can(u, 'summary'), back: true },
   // For a TV in the office: without the app's bars.
   { re: /^\/live\/tv$/, view: liveTvView, title: 'En vivo', allow: may('live'), bare: true },
+  { re: /^\/summary\/(\d{4}-\d{2}-\d{2})\/service\/(\d+)$/, view: summaryServiceView, title: 'Turnos del día', allow: may('summary'), back: true },
   { re: /^\/summary(?:\/(\d{4}-\d{2}-\d{2}))?$/, view: summaryView, title: 'Resumen del día', allow: may('summary'), back: true },
   // Enfermería, Trabajo Social…: only their own service's panel.
   { re: /^\/data$/, view: dataView, title: 'Datos y reportes', allow: (u) => can(u, 'reports') || !!u.serves?.length, back: true },
@@ -113,7 +117,10 @@ const ROUTES = [
   { re: /^\/message\/(\d+)$/, view: messageView, title: 'Mensaje', back: true },
   { re: /^\/notifications$/, view: notificationsView, title: 'Avisos', back: true },
   { re: /^\/profile$/, view: profileView, title: 'Mi perfil', back: true },
+  { re: /^\/profile\/notifications$/, view: notifySettingsView, title: 'Notificaciones', back: true },
   { re: /^\/more$/, view: moreView, title: 'Más' },
+  { re: /^\/history$/, view: historyPeopleView, title: 'Historial del personal', allow: may('history'), back: true },
+  { re: /^\/history\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, view: historyView, title: 'Historial', allow: may('history'), back: true },
   { re: /^\/guide$/, view: guideView, title: 'Cómo usar Hallway', back: true },
 ];
 
@@ -193,8 +200,9 @@ function renderShell(route, path) {
     setUnread(state.unread);
   }
   document.body.classList.remove('bare');
-  document.getElementById('page-title').textContent = route.title || '';
-  document.title = `${route.title ? `${route.title} · ` : ''}Hallway`;
+  const title = typeof route.title === 'function' ? route.title() : route.title || '';
+  document.getElementById('page-title').textContent = title;
+  document.title = `${title ? `${title} · ` : ''}Hallway`;
   appRoot.querySelector('.topbar').classList.toggle('has-back', !!route.back);
   for (const tab of appRoot.querySelectorAll('.tab')) {
     const active = tab.dataset.match.split(',').some((m) => path === m || path.startsWith(m.endsWith('/') ? m : `${m}/`));
@@ -318,7 +326,11 @@ async function router() {
       </div>`);
     el.querySelector('[data-retry]').addEventListener('click', () => router());
   }
-  if (user && !route.bare) refreshUnread();
+  if (user && !route.bare) {
+    refreshUnread();
+    // Turns from earlier days in the services this person attends: asked once per opening.
+    if (seq === navSeq) checkCarriedTurns(user);
+  }
 }
 
 /** An urgent notice while the app is open: alarm on screen (the screen already showing it just refreshes). */

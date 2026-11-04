@@ -2,7 +2,7 @@
 // every text that reaches the page (screens, dialogs, toasts, errors from the server) is swapped for its translation
 // as it appears, so a screen that isn't translated yet simply stays in Spanish. The choice is saved on the person's
 // profile (it follows them to any device) and on this device (for the sign-in screen).
-import { EN, EN_PATTERNS } from './i18n-en.js';
+import { EN, EN_PATTERNS, setPartTranslator } from './i18n-en.js';
 
 const KEY = 'lah:lang';
 export const LANGUAGES = [
@@ -50,6 +50,9 @@ export function t(text) {
   // Keep the spaces around it (they separate it from icons and other words).
   return key.slice(0, key.indexOf(trimmed)) + out + key.slice(key.indexOf(trimmed) + trimmed.length);
 }
+
+// The lines «a · b · c» of En vivo translate each part.
+setPartTranslator((x) => t(x));
 
 const ATTRS = ['placeholder', 'aria-label', 'title', 'alt'];
 // TEXT, ELEMENT, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT.
