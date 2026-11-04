@@ -2,8 +2,10 @@
 // stays in Spanish. EN_PATTERNS cover texts with a name, number or date inside.
 
 import { SERVER, VIEWS } from './i18n-en-views.js';
+import { NOTICES, NOTICE_PATTERNS } from './i18n-notices.js';
 
 export const EN = {
+  ...NOTICES,
   ...SERVER,
   ...VIEWS,
   // ---- Navigation and screen titles ----
@@ -392,23 +394,23 @@ export const EN_PATTERNS = [
   [/^Panel de (.+): estadísticas y Excel$/, '$1 panel: statistics and Excel'],
   [/^Para (.+?) · (.+)$/, 'For $1 · $2'],
   // Parts of the lines of lists and details (each «a · b» part is translated on its own).
-  [/^avisó ([^·]+)$/, (x) => `reported by ${x}`],
-  [/^pidió ([^·]+?)(?: (hace [^·]+))?$/, (x, ago) => `requested by ${x}${ago ? ` ${ago}` : ''}`],
-  [/^Salón ([^·]+)$/, 'Room $1'],
-  [/^salón ([^·]+)$/, 'room $1'],
-  [/^[Hh]acia las ([^·]+)$/, 'around $1'],
-  [/^venía de ([^·]+)$/, 'coming from $1'],
-  [/^está con ([^·]+)$/, 'with $1'],
-  [/^salió ([^·]+)$/, (x) => `left ${x}`],
-  [/^lo canceló ([^·]+)$/, 'cancelled by $1'],
-  [/^registrada por ([^·]+)$/, 'recorded by $1'],
+  [/^avisó ([^·.!?]+)$/, (x) => `reported by ${x}`],
+  [/^pidió ([^·.!?]+?)(?: (hace [^·.]+))?$/, (x, ago) => `requested by ${x}${ago ? ` ${ago}` : ''}`],
+  [/^Salón ([^·.!?]+)$/, 'Room $1'],
+  [/^salón ([^·.!?]+)$/, 'room $1'],
+  [/^[Hh]acia las ([^·.!?]+)$/, 'around $1'],
+  [/^venía de ([^·.!?]+)$/, 'coming from $1'],
+  [/^está con ([^·.!?]+)$/, 'with $1'],
+  [/^salió ([^·.!?]+)$/, (x) => `left ${x}`],
+  [/^lo canceló ([^·.!?]+)$/, 'cancelled by $1'],
+  [/^registrada por ([^·.!?]+)$/, 'recorded by $1'],
   [/^(.+) · tardó (\d+) min$/, '$1 · took $2 min'],
-  [/^Llegó a ([^·]+)$/, 'Arrived at $1'],
-  [/^No llegó a tiempo a ([^·]+)$/, 'Didn’t arrive at $1 in time'],
-  [/^Tardó en llegar a ([^·]+)$/, 'Was late arriving at $1'],
-  [/^Esperó ([^·]+)$/, (x) => `Waited ${x}`],
-  [/^atención ([^·]+)$/, (x) => `attention ${x}`],
-  [/^En fila hace ([^·]+)$/, (x) => `In line for ${x}`],
+  [/^Llegó a ([^·.!?]+)$/, 'Arrived at $1'],
+  [/^No llegó a tiempo a ([^·.!?]+)$/, 'Didn’t arrive at $1 in time'],
+  [/^Tardó en llegar a ([^·.!?]+)$/, 'Was late arriving at $1'],
+  [/^Esperó ([^·.!?]+)$/, (x) => `Waited ${x}`],
+  [/^atención ([^·.!?]+)$/, (x) => `attention ${x}`],
+  [/^En fila hace ([^·.!?]+)$/, (x) => `In line for ${x}`],
   [/^Qué se hizo: «(.+)»$/, 'What was done: “$1”'],
   [/^Solo los turnos de (.+)\.$/, 'Only the turns of $1.'],
   [/^(\d+) reservas? esperan? aprobación\.$/, (n) => `${n} booking${n === '1' ? '' : 's'} waiting for approval.`],
@@ -428,7 +430,7 @@ export const EN_PATTERNS = [
   [/^(.+) verá que su ausencia fue recibida\.$/, '$1 will see that their absence was received.'],
   [/^Su equipo, quienes también tienen (.+): (.+)\.$/, 'Their team, who also have $1: $2.'],
   [/^Nadie más tiene (.+): no hay equipo que cubra\.$/, 'Nobody else has $1: there’s no team to cover.'],
-  [/^Motivo: ([^·]+)$/, 'Reason: $1'],
+  [/^Motivo: ([^·.!?]+)$/, 'Reason: $1'],
   [/^Ver las cerradas hoy \((\d+)\)$/, 'Show the ones closed today ($1)'],
   [/^Ocultar las cerradas hoy \((\d+)\)$/, 'Hide the ones closed today ($1)'],
   [/^Ver los atendidos hoy \((\d+)\)$/, 'Show the ones seen today ($1)'],
@@ -491,4 +493,6 @@ export const EN_PATTERNS = [
   [/^(\d+) acciones? · última: (.+)$/, (n, at) => `${n} action${n === '1' ? '' : 's'} · last: ${at}`],
   [/^Hoy ya se apuntó en (.+) a alguien con un nombre parecido\.?$/, 'Someone with a similar name was already added today in $1.'],
   [/^(.+), que lo necesitó a esa hora · (.+)$/, '$1, who needed it at that time · $2'],
+  // The notices the server writes (last: the app's own patterns come first).
+  ...NOTICE_PATTERNS,
 ];

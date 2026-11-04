@@ -41,6 +41,8 @@ export type BrandedEmail = {
   note?: string;
   /** `cid:leap-logo` when the icon is attached, or a normal URL. */
   logoSrc: string;
+  /** The language of the layout's own words (the text itself comes already written). Spanish by default. */
+  lang?: 'es' | 'en';
 };
 
 export const escapeHtml = (s: string) =>
@@ -178,9 +180,10 @@ export function renderBody(text: string, highlights: string[] = [], buttonLabel 
 
 export function brandedHtml(e: BrandedEmail): string {
   const preheader = escapeHtml((e.preheader || '').slice(0, 140));
-  const body = renderBody(e.text, e.highlights || [], e.buttonLabel);
+  const en = e.lang === 'en';
+  const body = renderBody(e.text, e.highlights || [], e.buttonLabel || (en ? 'Open Hallway' : 'Abrir Hallway'));
   return `<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="${en ? 'en' : 'es'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
 <title>${escapeHtml(e.title)}</title></head>
 <body style="margin:0;padding:0;background:${C.bg};-webkit-text-size-adjust:100%">
@@ -205,7 +208,7 @@ ${e.cta ? `<div style="margin:6px 0 10px">${button(e.cta.url, e.cta.label)}</div
 
 <tr><td bgcolor="#ffffff" style="background:#ffffff;border:1px solid ${C.border};border-top:0;border-radius:0 0 16px 16px;padding:0 24px 22px">
 <div style="border-top:1px solid ${C.border};padding-top:14px;font:12px/1.5 ${FONT};color:${C.muted}">
-Enviado por <b style="color:${C.text}">${escapeHtml(e.schoolName)}</b> con Hallway.</div></td></tr>
+${en ? 'Sent by' : 'Enviado por'} <b style="color:${C.text}">${escapeHtml(e.schoolName)}</b> ${en ? 'with' : 'con'} Hallway.</div></td></tr>
 
 ${e.note ? `<tr><td align="center" style="padding:14px 24px 0;font:12px/1.5 ${FONT};color:${C.muted}">${escapeHtml(e.note)}</td></tr>` : ''}
 </table></td></tr></table></body></html>`;

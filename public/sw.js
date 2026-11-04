@@ -2,7 +2,7 @@
 // Paths are relative to this file so the app works under a sub-path (e.g. GitHub Pages).
 // VERSION is a fingerprint of every file in SHELL, written by `npm run sw-version` (CI checks it is up to date): any
 // change to the app changes this file, so phones download the new version.
-const VERSION = 'lah-4c611d8c7daa';
+const VERSION = 'lah-921bbcaca0dd';
 const SHELL = [
   'index.html',
   'manifest.webmanifest',
@@ -22,6 +22,8 @@ const SHELL = [
   'js/i18n.js',
   'js/i18n-en.js',
   'js/i18n-en-views.js',
+  'js/i18n-core.js',
+  'js/i18n-notices.js',
   'js/xlsx.js',
   'js/zip.js',
   'js/views/common.js',

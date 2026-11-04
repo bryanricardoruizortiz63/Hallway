@@ -5,6 +5,7 @@ import { json, serve, serviceClient } from '../_shared/http.ts';
 import { deleteAbsences } from '../_shared/cleanup.ts';
 import { buildCard, CATEGORIES, fmtRangeEs, postToTeams, scheduleText } from '../_shared/teams.ts';
 import { sendWebPush, type VapidKeys } from '../_shared/webpush.ts';
+import { inLang, langOf } from '../_shared/translate.ts';
 
 const db = serviceClient();
 const DAY = 86_400_000;
@@ -28,15 +29,16 @@ async function handlePush(payload: { notification_id: number; repeat?: boolean }
   const vapid = await setting<VapidKeys>('vapid');
   if (!vapid) return 'push: VAPID keys missing';
 
-  // The school's own icon, when it has one (set from the platform panel).
-  const { data: owner } = await db.from('profiles').select('school:schools(id, icon_version)').eq('id', n.user_id).maybeSingle();
+  // The school's own icon, when it has one (set from the platform panel), and the language the person chose.
+  const { data: owner } = await db.from('profiles').select('language, school:schools(id, icon_version)').eq('id', n.user_id).maybeSingle();
+  const lang = langOf(owner?.language);
   const school = owner?.school as unknown as { id: string; icon_version: number | null } | null;
   const icon = school?.icon_version
     ? `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/branding/${school.id}/icon-192.png?v=${school.icon_version}`
     : undefined;
   // uid: with two accounts on one phone, the app opens the notice as the account it belongs to.
   const message = JSON.stringify({
-    title: n.title, body: n.body || '', url: n.link || '#/notifications', icon, tag: n.tag, urgent: n.urgent, uid: n.user_id,
+    title: inLang(n.title, lang), body: inLang(n.body || '', lang), url: n.link || '#/notifications', icon, tag: n.tag, urgent: n.urgent, uid: n.user_id,
   });
   // An urgent notice that arrives more than 15 minutes late is no use.
   const options = { ttl: n.urgent ? 900 : 86400 };
