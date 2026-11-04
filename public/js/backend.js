@@ -208,6 +208,8 @@ export const updateMyContact = (email, phone) => rpc('update_my_contact', { p_em
 /** The Administración account's own name, position, email and phone (it belongs to a person, not just a role). */
 /** Spanish or English: saved on the profile. */
 export const setMyLanguage = (language) => rpc('set_my_language', { p_language: language });
+/** Kinds of notices whose phone alert I turned off. Returns the saved list. */
+export const setMyNotifyOff = (kinds) => rpc('set_my_notify_off', { p_kinds: kinds });
 
 export const updateAdminProfile = ({ full_name: name, position, email, phone }) =>
   rpc('update_admin_profile', { p_full_name: name || null, p_position: position || null, p_email: email || null, p_phone: phone || null });
@@ -1285,6 +1287,30 @@ export async function exportArchiveZip(school, data, onProgress = () => {}) {
   }
   files.sort((a, b) => a.name.localeCompare(b.name));
   download(`documentos_${school.code}_${data.from}_${data.to}.zip`, zip(files));
+}
+
+/**
+ * Saves files the person can already open (each with its signed url) on the phone or computer: one as it is,
+ * several in one ZIP (zipName). Their own names are kept.
+ */
+export async function downloadFiles(files, zipName = 'archivos.zip') {
+  const got = [];
+  for (const f of files) {
+    if (!f.url) continue;
+    const res = await fetch(f.url).catch(() => null);
+    if (!res?.ok) throw new ApiError(`No se pudo descargar «${f.original_name}». Revisa tu conexión e inténtalo de nuevo.`);
+    got.push({ name: f.original_name, mime: f.mime, data: new Uint8Array(await res.arrayBuffer()) });
+  }
+  if (!got.length) throw new ApiError('No hay archivos para descargar.');
+  if (got.length === 1) return download(got[0].name, new Blob([got[0].data], { type: got[0].mime || 'application/octet-stream' }));
+  // Two files with the same name: «plan.pdf», «plan (2).pdf».
+  const seen = new Map();
+  const named = got.map((g) => {
+    const n = (seen.get(g.name) || 0) + 1;
+    seen.set(g.name, n);
+    return { name: n === 1 ? g.name : g.name.replace(/(\.[^.]+)?$/, ` (${n})$1`), data: g.data };
+  });
+  download(zipName, zip(named));
 }
 
 export const archivePurge = (from, to) => callFunction('admin', { action: 'archive_purge', from, to, confirm: 'BORRAR' });

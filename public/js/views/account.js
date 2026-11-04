@@ -4,12 +4,14 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   setMyLanguage,
+  setMyNotifyOff,
   setMyRoom,
   testPush,
   updateAdminProfile,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast } from '../lib.js';
+import { $, busy, can, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
+import { locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
@@ -77,31 +79,104 @@ async function pushCard(slot, { compact = false } = {}) {
 
 // ---- Avisos -----------------------------------------------------------------------
 
+/** What a notice is about, by where it leads: its section, icon and order. */
+const CAUSES = [
+  { key: 'absences', test: /^#\/(absence|cover|dashboard|absences|home)\b/, label: 'Ausencias', icon: 'calendar' },
+  { key: 'turns', test: /^#\/turns\b/, label: 'Turnos', icon: 'pulse' },
+  { key: 'alerts', test: /^#\/alerts\/(missing|new\/missing)\b/, label: 'No ha llegado', icon: 'alert' },
+  { key: 'pickups', test: /^#\/alerts\/pickup\b/, label: 'Salidas', icon: 'user' },
+  { key: 'relief', test: /^#\/alerts\/relief\b/, label: 'Relevos', icon: 'users' },
+  { key: 'visits', test: /^#\/alerts\/visit\b/, label: 'Visitas', icon: 'door' },
+  { key: 'maintenance', test: /^#\/maintenance\b/, label: 'Mantenimiento', icon: 'wrench' },
+  { key: 'rooms', test: /^#\/rooms\b/, label: 'Salón de conferencias', icon: 'room' },
+  { key: 'messages', test: /^#\/messages?\b/, label: 'Mensajes', icon: 'mail' },
+  { key: 'summary', test: /^#\/summary\b/, label: 'Resumen del día', icon: 'chart' },
+  { key: 'staff', test: /^#\/employees\b/, label: 'Personal y contraseñas', icon: 'key' },
+  { key: 'other', test: /./, label: 'Otros avisos', icon: 'bell' },
+];
+const causeOf = (n) => CAUSES.find((c) => c.test.test(n.link || '')) || CAUSES.at(-1);
+
+/** «Hoy», «Ayer» or «Lunes, 3 de noviembre». */
+function noticeDay(iso) {
+  const d = new Date(iso);
+  const key = todayStr(d);
+  const today = todayStr();
+  if (key === today) return { key, title: 'Hoy' };
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  if (key === todayStr(y)) return { key, title: 'Ayer' };
+  const s = d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
+  return { key, title: s.charAt(0).toUpperCase() + s.slice(1) };
+}
+
 export async function notificationsView({ el, isCurrent, onLeave }) {
+  let filter = 'all';
+  let list = [];
+  let unreadCount = 0;
+  const draw = () => {
+    const shown = filter === 'all' ? list : list.filter((n) => causeOf(n).key === filter);
+    // Days, newest first; in each day, one block per cause (the cause with the newest notice first).
+    const days = [];
+    for (const n of shown) {
+      const d = noticeDay(n.created_at);
+      let day = days.find((x) => x.key === d.key);
+      if (!day) days.push((day = { ...d, causes: [] }));
+      const c = causeOf(n);
+      let block = day.causes.find((x) => x.cause.key === c.key);
+      if (!block) day.causes.push((block = { cause: c, items: [] }));
+      block.items.push(n);
+    }
+    const present = CAUSES.filter((c) => list.some((n) => causeOf(n).key === c.key));
+    $('[data-notices]', el).innerHTML = String(html`
+      ${present.length > 1 ? html`<div class="quick notice-filter" role="group" aria-label="Filtrar avisos">
+          <button type="button" class="chip-btn ${filter === 'all' ? 'active' : ''}" data-filter="all">Todos</button>
+          ${present.map((c) => html`<button type="button" class="chip-btn ${filter === c.key ? 'active' : ''}" data-filter="${c.key}">
+            ${icon(c.icon, 14)} ${c.label} <span class="count">${list.filter((n) => causeOf(n).key === c.key).length}</span></button>`)}
+        </div>` : ''}
+      ${days.map((d) => html`<section class="section notice-day">
+          <h3 class="section-title">${d.title}</h3>
+          ${d.causes.map((b) => html`<div class="notice-cause">
+            <h4 class="notice-cause-title">${icon(b.cause.icon, 16)} ${b.cause.label} <span class="count">${b.items.length}</span></h4>
+            <div class="list">${b.items.map(
+              (n) => html`<a class="item notif ${n.read_at ? '' : 'unread'}" href="${n.link || '#/notifications'}" data-id="${n.id}">
+                <span class="notif-icon">${icon(b.cause.icon, 18)}</span>
+                <span class="item-main">
+                  <strong>${n.title}</strong>
+                  ${n.body ? html`<span class="item-sub">${n.body}</span>` : ''}
+                  <span class="item-time">${fmtTime(new Date(n.created_at))} · ${timeAgo(n.created_at)}</span>
+                </span>
+              </a>`,
+            )}</div>
+          </div>`)}
+        </section>`)}`);
+    for (const b of el.querySelectorAll('[data-filter]')) {
+      b.addEventListener('click', () => {
+        filter = b.dataset.filter;
+        draw();
+      });
+    }
+    for (const a of el.querySelectorAll('.notif.unread')) {
+      a.addEventListener('click', () => {
+        markNotificationRead(Number(a.dataset.id)).catch(() => {});
+      });
+    }
+  };
   const load = async () => {
     const { notifications, unread } = await listNotifications();
     if (!isCurrent()) return;
     setUnread(unread);
+    list = notifications;
+    unreadCount = unread;
     el.innerHTML = String(html`
       <div data-push-slot></div>
-      ${notifications.length
+      ${list.length
         ? html`
           <div class="list-head">
-            <p class="muted">${unread ? `${unread} sin leer` : 'Todo leído'}</p>
-            ${unread ? html`<button class="btn btn-ghost btn-sm" data-read-all>${icon('check', 16)} Marcar todo como leído</button>` : ''}
+            <p class="muted">${unreadCount ? `${unreadCount} sin leer` : 'Todo leído'}</p>
+            ${unreadCount ? html`<button class="btn btn-ghost btn-sm" data-read-all>${icon('check', 16)} Marcar todo como leído</button>` : ''}
           </div>
-          <div class="list">${notifications.map(
-            (n) => html`<a class="item notif ${n.read_at ? '' : 'unread'}" href="${n.link || '#/notifications'}" data-id="${n.id}">
-              <span class="notif-icon">${icon('bell', 18)}</span>
-              <span class="item-main">
-                <strong>${n.title}</strong>
-                ${n.body ? html`<span class="item-sub">${n.body}</span>` : ''}
-                <span class="item-time">${timeAgo(n.created_at)}</span>
-              </span>
-            </a>`,
-          )}</div>`
+          <div data-notices></div>`
         : empty('bell', 'No tienes avisos', 'Aquí aparecerán las novedades sobre las ausencias.')}`);
-
     pushCard($('[data-push-slot]', el), { compact: true });
     $('[data-read-all]', el)?.addEventListener('click', (e) =>
       busy(e.currentTarget, async () => {
@@ -109,11 +184,7 @@ export async function notificationsView({ el, isCurrent, onLeave }) {
         await load();
       }),
     );
-    for (const a of el.querySelectorAll('.notif.unread')) {
-      a.addEventListener('click', () => {
-        markNotificationRead(Number(a.dataset.id)).catch(() => {});
-      });
-    }
+    if (list.length) draw();
   };
   await load();
   const onPush = () => load().catch(() => {});
@@ -141,6 +212,59 @@ function roomCard(user) {
   </form>`;
 }
 
+// ---- Which alerts sound -----------------------------------------------------------
+
+/** Kinds of notices each person can mute (the alert on the phone; the notice still shows in the bell). */
+function muteKinds(user, school) {
+  const turnsOn = moduleOn(school, 'turns') || moduleOn(school, 'support');
+  return [
+    { key: 'absences', label: 'Ausencias y cubiertas', hint: 'Ausencias nuevas, a quién te toca cubrir y cambios.', on: true },
+    { key: 'turns', label: 'Turnos', hint: 'Turnos que pides o atiendes (Enfermería, IT…).', on: turnsOn },
+    { key: 'relief', label: 'Relevos', hint: 'Cuando alguien pide un relevo o te toca darlo.', on: moduleOn(school, 'alerts') },
+    { key: 'alerts', label: 'Estudiantes que no han llegado', hint: 'Alertas de estudiantes que faltan al salón.', on: moduleOn(school, 'alerts') },
+    { key: 'pickups', label: 'Salidas de estudiantes', hint: 'Cuando recogen a un estudiante.', on: moduleOn(school, 'alerts') },
+    { key: 'visits', label: 'Visitas', hint: 'Visitas que llegan a la escuela.', on: moduleOn(school, 'visits') },
+    { key: 'maintenance', label: 'Mantenimiento', hint: 'Pedidos de mantenimiento y su estado.', on: moduleOn(school, 'maintenance') },
+    { key: 'rooms', label: 'Salón de conferencias', hint: 'Reservas del salón.', on: moduleOn(school, 'rooms') },
+    { key: 'messages', label: 'Mensajes', hint: 'Mensajes de la administración.', on: true },
+    { key: 'summary', label: 'Resumen del día', hint: 'El resumen al terminar las clases.', on: can(user, 'summary') },
+  ].filter((k) => k.on);
+}
+
+function notifyCard(user, school) {
+  const off = new Set(user.notify_off || []);
+  return html`<section class="card stack" data-notify>
+    <h2 class="card-title">${icon('bell')} Qué avisos te llegan</h2>
+    <p class="hint">Apaga los que no necesitas: ya no sonarán en tu teléfono, pero seguirán en la campana de avisos.
+      Los avisos de tu cuenta y contraseña siempre llegan.</p>
+    <div class="notify-list">
+      ${muteKinds(user, school).map((k) => html`<label class="toggle notify-row">
+          <input type="checkbox" data-kind="${k.key}" ${off.has(k.key) ? '' : 'checked'}>
+          <span class="toggle-ui"></span><span class="notify-text"><span>${k.label}</span><small>${k.hint}</small></span></label>`)}
+    </div>
+  </section>`;
+}
+
+function bindNotifyCard(el, user) {
+  const card = $('[data-notify]', el);
+  card?.addEventListener('change', async (e) => {
+    const box = e.target.closest('[data-kind]');
+    if (!box) return;
+    const before = user.notify_off || [];
+    const off = [...card.querySelectorAll('[data-kind]')].filter((b) => !b.checked).map((b) => b.dataset.kind);
+    box.disabled = true;
+    try {
+      user.notify_off = await setMyNotifyOff(off);
+      toast(box.checked ? 'Avisos encendidos' : 'Avisos apagados', 'ok');
+    } catch (err) {
+      box.checked = !before.includes(box.dataset.kind);
+      toast(err.message, 'error');
+    } finally {
+      box.disabled = false;
+    }
+  });
+}
+
 export async function profileView({ el }) {
   const { user, school } = state.me;
   el.innerHTML = String(html`
@@ -166,6 +290,7 @@ export async function profileView({ el }) {
       </section>
 
       <div data-push-slot></div>
+      ${notifyCard(user, school)}
       <div data-install-slot></div>
 
       ${user.role !== 'admin' ? roomCard(user) : ''}
@@ -214,6 +339,7 @@ export async function profileView({ el }) {
     user.language = code;
   });
   pushCard($('[data-push-slot]', el));
+  bindNotifyCard(el, user);
   installHint($('[data-install-slot]', el), { dismissible: false });
   $('[data-logout]', el).addEventListener('click', logout);
 

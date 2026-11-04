@@ -4556,3 +4556,66 @@ p.small {
     break-inside: avoid;
   }
 }
+
+/* «Descargar» under each file, and «Descargar todos» above the files. */
+.att-dl {
+  width: 100%;
+  min-height: 34px;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 13px;
+}
+
+[data-dl-all] {
+  justify-self: start;
+  margin-bottom: 8px;
+}
+
+/* Avisos: by day, and in each day by cause. */
+.notice-filter {
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.notice-filter .count {
+  margin-left: 2px;
+}
+
+.notice-cause {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.notice-cause-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 2px 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Mi perfil: which notices sound. */
+.notify-list {
+  display: flex;
+  flex-direction: column;
+}
+.notify-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.notify-row:first-child {
+  border-top: 0;
+}
+.notify-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notify-text small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
