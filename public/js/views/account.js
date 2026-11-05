@@ -10,7 +10,7 @@ import {
   updateAdminProfile,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, roomName, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
+import { $, busy, can, historyFull, roomName, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
 import { locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
@@ -429,9 +429,12 @@ export async function moreView({ el }) {
         : null,
       reportsOwn(user) && isStaff(user) ? ['#/home', 'calendar', 'Mis ausencias', 'Tus propias ausencias y su estado'] : null,
       isStaff(user) ? ['#/absences', 'list', 'Todas las ausencias', 'Busca por persona o fechas y exporta a Excel'] : null,
+      can(user, 'absence_search') ? ['#/search/absences', 'search', 'Buscar ausencias', 'Por nombre, fechas y grupo; guárdalas como PDF o foto'] : null,
+      can(user, 'own_absence_search') ? ['#/search/my-absences', 'search', 'Buscar mis ausencias', 'Tus ausencias por fechas; guárdalas como PDF o foto'] : null,
     ]],
     ['Día a día', [
       ['#/turns', 'pulse', 'Turnos', 'Enfermería, Trabajo Social y otros servicios'],
+      can(user, 'turn_search') || historyFull(user) ? ['#/search/turns', 'search', 'Buscar turnos', 'Los turnos de hoy y de días anteriores'] : null,
       ['#/maintenance', 'wrench', 'Mantenimiento', 'Pide limpieza y sigue las solicitudes'],
       can(user, 'rooms')
         ? ['#/rooms', 'room', roomName(school), 'Reserva y aprueba las reservas del personal']

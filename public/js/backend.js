@@ -728,6 +728,17 @@ export const setMyServiceStatus = (status, until) => rpc('set_my_service_status'
 
 /** Whether the service's turns stay open the next day (true) or close at the end of the school day. */
 export const setServiceKeepOpen = (id, keep) => rpc('set_service_keep_open', { p_id: id, p_keep: !!keep });
+/** A service's own hours for asking turns (both null: the school's class hours). */
+export const setServiceHours = (id, from, until) => rpc('set_service_hours', { p_id: id, p_from: from, p_until: until });
+
+/** «Buscar ausencias»: the staff's absences by name, dates and group (never the reason). */
+export const searchAbsences = ({ name, from, to, group }) =>
+  rpc('search_absences', { p_name: name || null, p_from: from || null, p_to: to || null, p_group: group || null });
+/** «Buscar mis ausencias»: one's own, by dates. */
+export const searchMyAbsences = ({ from, to }) => rpc('search_my_absences', { p_from: from || null, p_to: to || null });
+/** «Buscar turnos»: today's and earlier days' turns. */
+export const searchTurns = ({ from, to, name, service, group }) =>
+  rpc('search_turns', { p_from: from || null, p_to: to || null, p_name: name || null, p_service: service ? Number(service) : null, p_group: group || null });
 /** Turns still open from earlier days in the services I attend, not looked at today. */
 export const myCarriedTurns = () => rpc('my_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
 /** keep / close: ids of those turns. */

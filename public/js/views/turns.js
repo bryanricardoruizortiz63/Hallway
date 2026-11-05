@@ -12,6 +12,7 @@ import {
   requestService,
   returningStudents,
   saveService,
+  setServiceHours,
   setServiceKeepOpen,
   servicesOverview,
   setMyServiceStatus,
@@ -147,6 +148,8 @@ const names = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} y ${
  * turns); absent: those who are out while the rest attend.
  */
 function availability(service) {
+  // Outside its hours (or a day without classes) nobody asks for a turn; whoever attends it can still note one.
+  if (service.closed_reason) return { text: 'Fuera de horario', ok: false, closed: true, hours: service.closed_reason, absent: [] };
   const staff = service.staff || [];
   if (!staff.length) return { text: 'Nadie asignado', ok: false };
   const out = staff.map((p) => ({ ...p, absent: absentNow(p) }));
@@ -161,6 +164,7 @@ function availability(service) {
 /** What whoever asks for a turn should know when part (or all) of the service's staff is absent. */
 function absenceNotice(service) {
   const a = availability(service);
+  if (a.hours) return html`<p class="status-note warn" data-absence-notice>${icon('clock', 16)} <span>${a.hours}</span></p>`;
   if (!a.absent?.length) return '';
   if (a.closed) {
     const who = a.absent.length === 1
@@ -791,6 +795,7 @@ export async function newTurnView(ctx) {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
       if (!service) throw new Error('Elige el servicio.');
+      if (closed() && availability(service).hours) throw new Error(availability(service).hours);
       if (closed()) throw new Error(`${service.name} no está disponible en este momento: el personal del servicio se encuentra ausente.`);
       const help = support();
       const typed = help ? null : studentFrom(form);
@@ -1019,6 +1024,20 @@ export async function serviceFormView(ctx) {
         </div>
       </section>
       <section class="card stack">
+        <h2 class="card-title">${icon('clock')} Horario para pedir turnos</h2>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="hours" value="school" ${s.open_from ? '' : 'checked'}>
+            <span><strong>El horario de clases</strong><small>El de «Calendario escolar»${!s.open_from && s.opens ? ` (${fmtTime(s.opens)} – ${fmtTime(s.closes)})` : ''}.</small></span></label>
+          <label class="choice"><input type="radio" name="hours" value="own" ${s.open_from ? 'checked' : ''}>
+            <span><strong>Un horario propio</strong><small>Por ejemplo, si el servicio llega más tarde o se va antes.</small></span></label>
+        </div>
+        <div class="grid2" data-own-hours ${s.open_from ? '' : 'hidden'}>
+          <label class="field"><span>Desde</span><input type="time" name="open_from" value="${s.open_from || s.opens || '07:40'}"></label>
+          <label class="field"><span>Hasta</span><input type="time" name="open_until" value="${s.open_until || s.closes || '15:30'}"></label>
+        </div>
+        <p class="hint">Fuera de este horario, y los días sin clases, nadie puede pedir turnos a este servicio. Quien lo atiende sí puede anotar una visita.</p>
+      </section>
+      <section class="card stack">
         <h2 class="card-title">${icon('users')} ¿Quién lo atiende?</h2>
         <div class="chips">
           ${roles.map(
@@ -1050,9 +1069,17 @@ export async function serviceFormView(ctx) {
       for (const node of el.querySelectorAll('[data-minutes]')) node.hidden = !['visit', 'either'].includes(form.mode.value);
     });
   }
+  for (const input of el.querySelectorAll('[name=hours]')) {
+    input.addEventListener('change', () => { $('[data-own-hours]', el).hidden = form.hours.value !== 'own'; });
+  }
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
+      const own = form.hours.value === 'own';
+      const from = own ? form.open_from.value : null;
+      const until = own ? form.open_until.value : null;
+      if (own && (!from || !until)) throw new Error('Indica desde qué hora y hasta qué hora recibe turnos.');
+      if (own && from >= until) throw new Error('La hora final debe ser después de la inicial.');
       const saved = await saveService({
         id: isNew ? null : s.id,
         name: form.querySelector('[name=name]').value.trim(),
@@ -1064,6 +1091,7 @@ export async function serviceFormView(ctx) {
       });
       const keep = form.querySelector('[name=life]:checked')?.value === 'open';
       if (keep !== !!s.keep_open || isNew) await setServiceKeepOpen(saved?.id || s.id, keep);
+      if (from !== (s.open_from || null) || until !== (s.open_until || null)) await setServiceHours(saved?.id || s.id, from, until);
       toast('Servicio guardado', 'ok');
       go('/services', { replace: true });
     });

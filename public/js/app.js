@@ -1,5 +1,5 @@
 import { getMe, markAlertsRead } from './backend.js';
-import { can, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, toast } from './lib.js';
+import { can, historyFull, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -42,6 +42,7 @@ import { adoptAccountFromUrl, needsDailyCode, otherAccount, switchAccount } from
 import { guideView } from './views/guide.js';
 import { checkCarriedTurns } from './views/carried.js';
 import { historyPeopleView, historyView } from './views/history.js';
+import { absenceSearchView, myAbsenceSearchView, turnSearchView } from './views/search.js';
 import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
 import { composeView, messageView, messagesView } from './views/messages.js';
@@ -119,6 +120,9 @@ const ROUTES = [
   { re: /^\/profile$/, view: profileView, title: 'Mi perfil', back: true },
   { re: /^\/profile\/notifications$/, view: notifySettingsView, title: 'Notificaciones', back: true },
   { re: /^\/more$/, view: moreView, title: 'Más' },
+  { re: /^\/search\/absences$/, view: absenceSearchView, title: 'Buscar ausencias', allow: (u) => can(u, 'absence_search') || can(u, 'absences'), back: true },
+  { re: /^\/search\/my-absences$/, view: myAbsenceSearchView, title: 'Buscar mis ausencias', allow: may('own_absence_search'), back: true },
+  { re: /^\/search\/turns$/, view: turnSearchView, title: 'Buscar turnos', allow: (u) => can(u, 'turn_search') || historyFull(u), back: true },
   { re: /^\/history$/, view: historyPeopleView, title: 'Historial del personal', allow: may('history'), back: true },
   { re: /^\/history\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, view: historyView, title: 'Historial', allow: may('history'), back: true },
   { re: /^\/guide$/, view: guideView, title: 'Cómo usar Hallway', back: true },

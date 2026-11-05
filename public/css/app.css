@@ -4660,3 +4660,62 @@ fieldset.student-name > legend {
 fieldset.student-name .grid3 .field {
   font-size: 13px;
 }
+
+/* Búsquedas: choose the absences to save as PDF or image. */
+.search-row {
+  cursor: pointer;
+}
+
+.search-row > input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  accent-color: var(--primary);
+}
+
+.search-row.is-picked {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.search-results .item-sub {
+  white-space: normal;
+}
+
+.search-page [data-bar] .quick {
+  flex-wrap: nowrap;
+}
+
+.search-page [data-bar] .check-all {
+  flex: 1;
+  min-width: 0;
+}
+
+.check-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.check-all input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+}
+
+@media print {
+  .search-row.is-picked {
+    outline: none;
+  }
+
+  .search-results {
+    box-shadow: none !important;
+    border: 1px solid #ccc;
+  }
+
+  .search-row {
+    break-inside: avoid;
+  }
+}
