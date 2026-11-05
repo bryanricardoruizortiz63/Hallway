@@ -12,19 +12,23 @@ const S_HEADER = 1;
 const S_DATE = 2;
 const S_DATETIME = 3;
 const S_WRAP = 4;
+const S_DARK = 5;
+const S_TITLE = 6;
 
 const STYLES = `${XML}<styleSheet xmlns="${NS}">
 <numFmts count="2"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/><numFmt numFmtId="165" formatCode="yyyy-mm-dd h:mm AM/PM"/></numFmts>
-<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>
-<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1E4FD8"/><bgColor indexed="64"/></patternFill></fill></fills>
+<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FF1E4FD8"/><name val="Calibri"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1E4FD8"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="5">
+<cellXfs count="7">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -82,6 +86,25 @@ function sheetXml({ columns, rows }) {
 </worksheet>`;
 }
 
+/**
+ * «Verificación»: the document's code and link (lines; the first one as a title) and its QR code drawn with black
+ * cells, so it can be scanned from the screen or from the printed sheet.
+ */
+function verifySheetXml({ lines, matrix }) {
+  const top = lines.length + 1;
+  const size = matrix.length;
+  const rows = lines.map((l, i) => `<row r="${i + 1}"><c r="A${i + 1}" t="inlineStr" s="${i ? 0 : S_TITLE}"><is><t xml:space="preserve">${esc(l)}</t></is></c></row>`);
+  for (let r = 0; r < size; r++) {
+    const cells = matrix[r].map((dark, c) => (dark ? `<c r="${colName(c + 1)}${top + r + 1}" s="${S_DARK}"/>` : '')).join('');
+    rows.push(`<row r="${top + r + 1}" ht="11.25" customHeight="1">${cells}</row>`);
+  }
+  return `${XML}<worksheet xmlns="${NS}" xmlns:r="${REL_NS}">
+<sheetFormatPr defaultRowHeight="15"/>
+<cols><col min="1" max="1" width="2" customWidth="1"/><col min="2" max="${size + 1}" width="1.7" customWidth="1"/></cols>
+<sheetData>${rows.join('')}</sheetData>
+</worksheet>`;
+}
+
 const sheetName = (name, i) => (String(name).replace(/[[\]:*?/\\]/g, ' ').slice(0, 31).trim() || `Hoja${i + 1}`);
 
 /**
@@ -111,6 +134,7 @@ ${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" Con
 <sheets>${names.map((n, i) => `<sheet name="${esc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets>
 <definedNames>${sheets
         .map((s, i) => {
+          if (s.verify) return '';
           const ref = `'${names[i].replace(/'/g, "''")}'!$A$1:$${colName(s.columns.length - 1)}$${s.rows.length + 1}`;
           return `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">${esc(ref)}</definedName>`;
         })
@@ -123,7 +147,7 @@ ${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" Con
         .join('')}<Relationship Id="rId${names.length + 1}" Type="${REL_NS}/styles" Target="styles.xml"/></Relationships>`,
     },
     { name: 'xl/styles.xml', data: STYLES },
-    ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: sheetXml(s) })),
+    ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: s.verify ? verifySheetXml(s.verify) : sheetXml(s) })),
   ];
   return zip(files, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }

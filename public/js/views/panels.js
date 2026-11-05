@@ -14,6 +14,7 @@ import {
   closeServiceYear,
   downloadXlsx,
   getLiveTurn,
+  turnEvents,
   listClosures,
   liveBoard,
   liveHours,
@@ -57,6 +58,8 @@ import {
   TIMED,
   countdown,
   isLate,
+  changesSection,
+  closedText,
   outcomeLabel,
   placeText,
   statusTag,
@@ -261,7 +264,7 @@ export async function servicePanelView(ctx) {
   const waitOf = (t) => (walkIn(t) ? null : minutesBetween(t.created_at, t.called_at || t.on_the_way_at || t.arrived_at));
   const careOf = (t) => (visit && !t.on_the_way_at ? minutesBetween(t.arrived_at, t.returning_at || t.closed_at) : minutesBetween(t.on_the_way_at, t.closed_at));
   const resultOf = (t) =>
-    t.status === 'cancelled' ? 'Cancelado' : (support && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'En curso';
+    t.status === 'cancelled' ? closedText(t) : (support && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'En curso';
   const totalOf = (t) => minutesBetween(t.created_at, t.closed_at);
   const whole = (m) => (m === null ? null : Math.round(m));
   const isOpen = (t) => t.status !== 'done' && t.status !== 'cancelled';
@@ -779,7 +782,7 @@ function liveService(s, { filtered = false, link = true } = {}) {
     d.late ? `${d.late} no ${d.late === 1 ? 'llegó' : 'llegaron'} a tiempo` : null,
     // Like the Resumen del día: every turn of the day is counted somewhere.
     d.cancelled ? `${d.cancelled} ${d.cancelled === 1 ? 'cancelado' : 'cancelados'}` : null,
-    d.expired ? `${d.expired} sin atender (se ${d.expired === 1 ? 'cerró' : 'cerraron'} al final del día)` : null,
+    d.expired ? `${d.expired} sin tomar (${d.expired === 1 ? 'lo cerró' : 'los cerró'} el sistema al terminar el horario escolar)` : null,
     s.active.length ? `${s.active.length} en curso` : null,
   ].filter(Boolean).join(' · ');
   return html`<section class="card stack live-service" data-live-service="${s.id}">
@@ -1019,7 +1022,7 @@ function minutesText(m) {
 }
 /** How it ended: «Regresó al salón», «Resuelto», «Cancelado»… */
 const endText = (t, s) =>
-  t.status === 'cancelled' ? 'Cancelado' : (s.mode === 'support' ? SUPPORT_OUTCOMES[t.outcome] : null) || OUTCOMES[t.outcome] || 'Terminado';
+  t.status === 'cancelled' ? closedText(t) : (s.mode === 'support' ? SUPPORT_OUTCOMES[t.outcome] : null) || OUTCOMES[t.outcome] || 'Terminado';
 /** Minutes waiting (until it was called or someone went) and being attended (until it ended). */
 function turnMinutes(t) {
   const start = t.called_at || t.on_the_way_at || t.arrived_at;
@@ -1362,7 +1365,7 @@ function liveSteps(t) {
   const last = steps.reduce((n, step, i) => (step[2] ? i : n), 0);
   const shown = steps.filter((step, i) => step[2] || (open && !step[3] && i > last));
   if (t.status === 'done') shown.push([outcomeLabel(t), t.closed_by_name, t.closed_at]);
-  if (t.status === 'cancelled') shown.push(['Cancelado', t.closed_by_name, t.closed_at, 'is-cancelled']);
+  if (t.status === 'cancelled') shown.push(t.outcome === 'expired' ? ['Lo cerró el sistema: terminó el horario escolar y no se tomó el turno', null, t.closed_at, 'is-cancelled'] : ['Cancelado', t.closed_by_name, t.closed_at, 'is-cancelled']);
   return html`<ol class="timeline steps" data-steps>
     ${shown.map(([label, name, ts, cls = '']) => html`<li class="${ts ? 'is-done' : ''} ${cls}"><strong>${label}</strong>${name ? ` · ${name}` : ''}
       ${ts ? html`<small>${at(ts)} · ${timeAgo(ts)}</small>` : ''}</li>`)}
@@ -1413,7 +1416,7 @@ export async function liveTurnView(ctx) {
   const id = Number(params[0]);
 
   async function load() {
-    const t = await getLiveTurn(id);
+    const [t, events] = await Promise.all([getLiveTurn(id), turnEvents(id).catch(() => [])]);
     if (!isCurrent()) return;
     const support = t.service_mode === 'support';
     const open = isLiveOpen(t);
@@ -1446,6 +1449,7 @@ export async function liveTurnView(ctx) {
         <h2 class="card-title">${icon('clock')} Paso a paso</h2>
         ${liveSteps(t)}
       </section>
+      ${changesSection(events)}
       <a class="btn btn-secondary btn-block" href="#/live/service/${t.service_id}">${icon('list', 18)} Todos los turnos de hoy de ${t.service_name}</a>
       <a class="btn btn-ghost btn-block" href="#/live">${icon('back', 18)} Todo En vivo</a>
       <p class="hint live-stamp"><span class="live-dot" aria-hidden="true"></span> Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>

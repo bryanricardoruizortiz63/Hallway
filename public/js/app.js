@@ -45,6 +45,7 @@ import { historyPeopleView, historyView } from './views/history.js';
 import { absenceSearchView, myAbsenceSearchView, turnSearchView } from './views/search.js';
 import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
+import { verifyView } from './views/verify.js';
 import { composeView, messageView, messagesView } from './views/messages.js';
 
 // Who may open each screen: by the permissions of the person's role.
@@ -58,6 +59,8 @@ const may = (perm) => (u) => can(u, perm);
 const ROUTES = [
   { re: /^\/login$/, view: loginView, public: true, bare: true },
   { re: /^\/platform$/, view: platformView, public: true, bare: true },
+  // Checks a document's code (from its QR): it works without an account.
+  { re: /^\/verify(?:\/([A-Za-z0-9-]{4,20}))?$/, view: verifyView, public: true, bare: true },
   { re: /^\/change-password$/, view: changePasswordView, bare: true },
   { re: /^\/verify-code$/, view: verifyCodeView, bare: true },
   { re: /^\/accounts\/add$/, view: addAccountView, title: 'Agregar otra cuenta', back: true },

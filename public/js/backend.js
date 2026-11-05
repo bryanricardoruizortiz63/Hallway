@@ -772,17 +772,17 @@ const historyRow = (r, full, who) => [
 ];
 
 /** One person's history in Excel (what is on screen). full: with the turns' records. */
-export function exportPersonHistoryXlsx(person, rows, full) {
+export function exportPersonHistoryXlsx(person, rows, full, { from = null, to = null, period = '' } = {}) {
   const list = [...rows].sort((a, b) => a.at.localeCompare(b.at));
-  downloadXlsx(`historial_${slugName(person.full_name)}_${todayIso()}.xlsx`, [{
+  return downloadXlsx(`historial_${slugName(person.full_name)}_${todayIso()}.xlsx`, [{
     name: 'Historial',
     columns: HISTORY_COLUMNS(full, true),
     rows: list.map((r) => historyRow({ ...r, subject_name: r.about ? person.full_name : null }, full, true)),
-  }]);
+  }], { kind: 'history', user: person.id, from, to, title: `Historial de ${person.full_name}`, details: period || null });
 }
 
 /** The whole school's history of a period in Excel: everything, by person and (Admin, Director) the turns' records. */
-export function exportSchoolHistoryXlsx(school, rows, full, from) {
+export function exportSchoolHistoryXlsx(school, rows, full, from, to) {
   const byPerson = new Map();
   for (const r of rows) {
     const x = byPerson.get(r.actor_name) || [r.actor_name, 0, null];
@@ -806,7 +806,9 @@ export function exportSchoolHistoryXlsx(school, rows, full, from) {
       rows: rows.filter((r) => r.record).map((r) => [xDate(prDay(r.at)), prTime(r.at), r.actor_name, r.action, r.record]),
     });
   }
-  downloadXlsx(`historial_${school.code}_${prDay(from)}_${todayIso()}.xlsx`, sheets);
+  return downloadXlsx(`historial_${school.code}_${prDay(from)}_${todayIso()}.xlsx`, sheets, {
+    kind: 'school_history', from, to, title: `Historial del personal de ${school.name}`, details: `Desde ${prDay(from)}`,
+  });
 }
 
 const slugName = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').toLowerCase();
@@ -835,6 +837,10 @@ export function listTurns() {
   );
 }
 export const getTurn = (id) => one('service_requests_v', id, 'No se encontró el turno.');
+
+/** Every change of a turn: who made it («Sistema» when nobody did) and when, oldest first. */
+export const turnEvents = (id) =>
+  run(sb.from('service_request_events').select('id, at, actor_name, kind, what').eq('request_id', id).order('at').order('id'));
 
 /** The same student's earlier turns in that service (only the service sees them). */
 export const turnHistory = (t) =>
@@ -1088,8 +1094,38 @@ export function closeServiceYear(serviceId, from, to) {
   return callFunction('admin', { action: 'close_service_year', service_id: serviceId, from_ts: start, to_ts: end, confirm: 'BORRAR' });
 }
 
-/** sheets: [{ name, columns: [{ header, width, wrap }], rows }] */
-export const downloadXlsx = (filename, sheets) => download(filename, buildXlsx(sheets));
+/**
+ * Seals a document the app makes (docs.js): the database keeps a copy, who and when, and gives its code.
+ * kind: absences (ids) · turns (ids) · history (user, from, to) · school_history (from, to) · export (items).
+ */
+export const sealDocument = ({ kind, format, title, details = null, ids = null, user = null, from = null, to = null, items = null }) =>
+  rpc('seal_document', {
+    p_kind: kind, p_format: format, p_title: title, p_details: details, p_ids: ids, p_user: user,
+    p_from: from, p_to: to, p_items: items,
+  });
+
+/** What Hallway kept of a document (works without an account): null when the code doesn't exist. */
+export const verifyDocument = (code) => rpc('verify_document', { p_code: code });
+
+/**
+ * sheets: [{ name, columns: [{ header, width, wrap }], rows }]. Every Excel is sealed: it gets a «Verificación» sheet
+ * with its code and QR code. seal: what to seal (by default, a download of the first sheet's rows); if it can't be
+ * sealed (no connection), it downloads without it.
+ */
+export async function downloadXlsx(filename, sheets, seal = {}) {
+  let all = sheets;
+  try {
+    const docs = await import('./docs.js');
+    const title = seal.title || filename.replace(/\.xlsx$/, '').replace(/_/g, ' ');
+    const s = await sealDocument({
+      kind: 'export', items: sheets[0]?.rows?.length || 0, ...seal, title, format: 'excel',
+    });
+    all = [...sheets, await docs.verifySheet(s, title)];
+  } catch (err) {
+    console.warn('No se pudo sellar el Excel', err);
+  }
+  download(filename, buildXlsx(all));
+}
 
 // ---- Datos y reportes ------------------------------------------------------------
 
@@ -1194,9 +1230,10 @@ export async function exportAbsencesXlsx(code, { from, to } = {}) {
   const history = await fetchByIds('absence_history', 'absence_id', rows.filter((a) => a.status === 'cancelled').map((a) => a.id));
   const reasons = new Map(history.filter((h) => h.action === 'cancelled').map((h) => [h.absence_id, h.note]));
   const suffix = from || to ? `_${from || 'inicio'}_${to || 'hoy'}` : '';
-  download(
+  await downloadXlsx(
     `ausencias_${code}${suffix}.xlsx`,
-    buildXlsx([{ name: 'Ausencias', columns: ABSENCE_COLUMNS, rows: rows.map((a) => absenceRow(a, reasons)) }]),
+    [{ name: 'Ausencias', columns: ABSENCE_COLUMNS, rows: rows.map((a) => absenceRow(a, reasons)) }],
+    { title: 'Ausencias del personal', details: from || to ? `${from || 'inicio'} – ${to || 'hoy'}` : null },
   );
 }
 
@@ -1209,16 +1246,17 @@ export async function exportEmployeesXlsx(code) {
     { header: 'Activo', width: 8 }, { header: 'Ausencias', width: 10 },
     { header: 'Último acceso', width: 17 }, { header: 'Creado', width: 17 },
   ];
-  download(
+  await downloadXlsx(
     `empleados_${code}.xlsx`,
-    buildXlsx([{
+    [{
       name: 'Personal',
       columns,
       rows: rows.map((u) => [
         u.full_name, u.username, roleLabel(u.role), u.position, u.email, u.phone, u.employee_number,
         u.room, (u.groups || []).join(', '), u.active ? 'Sí' : 'No', u.absence_count, xDateTime(u.last_login_at), xDateTime(u.created_at),
       ]),
-    }]),
+    }],
+    { title: 'Personal de la escuela' },
   );
 }
 

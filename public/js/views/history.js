@@ -3,7 +3,8 @@
 // records (the student and the turn) only reach the Admin and Director(a). It lasts one school year: on July 1 the
 // year that ended is deleted, so it is downloaded before as a backup.
 import { activityHistory, activityHistoryAll, exportPersonHistoryXlsx, exportSchoolHistoryXlsx, historyPeople } from '../backend.js';
-import { $, busy, historyFull, html, roleLabel } from '../lib.js';
+import { $, busy, historyFull, html, roleLabel, toast } from '../lib.js';
+import { historyBlock, printHallwayDoc, seal } from '../docs.js';
 import { state } from '../store.js';
 import { locale } from '../i18n.js';
 import { icon } from '../icons.js';
@@ -69,8 +70,9 @@ export async function historyPeopleView({ el }) {
   const all = $('[data-download-all]', el);
   all.addEventListener('click', () => busy(all, async () => {
     const from = yearStart();
-    const rows = await activityHistoryAll(from, new Date(Date.now() + 86_400_000).toISOString());
-    exportSchoolHistoryXlsx(state.me.school, rows, full, from);
+    const to = new Date(Date.now() + 86_400_000).toISOString();
+    const rows = await activityHistoryAll(from, to);
+    await exportSchoolHistoryXlsx(state.me.school, rows, full, from, to);
   }));
 }
 
@@ -86,6 +88,8 @@ export async function historyView({ el, params, setTitle }) {
   setTitle(`Historial · ${person.full_name}`);
   let period = '30';
   let rows = [];
+  let from = null;
+  const periodText = () => PERIODS.find(([v]) => v === period)?.[1] || '';
 
   const draw = (q = '') => {
     const needle = q.trim().toLowerCase();
@@ -115,7 +119,7 @@ export async function historyView({ el, params, setTitle }) {
   };
 
   const load = async () => {
-    const from = period === 'year' ? yearStart() : new Date(Date.now() - Number(period) * 86_400_000).toISOString();
+    from = period === 'year' ? yearStart() : new Date(Date.now() - Number(period) * 86_400_000).toISOString();
     rows = await activityHistory(id, from, null);
     draw($('[data-search]', el).value);
   };
@@ -136,7 +140,7 @@ export async function historyView({ el, params, setTitle }) {
       <p class="muted" data-count></p>
       <span class="quick">
         <button type="button" class="btn btn-secondary btn-sm" data-xlsx>${icon('download', 16)} Excel</button>
-        <button type="button" class="btn btn-secondary btn-sm" data-print>${icon('list', 16)} Imprimir</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-print>${icon('download', 16)} PDF</button>
       </span>
     </div>
     <div data-rows></div>
@@ -150,7 +154,19 @@ export async function historyView({ el, params, setTitle }) {
     load();
   });
   $('[data-search]', el).addEventListener('input', (e) => draw(e.target.value));
-  $('[data-print]', el).addEventListener('click', () => window.print());
-  $('[data-xlsx]', el).addEventListener('click', () => exportPersonHistoryXlsx(person, rows, historyFull(state.me.user)));
+  // PDF in Hallway's layout, sealed: what the database has for this person in the period, with its code and QR.
+  $('[data-print]', el).addEventListener('click', (e) => busy(e.currentTarget, async () => {
+    if (!rows.length) return toast('No hay actividad en este período.', 'error');
+    const title = `Historial de ${person.full_name}`;
+    const s = await seal({ kind: 'history', format: 'pdf', title, details: periodText(), user: id, from });
+    const list = [...rows].sort((a, b) => a.at.localeCompare(b.at));
+    await printHallwayDoc({
+      title,
+      subtitle: [[person.job, roleLabel(person.role)].filter(Boolean).join(' · '), periodText(), 'Horas de Puerto Rico'].filter(Boolean).join(' · '),
+      blocks: list.map(historyBlock),
+    }, s);
+  }));
+  $('[data-xlsx]', el).addEventListener('click', (e) => busy(e.currentTarget, () =>
+    exportPersonHistoryXlsx(person, rows, historyFull(state.me.user), { from, period: periodText() })));
   await load();
 }
