@@ -9,7 +9,7 @@ import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
 import { empty } from './common.js';
-import { SEVERITY, outcomeLabel } from './turns.js';
+import { SEVERITY, closedText } from './turns.js';
 
 const STATUS = { pending: 'Pendiente', received: 'Recibida', cancelled: 'Cancelada' };
 
@@ -302,7 +302,7 @@ export async function turnSearchView({ el }) {
             <strong>${r.student_name ? `${r.student_name}${r.group_name ? ` (${r.group_name})` : ''}` : r.room || r.service_name}</strong>
             <span class="item-sub">${[r.service_name, r.reason, SEVERITY[r.severity]?.label].filter(Boolean).join(' · ')}</span>
             <span class="item-sub">${fmtDateTime(r.created_at)} · ${t('Pidió')}: ${r.created_by_name || '—'}${r.handled_by_name ? ` · ${t('Atendió')}: ${r.handled_by_name}` : ''}</span>
-            <span class="item-tags"><span class="tag">${['done', 'cancelled'].includes(r.status) ? (r.status === 'cancelled' && !r.outcome ? 'Cancelado' : outcomeLabel(r)) : OPEN[r.status] || r.status}</span></span>
+            <span class="item-tags"><span class="tag">${['done', 'cancelled'].includes(r.status) ? closedText(r) : OPEN[r.status] || r.status}</span></span>
           </span>
           ${icon('chevron', 18)}
         </a>`)}</div>`

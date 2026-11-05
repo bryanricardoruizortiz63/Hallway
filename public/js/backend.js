@@ -836,6 +836,10 @@ export function listTurns() {
 }
 export const getTurn = (id) => one('service_requests_v', id, 'No se encontró el turno.');
 
+/** Every change of a turn: who made it («Sistema» when nobody did) and when, oldest first. */
+export const turnEvents = (id) =>
+  run(sb.from('service_request_events').select('id, at, actor_name, kind, what').eq('request_id', id).order('at').order('id'));
+
 /** The same student's earlier turns in that service (only the service sees them). */
 export const turnHistory = (t) =>
   run(

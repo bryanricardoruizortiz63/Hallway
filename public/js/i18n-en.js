@@ -319,6 +319,14 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^Cancelado por (.+)$/, (who) => `Cancelled by ${who}`],
+  [/^(.+) · cerró (.+)$/, (how, who) => `${how} · closed by ${who}`],
+  [/^Lo llamó a (.+)$/, (s) => `Called them to ${s}`],
+  [/^Marcó que llegó a (.+)$/, (s) => `Marked that they arrived at ${s}`],
+  [/^Llegó a (.+)$/, (s) => `Arrived at ${s}`],
+  [/^Cerró el turno: (.+)$/, (how) => `Closed the turn: ${how}`],
+  [/^Cambió el salón: (.*) → (.*)$/, (a, b) => `Changed the room: ${a} → ${b}`],
+  [/^Cambió la gravedad: (.+) → (.+)$/, (a, b) => `Changed the severity: ${a} → ${b}`],
   [/^Hoy no hay clases: (.+) no recibe turnos\.$/, (service) => `There are no classes today: ${service} isn’t taking turns.`],
   [/^(.+) recibe turnos de (.+?) a (.+?)\. Ahora está fuera de su horario\.$/,
     (service, from, to) => `${service} takes turns from ${enTime(from)} to ${enTime(to)}. It’s outside its hours now.`],

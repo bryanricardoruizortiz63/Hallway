@@ -16,6 +16,7 @@ import {
   setServiceKeepOpen,
   servicesOverview,
   setMyServiceStatus,
+  turnEvents,
   turnHistory,
 } from '../backend.js';
 import { $, busy, can, dialog, moduleOn, schoolIcon, serviceOn, fmtDate, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast, todayStr } from '../lib.js';
@@ -54,6 +55,27 @@ const isSupport = (t) => t.service_mode === 'support';
 const supportTitle = (t) => t.reason || 'Pedido de ayuda';
 /** Where help is needed, as typed: "204" → "Salón 204"; "Biblioteca" stays. */
 export const placeText = (room) => (room ? (/^\d/.test(room) ? `Salón ${room}` : room) : null);
+/** How a closed turn ended, with who closed it: «Cancelado por Ana Torres», «Cerrado por el sistema». */
+export const closedText = (t) =>
+  t.status === 'cancelled'
+    ? t.outcome === 'expired'
+      ? 'Cerrado por el sistema: nadie lo atendió'
+      : `Cancelado${t.closed_by_name && t.closed_by_name !== 'Sistema' ? ` por ${t.closed_by_name}` : ''}`
+    : t.status === 'done' && t.closed_by_name
+      ? `${outcomeLabel(t)} · cerró ${t.closed_by_name}`
+      : outcomeLabel(t);
+
+/** «Quién hizo cada cambio»: every change of the turn with who made it and when. */
+export function changesSection(events) {
+  if (!events?.length) return '';
+  return html`<section class="card stack" data-changes>
+    <h2 class="card-title">${icon('users')} Quién hizo cada cambio</h2>
+    <ol class="timeline">${events.map((e) => html`<li class="is-done ${e.actor_name === 'Sistema' ? 't-system' : ''}">
+      <strong>${e.what}</strong> · ${e.actor_name}<small>${fmtDateTime(e.at)}</small></li>`)}</ol>
+    <p class="hint">«Sistema» quiere decir que nadie lo hizo: Hallway lo cerró solo al final del día porque nadie lo atendió.</p>
+  </section>`;
+}
+
 export const outcomeLabel = (t) => (isSupport(t) && SUPPORT_OUTCOMES[t.outcome]) || OUTCOMES[t.outcome] || 'Terminado';
 const who = (t) => (isSupport(t) ? `${supportTitle(t)}${t.room ? ` (${t.room})` : ''}` : `${t.student_name} (${t.group_name})`);
 // The group doesn't break at its hyphen.
@@ -90,7 +112,7 @@ export function statusTag(t) {
     returning: { label: 'Regresa al salón', cls: 'tag-warn' },
   }[t.status];
   if (open) return open;
-  if (t.status === 'cancelled') return { label: 'Cancelado', cls: '' };
+  if (t.status === 'cancelled') return { label: t.outcome === 'expired' ? 'Cerrado por el sistema' : 'Cancelado', cls: '' };
   if (t.outcome === 'unconfirmed') return { label: OUTCOMES.unconfirmed, cls: 'tag-warn' };
   if (isSupport(t) && t.outcome === 'referred') return { label: outcomeLabel(t), cls: 'tag-warn' };
   return { label: outcomeLabel(t), cls: t.outcome === 'expired' ? '' : 'tag-ok' };
@@ -840,7 +862,7 @@ function steps(t) {
             [`${t.service_name} va ${isSupport(t) ? 'en camino' : 'al salón'}`, t.on_the_way_at ? t.handled_by_name : null, t.on_the_way_at],
           ];
   if (t.status === 'done') list.push([outcomeLabel(t), t.closed_by_name, t.closed_at]);
-  if (t.status === 'cancelled') list.push(['Cancelado', t.closed_by_name, t.closed_at]);
+  if (t.status === 'cancelled') list.push(t.outcome === 'expired' ? ['Lo cerró el sistema: nadie lo atendió', null, t.closed_at] : ['Cancelado', t.closed_by_name, t.closed_at]);
   return html`<ol class="timeline steps">
     ${list.map(([label, name, at]) => html`<li class="${at ? 'is-done' : ''}"><strong>${label}</strong>${at ? html`${name ? ` · ${name}` : ''}<small>${timeAgo(at)}</small>` : ''}</li>`)}
   </ol>`;
@@ -876,7 +898,7 @@ export async function turnDetailView(ctx) {
   let history = null;
 
   async function load() {
-    const [t, services] = await Promise.all([getTurn(id), servicesOverview()]);
+    const [t, services, events] = await Promise.all([getTurn(id), servicesOverview(), turnEvents(id).catch(() => [])]);
     if (!isCurrent()) return;
     const service = services.find((s) => s.id === t.service_id) || { serves: false };
     if (service.serves && !isSupport(t) && !history) history = await turnHistory(t).catch(() => []);
@@ -912,6 +934,7 @@ export async function turnDetailView(ctx) {
           ${steps(t)}
         </section>
         ${actions.map((a) => actionButton(a))}
+        ${changesSection(events)}
         ${service.serves && isSupport(t) && t.status === 'done'
           ? html`<button type="button" class="btn btn-secondary btn-block" data-resolution>${icon('edit', 18)} ${t.resolution ? 'Cambiar lo que se hizo' : 'Anotar qué se hizo'}</button>`
           : ''}
