@@ -4926,3 +4926,56 @@ fieldset.student-name .grid3 .field {
 .verify-line {
   white-space: normal;
 }
+
+/* Más › Comentarios y problemas. */
+.feedback-item .item-sub.pre {
+  white-space: pre-wrap;
+}
+
+.feedback-reply {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--primary);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+/* Platform panel › errors, failed sign-ins and comments. */
+details.card > summary.card-title {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.card > summary.card-title::-webkit-details-marker {
+  display: none;
+}
+
+.log-item {
+  display: block;
+}
+
+.log-item > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-item .item-sub {
+  white-space: normal;
+}
+
+.log-detail {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow: auto;
+}

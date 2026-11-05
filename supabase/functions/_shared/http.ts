@@ -25,11 +25,37 @@ export function serve(fn: (req: Request) => Promise<Response>) {
     try {
       return await fn(req);
     } catch (err) {
-      if (err instanceof HttpError) return json({ error: err.message }, err.status);
+      if (err instanceof HttpError) {
+        if (err.status >= 500) await logServerError(req, err, err.status);
+        return json({ error: err.message }, err.status);
+      }
       console.error(err);
+      await logServerError(req, err, 500);
       return json({ error: 'Ocurrió un error inesperado. Inténtalo de nuevo.' }, 500);
     }
   });
+}
+
+let logDb: SupabaseClient | null = null;
+
+/** The creator's error history (app_errors, 30 days): what failed on the server, where and the details. */
+async function logServerError(req: Request, err: unknown, status: number) {
+  try {
+    logDb ??= serviceClient();
+    const e = err as { message?: string; stack?: string; code?: string; details?: string; hint?: string };
+    await logDb.from('app_errors').insert({
+      source: 'server',
+      kind: e.code ? `db:${e.code}`.slice(0, 40) : 'exception',
+      route: new URL(req.url).pathname.slice(0, 300),
+      message: String(e.message || err).slice(0, 1000),
+      detail: [e.details, e.hint, e.stack].filter(Boolean).join('\n').slice(0, 8000) || null,
+      status,
+      ip: (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null,
+      device: (req.headers.get('user-agent') || '').slice(0, 300) || null,
+    });
+  } catch (logErr) {
+    console.error('app_errors', logErr);
+  }
 }
 
 /**

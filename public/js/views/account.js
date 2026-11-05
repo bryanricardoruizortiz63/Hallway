@@ -462,6 +462,7 @@ export async function moreView({ el }) {
       ['#/notifications', 'bell', 'Avisos', state.unread ? `${state.unread} sin leer` : 'Lo que te ha llegado: ausencias, turnos, alertas y mensajes'],
       ['#/profile', 'user', 'Mi perfil', 'Idioma, notificaciones, contraseña, tu salón e instalar la app'],
       ['#/guide', 'sparkle', 'Cómo usar Hallway', 'Dónde está cada cosa'],
+      ['#/feedback', 'chat', 'Comentarios y problemas', 'Cuéntanos una idea o un problema de la app'],
     ]],
   ]
     .map(([title, links]) => [title, links.filter((link) => link && !inTabBar(user, link[0].slice(1)) && linkOn(link[0]))])

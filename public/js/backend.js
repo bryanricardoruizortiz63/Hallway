@@ -149,6 +149,33 @@ export async function getMe() {
   }
 }
 
+/**
+ * The creator's error history: an error the app had, with the screen and the details (the server adds who and the
+ * school). Never fails: if it can't be sent, it is lost.
+ */
+export async function sendErrorReport({ kind, message, detail = null, route = null, status = null }) {
+  try {
+    const device = navigator.userAgent.slice(0, 300);
+    const { data } = await sb.auth.getSession();
+    if (data.session) {
+      await sb.rpc('log_app_error', { p_kind: kind, p_message: message, p_detail: detail, p_route: route, p_status: status, p_device: device });
+    } else {
+      await callFunction('report', { action: 'error', kind, message, detail, route, status }, { auth: false });
+    }
+  } catch {
+    /* lost */
+  }
+}
+
+/** A failed sign-in, for the creator's security: the server works out what was wrong and emails after too many. */
+const reportLoginFailed = (code, username) =>
+  callFunction('report', { action: 'login_failed', code, username }, { auth: false }).catch(() => {});
+
+/** Más › Comentarios y problemas. kind: idea | problem | other. */
+export const sendFeedback = (kind, message, route) =>
+  rpc('send_feedback', { p_kind: kind, p_message: message, p_route: route || null, p_device: navigator.userAgent.slice(0, 300) });
+export const myFeedback = () => rpc('my_feedback');
+
 export async function signIn(schoolCode, username, password) {
   let code = String(schoolCode || '').trim().toUpperCase();
   const user = String(username || '').trim();
@@ -165,7 +192,10 @@ export async function signIn(schoolCode, username, password) {
   if (error) {
     if (error.code === 'user_banned') throw new ApiError('Tu cuenta está desactivada. Habla con la dirección.');
     if (error.status === 429) throw new ApiError('Demasiados intentos. Espera unos minutos e inténtalo de nuevo.');
-    if (error.status === 400) throw new ApiError('Código de escuela, usuario o contraseña incorrectos.');
+    if (error.status === 400) {
+      reportLoginFailed(code, user);
+      throw new ApiError('Código de escuela, usuario o contraseña incorrectos.');
+    }
     throw toApiError(error);
   }
   const me = await getMe();
