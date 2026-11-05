@@ -41,7 +41,7 @@ export const OUTCOMES = {
   referred: 'Referido',
   attended: 'Atendido',
   cancelled: 'Cancelado',
-  expired: 'Nadie lo cerró',
+  expired: 'Cerrado al terminar el horario escolar',
   unconfirmed: 'Regreso sin confirmar',
 };
 
@@ -59,7 +59,7 @@ export const placeText = (room) => (room ? (/^\d/.test(room) ? `Salón ${room}` 
 export const closedText = (t) =>
   t.status === 'cancelled'
     ? t.outcome === 'expired'
-      ? 'Cerrado por el sistema: nadie lo atendió'
+      ? 'Cerrado por el sistema: terminó el horario escolar'
       : `Cancelado${t.closed_by_name && t.closed_by_name !== 'Sistema' ? ` por ${t.closed_by_name}` : ''}`
     : t.status === 'done' && t.closed_by_name
       ? `${outcomeLabel(t)} · cerró ${t.closed_by_name}`
@@ -72,7 +72,7 @@ export function changesSection(events) {
     <h2 class="card-title">${icon('users')} Quién hizo cada cambio</h2>
     <ol class="timeline">${events.map((e) => html`<li class="is-done ${e.actor_name === 'Sistema' ? 't-system' : ''}">
       <strong>${e.what}</strong> · ${e.actor_name}<small>${fmtDateTime(e.at)}</small></li>`)}</ol>
-    <p class="hint">«Sistema» quiere decir que nadie lo hizo: Hallway lo cerró solo al final del día porque nadie lo atendió.</p>
+    <p class="hint">«Sistema» quiere decir que lo hizo Hallway solo: terminó el horario escolar y el turno no se tomó.</p>
   </section>`;
 }
 
@@ -862,7 +862,7 @@ function steps(t) {
             [`${t.service_name} va ${isSupport(t) ? 'en camino' : 'al salón'}`, t.on_the_way_at ? t.handled_by_name : null, t.on_the_way_at],
           ];
   if (t.status === 'done') list.push([outcomeLabel(t), t.closed_by_name, t.closed_at]);
-  if (t.status === 'cancelled') list.push(t.outcome === 'expired' ? ['Lo cerró el sistema: nadie lo atendió', null, t.closed_at] : ['Cancelado', t.closed_by_name, t.closed_at]);
+  if (t.status === 'cancelled') list.push(t.outcome === 'expired' ? ['Lo cerró el sistema: terminó el horario escolar y no se tomó el turno', null, t.closed_at] : ['Cancelado', t.closed_by_name, t.closed_at]);
   return html`<ol class="timeline steps">
     ${list.map(([label, name, at]) => html`<li class="${at ? 'is-done' : ''}"><strong>${label}</strong>${at ? html`${name ? ` · ${name}` : ''}<small>${timeAgo(at)}</small>` : ''}</li>`)}
   </ol>`;

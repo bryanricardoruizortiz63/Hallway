@@ -782,7 +782,7 @@ function liveService(s, { filtered = false, link = true } = {}) {
     d.late ? `${d.late} no ${d.late === 1 ? 'llegó' : 'llegaron'} a tiempo` : null,
     // Like the Resumen del día: every turn of the day is counted somewhere.
     d.cancelled ? `${d.cancelled} ${d.cancelled === 1 ? 'cancelado' : 'cancelados'}` : null,
-    d.expired ? `${d.expired} sin atender (se ${d.expired === 1 ? 'cerró' : 'cerraron'} al final del día)` : null,
+    d.expired ? `${d.expired} sin tomar (${d.expired === 1 ? 'lo cerró' : 'los cerró'} el sistema al terminar el horario escolar)` : null,
     s.active.length ? `${s.active.length} en curso` : null,
   ].filter(Boolean).join(' · ');
   return html`<section class="card stack live-service" data-live-service="${s.id}">
@@ -1365,7 +1365,7 @@ function liveSteps(t) {
   const last = steps.reduce((n, step, i) => (step[2] ? i : n), 0);
   const shown = steps.filter((step, i) => step[2] || (open && !step[3] && i > last));
   if (t.status === 'done') shown.push([outcomeLabel(t), t.closed_by_name, t.closed_at]);
-  if (t.status === 'cancelled') shown.push(t.outcome === 'expired' ? ['Lo cerró el sistema: nadie lo atendió', null, t.closed_at, 'is-cancelled'] : ['Cancelado', t.closed_by_name, t.closed_at, 'is-cancelled']);
+  if (t.status === 'cancelled') shown.push(t.outcome === 'expired' ? ['Lo cerró el sistema: terminó el horario escolar y no se tomó el turno', null, t.closed_at, 'is-cancelled'] : ['Cancelado', t.closed_by_name, t.closed_at, 'is-cancelled']);
   return html`<ol class="timeline steps" data-steps>
     ${shown.map(([label, name, ts, cls = '']) => html`<li class="${ts ? 'is-done' : ''} ${cls}"><strong>${label}</strong>${name ? ` · ${name}` : ''}
       ${ts ? html`<small>${at(ts)} · ${timeAgo(ts)}</small>` : ''}</li>`)}

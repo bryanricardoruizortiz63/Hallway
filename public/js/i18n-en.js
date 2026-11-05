@@ -319,6 +319,14 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^(.+) va al salón$/, (s) => `${s} is going to the classroom`],
+  [/^(.+) va en camino$/, (s) => `${s} is on the way`],
+  [/^Va a (.+)$/, (s) => `Going to ${s}`],
+  [/^turno (\d+)$/, (n) => `turn ${n}`],
+  [/^#(\d+) en la fila$/, (n) => `#${n} in line`],
+  [/^(\d+) min para llegar$/, (n) => `${n} min to arrive`],
+  [/^(\d+) sin tomar \((?:lo|los) cerró el sistema al terminar el horario escolar\)$/, (n) => `${n} not taken (the system closed ${n === '1' ? 'it' : 'them'} when the school day ended)`],
+  [/^([^·]+) ·$/, (s) => `${s} ·`],
   [/^Cancelado por (.+)$/, (who) => `Cancelled by ${who}`],
   [/^(.+) · cerró (.+)$/, (how, who) => `${how} · closed by ${who}`],
   [/^Lo llamó a (.+)$/, (s) => `Called them to ${s}`],
