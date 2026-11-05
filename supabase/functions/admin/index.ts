@@ -34,6 +34,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PERMISSIONS = [
   'absences', 'register', 'staff', 'settings', 'services', 'messages', 'reports',
   'live', 'calendar', 'rooms', 'security', 'visitors', 'maintenance', 'summary', 'history',
+  'absence_search', 'turn_search', 'own_absence_search',
 ];
 /** Duties rather than powers over other people's data: whoever manages the staff can give them. */
 const DUTIES = ['maintenance'];

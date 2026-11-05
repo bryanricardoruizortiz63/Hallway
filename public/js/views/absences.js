@@ -27,6 +27,7 @@ import {
   weekdays,
 } from '../lib.js';
 import {
+  freshFileUrl,
   addAttachments,
   addComment,
   addCoverLinks,
@@ -106,18 +107,32 @@ function canChange(a, me) {
 export const reportView = (ctx) => absenceForm(ctx, null);
 
 export async function editAbsenceView(ctx) {
-  const { absence } = await getAbsence(ctx.params[0]);
-  if (!canChange(absence, state.me.user)) {
+  const data = await getAbsence(ctx.params[0]);
+  if (!canChange(data.absence, state.me.user)) {
     throw new Error(
-      absence.status === 'cancelled'
+      data.absence.status === 'cancelled'
         ? 'La ausencia está cancelada.'
         : 'Solo el empleado o quien registra las ausencias del personal pueden modificar esta ausencia.',
     );
   }
-  return absenceForm(ctx, absence);
+  return absenceForm(ctx, data.absence, data);
 }
 
-async function absenceForm({ el, query }, absence) {
+/** The files and links already saved, in «Modificar ausencia»: each with «Quitar» (who added it, or the staff). */
+function savedItems(items, me, kind) {
+  if (!items.length) return '';
+  return html`<ul class="file-list saved-list">${items.map((x) => {
+    const removable = kind === 'link' ? x.added_by === me.id || can(me, 'staff') : x.uploaded_by === me.id || can(me, 'staff');
+    const name = kind === 'link' ? x.label || linkText(x.url) : x.original_name;
+    return html`<li data-saved="${kind}:${x.id}">${icon(kind === 'link' ? 'link' : 'file', 18)}<span>${name}</span>
+      ${kind === 'link' ? '' : html`<small>${fileSize(x.size)}</small>`}
+      ${removable
+        ? html`<button type="button" class="link-btn" data-drop="${kind}:${x.id}">Quitar</button>`
+        : ''}</li>`;
+  })}</ul>`;
+}
+
+async function absenceForm({ el, query }, absence, saved = null) {
   const me = state.me.user;
   const editing = !!absence;
   // Whoever registers the staff's absences (and the Administración account) can report one for someone else;
@@ -142,6 +157,11 @@ async function absenceForm({ el, query }, absence) {
   const startTime = absence?.start_time?.slice(0, 5) || '08:00';
   const endTime = absence?.end_time?.slice(0, 5) || '';
   const category = v0.category || '';
+  // While editing: what is already saved, and what will be removed on «Guardar cambios».
+  const savedExcuses = (saved?.attachments || []).filter((f) => !f.for_cover);
+  const savedCover = (saved?.attachments || []).filter((f) => f.for_cover);
+  const savedLinks = saved?.links || [];
+  const dropped = new Set();
 
   el.innerHTML = String(html`
     <form class="stack" data-form novalidate>
@@ -205,25 +225,38 @@ async function absenceForm({ el, query }, absence) {
         </label>
       </section>
 
-      <section class="card stack" data-coverage-notes ${needsCoverage(initialRole) || v0.coverage_notes ? '' : 'hidden'}>
+      <section class="card stack" data-coverage-notes ${needsCoverage(initialRole) || v0.coverage_notes || savedCover.length || savedLinks.length ? '' : 'hidden'}>
         <h2 class="card-title">${icon('users')} Para cubrir la clase <em class="optional">opcional</em></h2>
         <label class="field"><span>Instrucciones para quien te cubra</span>
           <textarea name="coverage_notes" rows="3" maxlength="1000"
             placeholder="Ej.: El plan está en el escritorio. Grupo 3-B: lectura pág. 45.">${v0.coverage_notes || ''}</textarea>
         </label>
-        ${editing
-          ? ''
-          : html`<div class="stack-sm" data-cover-links>
-              <label class="field"><span>Enlace para quien te cubra <em class="optional">opcional</em></span>
-                <input name="cover_link" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://docs.google.com/…"></label>
-            </div>
-            <button type="button" class="link-btn" data-more-link>${icon('plus', 16)} Otro enlace</button>
-            <label class="btn btn-secondary btn-block file-btn" data-cover-pick>
-              ${icon('clip', 18)} Adjuntar plan o material
-              <input type="file" name="cover_files" multiple accept="${ACCEPT}" hidden>
-            </label>
-            <ul class="file-list" data-cover-files></ul>
-            <p class="hint">Quien te cubra ve las instrucciones, los enlaces (un Google Doc, una presentación, un video…) y los archivos, y su aviso le dice que están en la app. Archivos: PDF, foto o Word, hasta ${MAX_FILES}.</p>`}
+        ${savedItems(savedLinks, me, 'link')}
+        ${savedItems(savedCover, me, 'file')}
+        <div class="stack-sm" data-cover-links>
+          <label class="field"><span>${editing ? 'Añadir enlace' : 'Enlace para quien te cubra'} <em class="optional">opcional</em></span>
+            <input name="cover_link" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://docs.google.com/…"></label>
+        </div>
+        <button type="button" class="link-btn" data-more-link ${savedLinks.length + 1 >= MAX_LINKS ? 'hidden' : ''}>${icon('plus', 16)} Otro enlace</button>
+        <label class="btn btn-secondary btn-block file-btn" data-cover-pick>
+          ${icon('clip', 18)} ${editing ? 'Añadir plan o material' : 'Adjuntar plan o material'}
+          <input type="file" name="cover_files" multiple accept="${ACCEPT}" hidden>
+        </label>
+        <ul class="file-list" data-cover-files></ul>
+        <p class="hint">Quien te cubra ve las instrucciones, los enlaces (un Google Doc, una presentación, un video…) y los archivos, y su aviso le dice que están en la app. Archivos: PDF, foto o Word, hasta ${MAX_FILES}.</p>
+      </section>
+
+      <section class="card stack">
+        <h2 class="card-title">${icon('clip')} Excusa o evidencia <em class="optional">opcional</em></h2>
+        ${savedItems(savedExcuses, me, 'file')}
+        <label class="dropzone">
+          <input type="file" name="files" multiple accept="${ACCEPT}">
+          ${icon('camera', 26)}
+          <strong>${editing ? 'Añadir foto o archivo' : 'Tomar foto o elegir archivo'}</strong>
+          <small>PDF, foto o Word · máx. ${maxMb} MB · hasta ${MAX_FILES} archivos</small>
+        </label>
+        <ul class="file-list" data-files></ul>
+        <p class="hint">Solo la ve la dirección; quien te cubra, no.</p>
       </section>
 
       ${editing
@@ -232,19 +265,8 @@ async function absenceForm({ el, query }, absence) {
             <label class="field"><span>Queda en el historial de la ausencia</span>
               <textarea name="note" rows="2" maxlength="500" placeholder="Ej.: Puse el lunes por error, era el martes."></textarea>
             </label>
-            <p class="hint">Los documentos se añaden o quitan desde la ausencia.</p>
           </section>`
-        : html`<section class="card stack">
-            <h2 class="card-title">${icon('clip')} Excusa o evidencia <em class="optional">opcional</em></h2>
-            <label class="dropzone">
-              <input type="file" name="files" multiple accept="${ACCEPT}">
-              ${icon('camera', 26)}
-              <strong>Tomar foto o elegir archivo</strong>
-              <small>PDF, foto o Word · máx. ${maxMb} MB · hasta ${MAX_FILES} archivos</small>
-            </label>
-            <ul class="file-list" data-files></ul>
-            <p class="hint">Solo la ve la dirección; quien te cubra, no.</p>
-          </section>`}
+        : ''}
 
       <button class="btn btn-primary btn-block btn-lg" type="submit">
         ${editing ? html`${icon('check')} Guardar cambios` : html`${icon('send')} Enviar ausencia`}</button>
@@ -313,8 +335,19 @@ async function absenceForm({ el, query }, absence) {
     field.querySelector('input').value = '';
     box.append(field);
     field.querySelector('input').focus();
-    e.currentTarget.hidden = box.querySelectorAll('[name=cover_link]').length >= MAX_LINKS;
+    e.currentTarget.hidden = box.querySelectorAll('[name=cover_link]').length + savedLinks.length >= MAX_LINKS;
   });
+  // «Quitar» only marks it: nothing is deleted until «Guardar cambios».
+  for (const btn of el.querySelectorAll('[data-drop]')) {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.drop;
+      const on = !dropped.has(key);
+      if (on) dropped.add(key);
+      else dropped.delete(key);
+      btn.closest('li').classList.toggle('is-dropped', on);
+      btn.textContent = on ? 'Deshacer' : 'Quitar';
+    });
+  }
   for (const r of form.querySelectorAll('[name=partial]')) r.addEventListener('change', update);
   update();
 
@@ -350,7 +383,7 @@ async function absenceForm({ el, query }, absence) {
     });
   }
   filePicker(form.querySelector('[name=files]'), $('[data-files]', el), files);
-  if (!editing) filePicker(form.querySelector('[name=cover_files]'), $('[data-cover-files]', el), coverFiles);
+  filePicker(form.querySelector('[name=cover_files]'), $('[data-cover-files]', el), coverFiles);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -365,7 +398,19 @@ async function absenceForm({ el, query }, absence) {
       // Checked before sending, so a wrong link doesn't leave the absence half done.
       const coverLinks = [...form.querySelectorAll('[name=cover_link]')].map((i) => toLink(i.value)).filter(Boolean);
       if (editing) {
+        if (coverLinks.length + savedLinks.length - [...dropped].filter((k) => k.startsWith('link:')).length > MAX_LINKS) {
+          throw new Error(`Máximo ${MAX_LINKS} enlaces por ausencia.`);
+        }
         await updateAbsence(absence.id, v);
+        // The documents: first what was removed, then what was added.
+        for (const key of dropped) {
+          const [kind, rid] = key.split(':');
+          if (kind === 'link') await removeCoverLink(Number(rid));
+          else await deleteAttachment(Number(rid));
+        }
+        if (files.length) await addAttachments(state.me, absence.id, files, { cover: false });
+        if (coverFiles.length) await addAttachments(state.me, absence.id, coverFiles, { cover: true });
+        if (coverLinks.length) await addCoverLinks(absence.id, coverLinks.map((url) => ({ url })));
         toast('Cambios guardados', 'ok');
         go(`/absence/${absence.id}`, { replace: true });
         return;
@@ -977,7 +1022,7 @@ function fileGrid(files, me, zipName = 'archivos.zip') {
     ? html`<button type="button" class="btn btn-secondary btn-sm" data-dl-all="${zipName}">${icon('download', 16)} Descargar todos (${files.length})</button>`
     : ''}<div class="attachments" data-files>${files.map(
     (f) => html`<div class="att">
-      <a href="${f.url || '#'}" target="_blank" rel="noopener" class="att-link">
+      <a href="${f.url || '#'}" target="_blank" rel="noopener" class="att-link" data-open-att="${f.id}">
         ${IMAGE_MIME.includes(f.mime) && f.url
           ? html`<img src="${f.url}" alt="" loading="lazy">`
           : html`<span class="att-icon">${icon('file', 28)}</span>`}
@@ -992,8 +1037,25 @@ function fileGrid(files, me, zipName = 'archivos.zip') {
   )}</div>`;
 }
 
-/** «Descargar» on each file and «Descargar todos» above them (in one ZIP). */
+/** «Descargar» on each file and «Descargar todos» above them (in one ZIP); opening a file asks for a new link. */
 function bindDownloads(root, files) {
+  for (const link of root.querySelectorAll('[data-open-att]')) {
+    link.addEventListener('click', async (e) => {
+      const f = files.find((x) => String(x.id) === link.dataset.openAtt);
+      if (!f) return;
+      e.preventDefault();
+      // Opened now, while the tap counts, so the browser doesn't block it; the address comes a moment later.
+      const win = window.open('', '_blank');
+      try {
+        const url = await freshFileUrl(f.path);
+        if (win) win.location.href = url;
+        else location.href = url;
+      } catch (err) {
+        win?.close();
+        toast(err.message, 'error');
+      }
+    });
+  }
   for (const btn of root.querySelectorAll('[data-dl]')) {
     btn.addEventListener('click', () => busy(btn, () => downloadFiles(files.filter((f) => String(f.id) === btn.dataset.dl))));
   }
@@ -1077,31 +1139,17 @@ export async function absenceView({ el, params }) {
         ${coverable || forCover.length || links.length
           ? html`<section class="card stack" data-cover-files>
               <h3 class="card-title">${icon('users')} Para quien cubra ${forCover.length + links.length ? html`<span class="count">${forCover.length + links.length}</span>` : ''}</h3>
-              ${links.length ? linkList(links, me) : ''}
-              ${forCover.length ? fileGrid(forCover, me) : ''}
+              ${links.length ? linkList(links, null) : ''}
+              ${forCover.length ? fileGrid(forCover, null) : ''}
               ${forCover.length || links.length ? '' : html`<p class="muted">No hay enlaces ni archivos para quien cubra.</p>`}
-              ${!cancelled && (mine || staff)
-                ? html`<div class="button-row">
-                    <button type="button" class="btn btn-secondary" data-add-link ${links.length >= MAX_LINKS ? 'disabled' : ''}>${icon('link', 18)} Añadir enlace</button>
-                    <label class="btn btn-secondary file-btn">
-                      ${icon('upload', 18)} Añadir archivo
-                      <input type="file" multiple accept="${ACCEPT}" data-upload="cover" hidden>
-                    </label>
-                  </div>`
-                : ''}
-              <p class="hint">Quien cubre lo ve en «Vas a cubrir», junto con las instrucciones, y su aviso le dice que hay material. Si ya hay alguien cubriendo, le avisamos de lo nuevo.</p>
+              <p class="hint">Quien cubre lo ve en «Vas a cubrir», junto con las instrucciones, y su aviso le dice que hay material. Si ya hay alguien cubriendo, le avisamos de lo nuevo.${editable ? ' Para añadir o quitar, toca «Modificar».' : ''}</p>
             </section>`
           : ''}
 
         <section class="card stack" data-excuse-files>
           <h3 class="card-title">${icon('clip')} Documentos ${excuses.length ? html`<span class="count">${excuses.length}</span>` : ''}</h3>
-          ${excuses.length ? fileGrid(excuses, me) : html`<p class="muted">No hay documentos adjuntos.</p>`}
-          ${!cancelled && (mine || staff)
-            ? html`<label class="btn btn-secondary btn-block file-btn">
-                ${icon('upload', 18)} Añadir documento
-                <input type="file" multiple accept="${ACCEPT}" data-upload="excuse" hidden>
-              </label>`
-            : ''}
+          ${excuses.length ? fileGrid(excuses, null) : html`<p class="muted">No hay documentos adjuntos.</p>`}
+          ${editable ? html`<p class="hint">Para añadir o quitar documentos, toca «Modificar».</p>` : ''}
           ${coverable ? html`<p class="hint">La excusa o evidencia solo la ven ${mine ? 'tú' : 'el empleado'} y la dirección; quien cubre, no.</p>` : ''}
         </section>
 
@@ -1174,71 +1222,7 @@ export async function absenceView({ el, params }) {
       });
     });
 
-    for (const input of el.querySelectorAll('[data-upload]')) {
-      input.addEventListener('change', () => {
-        const chosen = [...input.files];
-        input.value = '';
-        const problem = chosen.map(checkFile).find(Boolean);
-        if (problem) return toast(problem, 'error');
-        if (!chosen.length) return;
-        const cover = input.dataset.upload === 'cover';
-        const label = input.closest('label');
-        label.classList.add('is-busy');
-        addAttachments(state.me, Number(id), chosen.slice(0, MAX_FILES), { cover })
-          .then(async () => {
-            toast(cover ? 'Material añadido para quien cubra' : 'Documento añadido', 'ok');
-            await reload();
-          })
-          .catch((err) => {
-            toast(err.message, 'error');
-            label.classList.remove('is-busy');
-          });
-      });
-    }
-
-    $('[data-add-link]', el)?.addEventListener('click', async () => {
-      const saved = await dialog({
-        title: 'Enlace para quien cubra',
-        message: 'Un Google Doc, una presentación, un video… Quien cubre lo abre desde «Vas a cubrir».',
-        body: html`<label class="field"><span>Enlace</span>
-            <input name="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://docs.google.com/…"></label>
-          <label class="field"><span>Nombre <em class="optional">opcional</em></span>
-            <input name="label" maxlength="120" placeholder="Ej.: Plan de la semana"></label>`,
-        confirmText: 'Añadir',
-        collect: true,
-        onSubmit: (v) => {
-          const url = toLink(v.url);
-          if (!url) throw new Error('Escribe o pega el enlace.');
-          return addCoverLinks(Number(id), [{ url, label: v.label.trim() || null }]);
-        },
-      });
-      if (!saved) return;
-      toast('Enlace añadido para quien cubra', 'ok');
-      await reload();
-    });
-
-    for (const btn of el.querySelectorAll('[data-del-link]')) {
-      btn.addEventListener('click', async () => {
-        const ok = await dialog({ title: '¿Quitar este enlace?', message: 'Quien cubre dejará de verlo.', confirmText: 'Quitar', danger: true });
-        if (!ok) return;
-        await busy(btn, async () => {
-          await removeCoverLink(Number(btn.dataset.delLink));
-          await reload();
-        });
-      });
-    }
-
     bindDownloads(el, data.attachments);
-    for (const btn of el.querySelectorAll('[data-del-att]')) {
-      btn.addEventListener('click', async () => {
-        const ok = await dialog({ title: '¿Eliminar este archivo?', confirmText: 'Eliminar', danger: true, doubleCheck: 'El archivo se borra para siempre.' });
-        if (!ok) return;
-        await busy(btn, async () => {
-          await deleteAttachment(Number(btn.dataset.delAtt));
-          await reload();
-        });
-      });
-    }
 
     $('[data-cancel]', el)?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;

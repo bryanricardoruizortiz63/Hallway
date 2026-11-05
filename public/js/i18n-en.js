@@ -307,6 +307,9 @@ export const EN = {
 
 /** One part of a line «a · b · c»: the dictionary or a pattern (filled in below). */
 let t2 = (x) => x;
+/** «7:40 a. m.» → «7:40 AM». */
+const enTime = (x) => x.replace(/\s*a\.\s*m\.?/, ' AM').replace(/\s*p\.\s*m\.?/, ' PM');
+
 export function setPartTranslator(fn) {
   t2 = fn;
 }
@@ -316,6 +319,10 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^Hoy no hay clases: (.+) no recibe turnos\.$/, (service) => `There are no classes today: ${service} isn’t taking turns.`],
+  [/^(.+) recibe turnos de (.+?) a (.+?)\. Ahora está fuera de su horario\.$/,
+    (service, from, to) => `${service} takes turns from ${enTime(from)} to ${enTime(to)}. It’s outside its hours now.`],
+  [/^El de «Calendario escolar» \((.+?) – (.+?)\)\.$/, (from, to) => `The one in “School calendar” (${enTime(from)} – ${enTime(to)}).`],
   [/^(.+) no está disponible en este momento\. (.+) se encuentra ausente (hoy|hasta .+?)\.? Para una situación urgente, comunícate con la oficina\.$/,
     (service, name, u) => `${service} is not available at the moment. ${name} is out ${until(u)}. For an urgent matter, please contact the office.`],
   [/^(.+) no está disponible en este momento\. El personal del servicio se encuentra ausente\. Para una situación urgente, comunícate con la oficina\.$/,

@@ -289,6 +289,15 @@ export const addCoverLinks = (absenceId, links) => rpc('add_cover_links', { p_ab
 /** Takes a link away: whoever left it, or whoever manages the staff. */
 export const removeCoverLink = (id) => rpc('remove_cover_link', { p_id: id });
 
+/** A new link to open a file right now (the one on screen may be older than its 10 minutes). */
+export async function freshFileUrl(path) {
+  await freshSession();
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_SECONDS);
+  if (error || !data?.signedUrl) throw toApiError(error);
+  signedCache.set(`${BUCKET}/${path}`, { url: data.signedUrl, until: Date.now() + SIGNED_URL_SECONDS * 1000 });
+  return data.signedUrl;
+}
+
 /** Links that open each file for a few minutes (url; null if it can't be read). */
 async function signFiles(files) {
   if (files.length) {
@@ -337,8 +346,22 @@ export function checkFile(file) {
   return null;
 }
 
+/**
+ * Before uploading: a session about to expire is renewed first. Storage answers an expired one with a bare 400
+ * («No se pudo subir»), which is what a teacher saw with a PDF; now they get «Tu sesión expiró».
+ */
+async function freshSession() {
+  const { data } = await sb.auth.getSession();
+  const session = data?.session;
+  if (!session) throw unauthorized();
+  if ((session.expires_at || 0) * 1000 > Date.now() + 60_000) return;
+  const { error } = await sb.auth.refreshSession();
+  if (error) throw unauthorized();
+}
+
 async function uploadFiles(files, me) {
   const uploaded = [];
+  if (files.length) await freshSession();
   try {
     for (const file of files) {
       const type = fileType(file);
@@ -346,8 +369,11 @@ async function uploadFiles(files, me) {
       const path = `${me.school.id}/${me.user.id}/${crypto.randomUUID()}.${ext}`;
       const { error } = await sb.storage.from(BUCKET).upload(path, file, { contentType: type, upsert: false });
       if (error) {
+        const msg = String(error.message || '');
+        if (/jwt|token|exp|unauthori[sz]ed|not authenticated/i.test(msg)) throw unauthorized();
+        if (/Failed to fetch|NetworkError|Load failed|network/i.test(msg)) throw toApiError(error);
         throw new ApiError(
-          /size|large/i.test(error.message) ? `“${file.name}” es demasiado grande.` : `No se pudo subir “${file.name}”.`,
+          /size|large/i.test(msg) ? `“${file.name}” es demasiado grande.` : `No se pudo subir “${file.name}”. Inténtalo de nuevo.`,
         );
       }
       uploaded.push({ path, name: file.name });
@@ -702,6 +728,17 @@ export const setMyServiceStatus = (status, until) => rpc('set_my_service_status'
 
 /** Whether the service's turns stay open the next day (true) or close at the end of the school day. */
 export const setServiceKeepOpen = (id, keep) => rpc('set_service_keep_open', { p_id: id, p_keep: !!keep });
+/** A service's own hours for asking turns (both null: the school's class hours). */
+export const setServiceHours = (id, from, until) => rpc('set_service_hours', { p_id: id, p_from: from, p_until: until });
+
+/** «Buscar ausencias»: the staff's absences by name, dates and group (never the reason). */
+export const searchAbsences = ({ name, from, to, group }) =>
+  rpc('search_absences', { p_name: name || null, p_from: from || null, p_to: to || null, p_group: group || null });
+/** «Buscar mis ausencias»: one's own, by dates. */
+export const searchMyAbsences = ({ from, to }) => rpc('search_my_absences', { p_from: from || null, p_to: to || null });
+/** «Buscar turnos»: today's and earlier days' turns. */
+export const searchTurns = ({ from, to, name, service, group }) =>
+  rpc('search_turns', { p_from: from || null, p_to: to || null, p_name: name || null, p_service: service ? Number(service) : null, p_group: group || null });
 /** Turns still open from earlier days in the services I attend, not looked at today. */
 export const myCarriedTurns = () => rpc('my_carried_turns', { p_since: startOfToday() }).then((r) => r || []);
 /** keep / close: ids of those turns. */
