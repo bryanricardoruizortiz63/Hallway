@@ -1,5 +1,5 @@
 // Búsquedas (each one a permission in «Roles y permisos», off until the Admin turns it on):
-//   #/search/absences     «Buscar ausencias»: the staff's absences by name, dates and group (never the reason); the
+//   #/search/absences     «Buscar ausencias»: the staff's absences by name, dates and group, with the type and the reason; the
 //                         chosen ones are saved as a PDF (print) or an image (PNG) to send them.
 //   #/search/my-absences  «Buscar mis ausencias»: one's own, by dates; saved the same way.
 //   #/search/turns        «Buscar turnos»: today's and earlier days' turns.
@@ -25,6 +25,8 @@ function absenceLines(a, own) {
     own
       ? [a.category ? t(CATEGORIES[a.category]) : null, t(STATUS[a.status] || a.status)].filter(Boolean).join(' · ')
       : [a.employee_position, a.groups?.length ? `${t('Grupos')}: ${a.groups.join(', ')}` : null, t(STATUS[a.status] || a.status)].filter(Boolean).join(' · '),
+    own || !a.category ? null : `${t('Tipo')}: ${t(CATEGORIES[a.category] || a.category)}`,
+    a.reason ? `${t('Causa')}: ${a.reason}` : null,
     [coverText(a), a.cover_groups?.length ? `(${a.cover_groups.join(', ')})` : null].filter(Boolean).join(' '),
   ].filter(Boolean);
 }
@@ -54,7 +56,7 @@ function absenceSearch({ el }, own) {
       </div>
       ${own ? '' : html`<label class="field"><span>Grado o grupo</span><select name="group">${groupOptions()}</select></label>`}
       <button class="btn btn-primary btn-block" type="submit">${icon('search', 18)} Buscar</button>
-      ${own ? '' : html`<p class="hint">Busca por el grupo de la persona o por los grupos que se cubrieron. No se muestra la causa de la ausencia.</p>`}
+      ${own ? '' : html`<p class="hint">Busca por el grupo de la persona o por los grupos que se cubrieron. Incluye el tipo y la causa, para enviarlas a Recursos Humanos.</p>`}
     </form>
     <div class="list-head no-print" data-bar hidden>
       <label class="check-all"><input type="checkbox" data-all> <span data-count></span></label>

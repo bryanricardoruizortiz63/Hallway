@@ -78,7 +78,7 @@ export const PERMISSIONS = [
   { key: 'settings', label: 'Configurar la escuela', hint: 'Nombre, Teams, correo y mensaje de bienvenida.' },
   { key: 'services', label: 'Configurar Turnos', hint: 'Los servicios de Turnos (Enfermería, Trabajo Social, Soporte IT…): quién los atiende, sus motivos y el tiempo para llegar.' },
   { key: 'history', label: 'Historial del personal', hint: 'Ve, imprime y descarga el historial de cada empleado: lo que hizo en la app, el día y la hora (hora de Puerto Rico) y los detalles. El récord de los turnos con los estudiantes solo lo ven Admin y Director(a).' },
-  { key: 'absence_search', label: 'Buscar ausencias', hint: 'Busca las ausencias del personal por nombre, fechas y grado o grupo; elige las que quiera y las guarda como PDF o como foto para enviarlas. No muestra la causa.' },
+  { key: 'absence_search', label: 'Buscar ausencias', hint: 'Busca las ausencias del personal por nombre, fechas y grado o grupo; con el tipo y la causa; elige las que quiera y las guarda como PDF o como foto para enviarlas (por ejemplo, a Recursos Humanos).' },
   { key: 'own_absence_search', label: 'Buscar mis ausencias', hint: 'Busca sus propias ausencias por fechas y las guarda como PDF o como foto.' },
   { key: 'turn_search', label: 'Buscar turnos', hint: 'Busca los turnos de hoy y de días anteriores por estudiante, quién lo pidió, servicio y grupo, y los abre.' },
   { key: 'summary', label: 'Resumen del día', hint: 'Al terminar las clases le llega un aviso con el resumen del día: quién faltó y si se cubrió, los turnos, las alertas, el mantenimiento y quién falta mañana. Incluye ver las ausencias de todos.' },
