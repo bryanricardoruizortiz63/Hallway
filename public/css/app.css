@@ -1080,6 +1080,16 @@ select {
   color: var(--muted);
 }
 
+.saved-list li .link-btn {
+  padding: 4px 8px;
+}
+
+.saved-list li.is-dropped span,
+.saved-list li.is-dropped small {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
 .search {
   display: flex;
   align-items: center;
