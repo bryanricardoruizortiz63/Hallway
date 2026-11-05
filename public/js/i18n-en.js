@@ -319,6 +319,8 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^Historial de (.+)$/, (who) => `${who}’s history`],
+  [/^Historial del personal de (.+)$/, (school) => `${school} staff history`],
   [/^(.+) va al salón$/, (s) => `${s} is going to the classroom`],
   [/^(.+) va en camino$/, (s) => `${s} is on the way`],
   [/^Va a (.+)$/, (s) => `Going to ${s}`],

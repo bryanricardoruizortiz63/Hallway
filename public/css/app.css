@@ -4719,3 +4719,210 @@ fieldset.student-name .grid3 .field {
     break-inside: avoid;
   }
 }
+
+/* ---- Documents in Hallway's layout (docs.js): only printed, never on screen ---------------------------------- */
+.hw-doc {
+  display: none;
+}
+
+@media print {
+  body.print-doc > *:not(#hallway-doc) {
+    display: none !important;
+  }
+
+  body.print-doc {
+    background: #fff !important;
+  }
+
+  body.print-doc .hw-doc {
+    display: block;
+    color: #0f172a;
+    font: 11pt/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    padding-bottom: 14mm;
+  }
+
+  .hw-doc-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: #1e4fd8 !important;
+    color: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .hw-doc-head img {
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .hw-doc-brand {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .hw-doc-brand strong {
+    font-size: 15pt;
+  }
+
+  .hw-doc-brand span,
+  .hw-doc-id span {
+    font-size: 9pt;
+    color: #d6e0ff;
+  }
+
+  .hw-doc-id {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .hw-doc-id strong {
+    font: 700 12pt/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.04em;
+  }
+
+  .hw-doc h1 {
+    margin: 16px 0 2px;
+    font-size: 18pt;
+  }
+
+  .hw-doc-sub,
+  .hw-doc-meta {
+    margin: 0 0 2px;
+    color: #475569;
+    font-size: 10pt;
+  }
+
+  .hw-doc-items {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .hw-doc-item {
+    break-inside: avoid;
+    padding: 8px 12px;
+    border: 1px solid #e0e6f0;
+    border-left: 4px solid #1e4fd8;
+    border-radius: 8px;
+  }
+
+  .hw-doc-item h2 {
+    margin: 0 0 2px;
+    font-size: 11.5pt;
+  }
+
+  .hw-doc-item p {
+    margin: 0;
+    font-size: 10pt;
+    color: #334155;
+  }
+
+  .hw-doc-verify {
+    break-inside: avoid;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: 2px solid #1e4fd8;
+    border-radius: 10px;
+  }
+
+  .hw-doc-qr svg {
+    width: 34mm;
+    height: 34mm;
+  }
+
+  .hw-doc-verify h3 {
+    margin: 0 0 4px;
+    font-size: 12pt;
+  }
+
+  .hw-doc-verify p {
+    margin: 0 0 4px;
+    font-size: 9.5pt;
+    color: #334155;
+  }
+
+  .hw-doc-code {
+    font: 700 14pt/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+    color: #1e4fd8 !important;
+    letter-spacing: 0.05em;
+  }
+
+  .hw-doc-link {
+    word-break: break-all;
+  }
+
+  /* On every page. */
+  .hw-doc-foot {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding-top: 4px;
+    border-top: 1px solid #e0e6f0;
+    font-size: 8.5pt;
+    color: #64748b;
+    text-align: center;
+    background: #fff;
+  }
+}
+
+/* ---- #/verify ------------------------------------------------------------------------------------------------ */
+.verify-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.verify-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.verify-head img {
+  border-radius: 10px;
+}
+
+.verify-head div {
+  display: flex;
+  flex-direction: column;
+}
+
+.verify-head strong {
+  font-size: 20px;
+}
+
+.verify-head span {
+  color: var(--muted);
+}
+
+.verify-result.is-ok {
+  border: 2px solid var(--ok, #16a34a);
+}
+
+.verify-result.is-bad {
+  border: 2px solid var(--danger, #dc2626);
+}
+
+.verify-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+.verify-line {
+  white-space: normal;
+}
