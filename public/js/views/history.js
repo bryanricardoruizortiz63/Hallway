@@ -4,7 +4,7 @@
 // year that ended is deleted, so it is downloaded before as a backup.
 import { activityHistory, activityHistoryAll, exportPersonHistoryXlsx, exportSchoolHistoryXlsx, historyPeople } from '../backend.js';
 import { $, busy, historyFull, html, roleLabel, toast } from '../lib.js';
-import { historyBlock, printHallwayDoc, seal } from '../docs.js';
+import { historyBlock, savePdf, seal } from '../docs.js';
 import { state } from '../store.js';
 import { locale } from '../i18n.js';
 import { icon } from '../icons.js';
@@ -160,11 +160,11 @@ export async function historyView({ el, params, setTitle }) {
     const title = `Historial de ${person.full_name}`;
     const s = await seal({ kind: 'history', format: 'pdf', title, details: periodText(), user: id, from });
     const list = [...rows].sort((a, b) => a.at.localeCompare(b.at));
-    await printHallwayDoc({
+    await savePdf({
       title,
       subtitle: [[person.job, roleLabel(person.role)].filter(Boolean).join(' · '), periodText(), 'Horas de Puerto Rico'].filter(Boolean).join(' · '),
       blocks: list.map(historyBlock),
-    }, s);
+    }, s, `historial-${person.full_name.normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
   }));
   $('[data-xlsx]', el).addEventListener('click', (e) => busy(e.currentTarget, () =>
     exportPersonHistoryXlsx(person, rows, historyFull(state.me.user), { from, period: periodText() })));
