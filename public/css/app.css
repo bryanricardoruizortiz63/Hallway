@@ -4979,3 +4979,22 @@ details.card > summary.card-title::-webkit-details-marker {
   max-height: 360px;
   overflow: auto;
 }
+
+/* Escuela y Teams › Avisos urgentes. */
+.urgent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.urgent-row small {
+  display: block;
+}
+
+.notify-absent {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}

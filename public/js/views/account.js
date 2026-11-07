@@ -242,6 +242,10 @@ function notifyCard(user, school) {
           <input type="checkbox" data-kind="${k.key}" ${off.has(k.key) ? '' : 'checked'}>
           <span class="toggle-ui"></span><span class="notify-text"><span>${k.label}</span><small>${k.hint}</small></span></label>`)}
     </div>
+    <label class="toggle notify-row notify-absent">
+      <input type="checkbox" data-kind="absent_silence" ${off.has('absent_silence') ? '' : 'checked'}>
+      <span class="toggle-ui"></span><span class="notify-text"><span>Silencio mientras estoy ausente</span>
+        <small>Mientras tengas una ausencia, solo te llegan los avisos de tu ausencia; lo demás queda en la campana, sin sonar.</small></span></label>
   </section>`;
 }
 
@@ -255,7 +259,9 @@ function bindNotifyCard(el, user) {
     box.disabled = true;
     try {
       user.notify_off = await setMyNotifyOff(off);
-      toast(box.checked ? 'Avisos encendidos' : 'Avisos apagados', 'ok');
+      toast(box.dataset.kind === 'absent_silence'
+        ? (box.checked ? 'Silencio mientras estás ausente: encendido' : 'Silencio mientras estás ausente: apagado')
+        : (box.checked ? 'Avisos encendidos' : 'Avisos apagados'), 'ok');
     } catch (err) {
       box.checked = !before.includes(box.dataset.kind);
       toast(err.message, 'error');

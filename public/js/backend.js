@@ -172,6 +172,9 @@ const reportLoginFailed = (code, username) =>
   callFunction('report', { action: 'login_failed', code, username }, { auth: false }).catch(() => {});
 
 /** Más › Comentarios y problemas. kind: idea | problem | other. */
+/** Escuela y Teams › Avisos urgentes: { kind: { every, for } } (every 0 = only once). */
+export const setUrgentRepeat = (settings) => rpc('set_urgent_repeat', { p_settings: settings });
+
 export const sendFeedback = (kind, message, route) =>
   rpc('send_feedback', { p_kind: kind, p_message: message, p_route: route || null, p_device: navigator.userAgent.slice(0, 300) });
 export const myFeedback = () => rpc('my_feedback');
