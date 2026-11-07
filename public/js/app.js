@@ -1,5 +1,5 @@
-import { getMe, markAlertsRead } from './backend.js';
-import { can, historyFull, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, toast } from './lib.js';
+import { getMe, markAlertsRead, sendErrorReport } from './backend.js';
+import { can, historyFull, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, setErrorReporter, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
@@ -46,6 +46,7 @@ import { absenceSearchView, myAbsenceSearchView, turnSearchView } from './views/
 import { summaryView } from './views/summary.js';
 import { platformView } from './views/platform.js';
 import { verifyView } from './views/verify.js';
+import { feedbackView } from './views/feedback.js';
 import { composeView, messageView, messagesView } from './views/messages.js';
 
 // Who may open each screen: by the permissions of the person's role.
@@ -126,6 +127,7 @@ const ROUTES = [
   { re: /^\/search\/absences$/, view: absenceSearchView, title: 'Buscar ausencias', allow: (u) => can(u, 'absence_search') || can(u, 'absences'), back: true },
   { re: /^\/search\/my-absences$/, view: myAbsenceSearchView, title: 'Buscar mis ausencias', allow: may('own_absence_search'), back: true },
   { re: /^\/search\/turns$/, view: turnSearchView, title: 'Buscar turnos', allow: (u) => can(u, 'turn_search') || historyFull(u), back: true },
+  { re: /^\/feedback$/, view: feedbackView, title: 'Comentarios y problemas', back: true },
   { re: /^\/history$/, view: historyPeopleView, title: 'Historial del personal', allow: may('history'), back: true },
   { re: /^\/history\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, view: historyView, title: 'Historial', allow: may('history'), back: true },
   { re: /^\/guide$/, view: guideView, title: 'Cómo usar Hallway', back: true },
@@ -324,6 +326,7 @@ async function router() {
   } catch (err) {
     if (seq !== navSeq) return;
     leaveBoot();
+    if (err?.status !== 401) window.__reportError?.(err, { kind: 'screen' });
     el.innerHTML = String(html`
       <div class="empty">
         ${icon('alert', 40)}
@@ -382,7 +385,41 @@ function sessionEnded() {
   go('/login', { replace: true });
 }
 
+/**
+ * The creator's error history: what failed on a button (busy), when a screen didn't load and the app's own crashes,
+ * with the screen and the details. At most one report per message every 10 seconds.
+ */
+function watchErrors() {
+  const recent = new Map();
+  const send = (err, extra = {}) => {
+    const message = String(err?.message || err || 'Error').slice(0, 1000);
+    const key = `${location.hash}|${message}`;
+    if (Date.now() - (recent.get(key) || 0) < 10_000) return;
+    recent.set(key, Date.now());
+    sendErrorReport({
+      kind: extra.kind || (err?.status ? 'server' : err?.name || 'error'),
+      message,
+      detail: [extra.where ? `Botón: ${extra.where}` : null, err?.stack || null].filter(Boolean).join('\n').slice(0, 8000) || null,
+      route: location.hash.slice(0, 300) || '#/',
+      status: Number.isInteger(err?.status) ? err.status : null,
+    });
+  };
+  setErrorReporter(send);
+  window.__reportError = send;
+  window.addEventListener('error', (e) => {
+    // Pictures that don't load and the browser's extensions aren't the app's.
+    if (!e.error || !String(e.filename || '').includes(location.host)) return;
+    send(e.error, { kind: 'crash' });
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const err = e.reason;
+    if (err?.status === 401 || /Sin conexión|Failed to fetch|NetworkError|Load failed/i.test(String(err?.message || ''))) return;
+    send(err, { kind: 'crash' });
+  });
+}
+
 async function boot() {
+  watchErrors();
   initLanguage();
   initPwa();
   unlockAudio();

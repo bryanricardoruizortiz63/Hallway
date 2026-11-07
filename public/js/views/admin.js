@@ -39,6 +39,7 @@ import {
   sendCredentials,
   servicesOverview,
   setAdminPassword,
+  setUrgentRepeat,
   stats,
   testEmail,
   testTeams,
@@ -426,6 +427,63 @@ export async function employeeFormView({ el, params, setTitle }) {
 
 // ---- Escuela y Teams -----------------------------------------------------------
 
+// ---- Avisos urgentes -------------------------------------------------------------------------------------------
+
+/** The urgent notices that repeat until someone opens them, and what the school uses when it hasn't chosen. */
+const URGENT_KINDS = [
+  ['turns', 'Turnos', 'A quien atiende el servicio (Enfermería, Trabajo Social, Soporte IT…) cuando le piden un turno.'],
+  ['alerts', 'No ha llegado', 'Cuando un estudiante no llega a donde debía.'],
+  ['pickups', 'Salidas', 'Cuando vienen a buscar a un estudiante.'],
+  ['relief', 'Relevo', 'Cuando un maestro pide que alguien lo releve un momento.'],
+  ['visits', 'Visitas', 'Cuando llega un padre o una visita para alguien.'],
+  ['maintenance', 'Mantenimiento', 'Las solicitudes de limpieza «Pronto» y «Urgente».'],
+];
+const URGENT_DEFAULT = (kind) => ({ every: kind === 'relief' ? 5 : 1, for: 15 });
+const EVERY = [[0, 'Solo una vez'], [1, 'Cada minuto'], [2, 'Cada 2 minutos'], [3, 'Cada 3 minutos'], [5, 'Cada 5 minutos'], [10, 'Cada 10 minutos'], [15, 'Cada 15 minutos']];
+const FOR = [5, 10, 15, 20, 30, 45, 60];
+
+function urgentCard(school) {
+  const saved = school.urgent_repeat || {};
+  return html`<form class="card stack" data-urgent>
+    <h2 class="card-title">${icon('bell')} Avisos urgentes</h2>
+    <p class="muted">Los avisos urgentes suenan como alarma y se repiten hasta que alguien los abre. Elige cada cuánto se
+      repite cada tipo, o que suene una sola vez.</p>
+    ${URGENT_KINDS.map(([key, label, hint]) => {
+      const v = { ...URGENT_DEFAULT(key), ...(saved[key] || {}) };
+      return html`<div class="urgent-row" data-kind="${key}">
+        <div><strong>${label}</strong><small class="hint">${hint}</small></div>
+        <div class="grid2">
+          <label class="field"><span>Se repite</span>
+            <select name="${key}_every">${EVERY.map(([n, l]) => html`<option value="${n}" ${n === v.every ? 'selected' : ''}>${l}</option>`)}</select></label>
+          <label class="field" data-for ${v.every ? '' : 'hidden'}><span>Durante</span>
+            <select name="${key}_for">${FOR.map((n) => html`<option value="${n}" ${n === v.for ? 'selected' : ''}>${n} minutos</option>`)}</select></label>
+        </div>
+      </div>`;
+    })}
+    <p class="hint">Deja de sonar en cuanto alguien abre el aviso (y el relevo, en cuanto alguien lo toma). Con la app abierta, cada vez suena unos segundos.</p>
+    <button class="btn btn-secondary" type="submit">Guardar</button>
+  </form>`;
+}
+
+function bindUrgentCard(el, school) {
+  const form = $('[data-urgent]', el);
+  if (!form) return;
+  form.addEventListener('change', (e) => {
+    const row = e.target.closest('[data-kind]');
+    if (row && e.target.name.endsWith('_every')) $('[data-for]', row).hidden = e.target.value === '0';
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(form.querySelector('[type=submit]'), async () => {
+      const settings = Object.fromEntries(URGENT_KINDS.map(([key]) => [key, {
+        every: Number(form[`${key}_every`].value), for: Number(form[`${key}_for`].value),
+      }]));
+      school.urgent_repeat = await setUrgentRepeat(settings);
+      toast('Avisos urgentes guardados', 'ok');
+    });
+  });
+}
+
 export async function settingsView({ el, reload }) {
   let school = await getSchool(state.me.school.id);
 
@@ -465,6 +523,8 @@ export async function settingsView({ el, reload }) {
         </div>
         <button class="btn btn-secondary" type="submit">Guardar</button>
       </form>
+
+      ${urgentCard(school)}
 
       <form class="card stack" data-teams>
         <h2 class="card-title">${icon('teams')} Notificaciones en Microsoft Teams</h2>
@@ -625,6 +685,7 @@ export async function settingsView({ el, reload }) {
     });
   });
 
+  bindUrgentCard(el, school);
   const schoolForm = $('[data-school]', el);
   schoolForm.addEventListener('submit', (e) => {
     e.preventDefault();

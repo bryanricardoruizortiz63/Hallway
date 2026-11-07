@@ -4,8 +4,8 @@
 //   #/search/my-absences  «Buscar mis ausencias»: one's own, by dates; saved the same way.
 //   #/search/turns        «Buscar turnos»: today's and earlier days' turns.
 import { searchAbsences, searchMyAbsences, searchTurns, servicesOverview } from '../backend.js';
-import { $, can, addDays, busy, fmtDateTime, fmtLongDate, html, schoolCalendar, toast, todayStr } from '../lib.js';
-import { absenceBlock, docImage, printHallwayDoc, seal, turnBlock } from '../docs.js';
+import { $, can, addDays, busy, fmtDateTime, fmtLongDate, html, schoolCalendar, todayStr } from '../lib.js';
+import { absenceBlock, docImage, offerFile, savePdf, seal, turnBlock } from '../docs.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
@@ -123,12 +123,11 @@ function absenceSearch({ el }, own) {
   };
   $('[data-pdf]', el).addEventListener('click', (e) => busy(e.currentTarget, async () => {
     const [s, doc] = await sealed('pdf');
-    await printHallwayDoc(doc, s);
+    await savePdf(doc, s, `${own ? 'mis-ausencias' : 'ausencias'}-${todayStr()}.pdf`);
   }));
   $('[data-png]', el).addEventListener('click', (e) => busy(e.currentTarget, async () => {
     const [s, doc] = await sealed('image');
-    saveBlob(await docImage(doc, s), `${own ? 'mis-ausencias' : 'ausencias'}-${todayStr()}.png`);
-    toast('Imagen guardada', 'ok');
+    await offerFile(await docImage(doc, s), `${own ? 'mis-ausencias' : 'ausencias'}-${todayStr()}.png`);
   }));
 
   busy(form.querySelector('[type=submit]'), search);
@@ -137,24 +136,6 @@ function absenceSearch({ el }, own) {
 export const absenceSearchView = (ctx) => absenceSearch(ctx, false);
 export const myAbsenceSearchView = (ctx) => absenceSearch(ctx, true);
 
-/** Gives the file to the phone: «Compartir» when it can (to send it), otherwise a download. */
-function saveBlob(blob, name) {
-  const file = new window.File([blob], name, { type: blob.type });
-  const download = () => {
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement('a'), { href: url, download: name });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  };
-  // After sealing, some phones no longer let the page open «Compartir»: then it downloads.
-  if (navigator.canShare?.({ files: [file] })) {
-    navigator.share({ files: [file], title: name }).catch((err) => { if (err?.name !== 'AbortError') download(); });
-    return;
-  }
-  download();
-}
 // ---- Turnos ----------------------------------------------------------------------------------
 
 const OPEN = { waiting: 'En fila', called: 'Llamado', sent: 'En camino', arrived: 'En la oficina', on_the_way: 'Van en camino', returning: 'Regresando al salón' };
@@ -223,7 +204,7 @@ export async function turnSearchView({ el }) {
     if (!rows.length) throw new Error('No hay turnos para guardar.');
     const title = t('Turnos');
     const s = await seal({ kind: 'turns', format: 'pdf', title, details: filters, ids: rows.map((r) => r.id) });
-    await printHallwayDoc({ title, subtitle: filters, blocks: rows.map(turnBlock) }, s);
+    await savePdf({ title, subtitle: filters, blocks: rows.map(turnBlock) }, s, `turnos-${todayStr()}.pdf`);
   }));
   busy(form.querySelector('[type=submit]'), search);
 }

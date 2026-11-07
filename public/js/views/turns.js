@@ -171,7 +171,10 @@ const names = (list) => (list.length > 1 ? `${list.slice(0, -1).join(', ')} y ${
  */
 function availability(service) {
   // Outside its hours (or a day without classes) nobody asks for a turn; whoever attends it can still note one.
-  if (service.closed_reason) return { text: 'Fuera de horario', ok: false, closed: true, hours: service.closed_reason, absent: [] };
+  // The server also closes it when all its staff is absent: then the app's own notice says who and until when.
+  if (service.closed_reason && !/se encuentra ausente/.test(service.closed_reason)) {
+    return { text: 'Fuera de horario', ok: false, closed: true, hours: service.closed_reason, absent: [] };
+  }
   const staff = service.staff || [];
   if (!staff.length) return { text: 'Nadie asignado', ok: false };
   const out = staff.map((p) => ({ ...p, absent: absentNow(p) }));
