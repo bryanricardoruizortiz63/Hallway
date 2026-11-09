@@ -55,7 +55,7 @@ export async function archiveSection(slot) {
         )}</select></label>
       <div data-summary></div>
       <div class="stack-sm">
-        <button type="button" class="btn btn-secondary btn-block" data-xlsx>${icon('download', 18)} 1. Descargar Excel del año</button>
+        <button type="button" class="btn btn-secondary btn-block" data-xlsx>${icon('download', 18)} 1. Descargar el año (Excel o PDF)</button>
         <button type="button" class="btn btn-secondary btn-block" data-zip>${icon('download', 18)} 2. Descargar documentos (ZIP)</button>
         ${admin ? html`<button type="button" class="btn btn-ghost-danger btn-block" data-purge>${icon('trash', 18)} 3. Liberar espacio</button>` : ''}
       </div>
@@ -130,9 +130,9 @@ export async function archiveSection(slot) {
 
   xlsxBtn.addEventListener('click', () =>
     busy(xlsxBtn, async () => {
-      exportArchiveXlsx(school, data);
+      if (!(await exportArchiveXlsx(school, data))) return;
       downloaded.xlsx = true;
-      toast('Excel descargado. Guárdalo en un lugar seguro (por ejemplo OneDrive).', 'ok');
+      toast('Descargado. Guárdalo en un lugar seguro (por ejemplo OneDrive).', 'ok');
     }).then(refreshButtons),
   );
 

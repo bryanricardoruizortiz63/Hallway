@@ -5018,3 +5018,20 @@ details.card > summary.card-title::-webkit-details-marker {
 .otp-account-sub { font-size: 0.85rem; color: rgba(255, 255, 255, 0.82); overflow-wrap: anywhere; }
 .otp-entry { color: #fff; background: rgba(255, 255, 255, 0.16); padding: 1px 8px; border-radius: 6px; white-space: nowrap; }
 .otp-hint { margin: 0; font-size: 0.85rem; text-align: center; color: rgba(255, 255, 255, 0.78); }
+
+/* «¿En qué formato?» (Excel or PDF) */
+.format-pick { display: grid; gap: 10px; }
+.format-option {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; text-align: left; cursor: pointer;
+  border: 1.5px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); font: inherit;
+}
+.format-option:hover, .format-option:focus-visible { border-color: var(--primary); }
+.format-option.is-last { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.format-option span:last-child { display: grid; gap: 2px; }
+.format-option small { color: var(--muted); font-size: 0.85rem; line-height: 1.35; }
+.format-badge {
+  flex: none; display: grid; place-items: center; width: 52px; height: 60px; border-radius: 10px;
+  font-weight: 800; font-size: 0.8rem; letter-spacing: 0.04em; color: #fff;
+}
+.format-badge.is-pdf { background: #d93025; }
+.format-badge.is-xlsx { background: #1d7a46; }

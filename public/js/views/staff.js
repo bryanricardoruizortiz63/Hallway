@@ -126,7 +126,7 @@ export async function absencesListView({ el, query, isCurrent }) {
     </form>
     <div class="list-head">
       <p class="muted" data-count></p>
-      ${can(me, 'reports') ? html`<button type="button" class="btn btn-ghost btn-sm" data-export>${icon('download', 16)} Exportar a Excel</button>` : ''}
+      ${can(me, 'reports') ? html`<button type="button" class="btn btn-ghost btn-sm" data-export>${icon('download', 16)} Exportar (Excel o PDF)</button>` : ''}
     </div>
     <div data-results><div class="loading"><span class="spinner"></span></div></div>`);
 
