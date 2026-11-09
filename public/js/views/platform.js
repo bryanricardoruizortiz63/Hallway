@@ -10,6 +10,7 @@ import { state } from '../store.js';
 import { bindOtp, otpField } from './account.js';
 import { bindPasswordToggles } from './auth.js';
 import { empty } from './common.js';
+import { platformLogs } from './platform-logs.js';
 import { iconTool } from './icon-tool.js';
 
 function randomPassword() {
@@ -101,12 +102,14 @@ export async function platformView(ctx) {
           : html`<div class="card">${empty('school', 'Aún no hay escuelas', 'Crea la primera con el formulario de arriba.')}</div>`}
       </section>
 
+      <div data-logs-slot></div>
       <div data-icon-slot></div>
       ${securityCard(sec)}
     </div>`);
 
   bindPasswordToggles(el);
   iconTool($('[data-icon-slot]', el), { schools, call, onChange: () => ctx.reload() });
+  platformLogs($('[data-logs-slot]', el), call);
   $('[data-logout]', el).addEventListener('click', (e) =>
     busy(e.currentTarget, async () => {
       await call('logout').catch(() => {});

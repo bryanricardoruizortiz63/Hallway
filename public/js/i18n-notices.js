@@ -4,6 +4,7 @@
 // needs to be here once.
 
 export const NOTICES = {
+  '💬 Hallway respondió tu mensaje': '💬 Hallway answered your message',
   // ---- Absences and coverage ----
   'Nuevo documento en una ausencia': 'New document on an absence',
   'Tu ausencia fue cancelada': 'Your absence was cancelled',

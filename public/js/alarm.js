@@ -6,7 +6,7 @@ import { html } from './lib.js';
 import { icon } from './icons.js';
 
 const RING_EVERY_MS = 2500;
-const RING_FOR_MS = 60000;
+const RING_FOR_MS = 8000;
 
 let audio = null;
 let overlay = null;
@@ -101,6 +101,8 @@ export function showAlarm({ title, body, link }, { onOpen, onClose } = {}) {
   });
   overlay.querySelector('[data-alarm-open]').focus();
   ring();
+  // A few seconds: the notice comes back as often as the school chose in Escuela y Teams › Avisos urgentes
+  // (every minute, every 5 minutes, only once…) until someone opens it.
   const until = Date.now() + RING_FOR_MS;
   timer = setInterval(() => (Date.now() > until ? clearInterval(timer) : ring()), RING_EVERY_MS);
 }

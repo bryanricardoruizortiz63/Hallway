@@ -288,6 +288,21 @@ export function formValues(form) {
 }
 
 /** Disables a button and shows a spinner while fn runs. Errors are shown as toasts. */
+// Who reports errors to the creator's history (app.js sets it; see backend.js reportError).
+let errorReporter = null;
+export const setErrorReporter = (fn) => {
+  errorReporter = fn;
+};
+/**
+ * Whether an error is worth the creator's history: answers of the server (4xx/5xx) and the app's own failures, not
+ * the hints a form gives («Escribe el nombre»), a lost connection or a session that ended.
+ */
+export const isReportable = (err) =>
+  (err?.status >= 400 && err.status !== 401) || ['TypeError', 'ReferenceError', 'RangeError', 'SyntaxError'].includes(err?.name);
+export const reportError = (err, extra = {}) => {
+  if (errorReporter && isReportable(err)) errorReporter(err, extra);
+};
+
 export async function busy(button, fn) {
   if (button?.disabled) return;
   const original = button?.innerHTML;
@@ -299,6 +314,7 @@ export async function busy(button, fn) {
     return await fn();
   } catch (err) {
     toast(err.message || 'Ocurrió un error.', 'error');
+    reportError(err, { where: button?.textContent?.trim().slice(0, 60) || null });
   } finally {
     if (button && button.isConnected) {
       button.disabled = false;

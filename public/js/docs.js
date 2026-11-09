@@ -7,7 +7,7 @@
 //   * Picture (PNG): the same, drawn.
 //   * Excel: a «Verificación» sheet with the code, the link and the QR code.
 import { sealDocument } from './backend.js';
-import { CATEGORIES, fmtDateTime, fmtLongDate, fmtTime, html, raw } from './lib.js';
+import { CATEGORIES, dialog, fmtDateTime, fmtLongDate, fmtTime, html } from './lib.js';
 import { t } from './i18n.js';
 import { appIcon } from './branding.js';
 import { state } from './store.js';
@@ -103,51 +103,242 @@ export function historyBlock(r) {
 
 // ---- PDF ------------------------------------------------------------------------------------------------------
 
-/**
- * Prints (or saves as PDF) a document in Hallway's layout. doc: { title, subtitle, blocks: [{ title, lines }] },
- * s: the seal. Only the document is printed; the screen stays as it was.
- */
-export async function printHallwayDoc(doc, s) {
-  const link = verifyLink(s.code);
+// Letter pages at 150 dpi.
+const PAGE_W = 1275;
+const PAGE_H = 1650;
+const MARGIN = 80;
+
+const fontOf = (size, weight = 400) => `${weight} ${size}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+
+function wrapText(ctx, text, size, weight, width) {
+  ctx.font = fontOf(size, weight);
+  const out = [];
+  let line = '';
+  for (const w of String(text).split(' ')) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width > width && line) {
+      out.push(line);
+      line = w;
+    } else line = next;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+/** The document in Hallway's layout, as Letter pages (canvases): header, items, verification box, page footers. */
+async function docPages(doc, s) {
   const school = doc.school || state.me?.school?.name || '';
-  const qrCode = await qrSvg(link, t('Código QR para verificar el documento'));
-  const box = document.createElement('div');
-  box.id = 'hallway-doc';
-  box.className = 'hw-doc';
-  box.innerHTML = String(html`
-    <header class="hw-doc-head">
-      <img src="${appIcon()}" alt="" width="40" height="40">
-      <div class="hw-doc-brand"><strong>Hallway</strong><span>${school}</span></div>
-      <div class="hw-doc-id"><span>${t('Código de verificación')}</span><strong>${s.code}</strong></div>
-    </header>
-    <h1>${doc.title}</h1>
-    ${doc.subtitle ? html`<p class="hw-doc-sub">${doc.subtitle}</p>` : ''}
-    <p class="hw-doc-meta">${t('Generado por')} ${s.created_by_name} · ${fmtDateTime(s.created_at)} · ${s.items} ${t(s.items === 1 ? 'elemento' : 'elementos')}</p>
-    <section class="hw-doc-items">
-      ${doc.blocks.map((b) => html`<article class="hw-doc-item"><h2>${b.title}</h2>${b.lines.map((l) => html`<p>${l}</p>`)}</article>`)}
-    </section>
-    <section class="hw-doc-verify">
-      <div class="hw-doc-qr">${raw(qrCode)}</div>
-      <div>
-        <h3>${t('Documento verificable')}</h3>
-        <p>${t('Este documento salió de Hallway. Para comprobar que es auténtico y que no se cambió, escanea el código QR o entra a la dirección de abajo y compáralo con lo que Hallway guardó.')}</p>
-        <p class="hw-doc-code">${s.code}</p>
-        <p class="hw-doc-link">${link}</p>
-      </div>
-    </section>
-    <footer class="hw-doc-foot">Hallway · ${school} · ${t('Código')} ${s.code}</footer>`);
-  document.body.append(box);
-  document.body.classList.add('print-doc');
-  // Pictures (the icon, the QR) have to load before printing.
-  await Promise.all([...box.querySelectorAll('img')].map((img) => (img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; }))));
-  const done = () => {
-    document.body.classList.remove('print-doc');
-    box.remove();
+  const link = verifyLink(s.code);
+  const [icon, matrix] = await Promise.all([loadImage(appIcon()), qrMatrix(link)]);
+  const W = PAGE_W - MARGIN * 2;
+  const BOTTOM = PAGE_H - MARGIN - 30;
+  const pages = [];
+  let ctx;
+  let y;
+  const newPage = () => {
+    const c = document.createElement('canvas');
+    c.width = PAGE_W;
+    c.height = PAGE_H;
+    ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, PAGE_W, PAGE_H);
+    pages.push(c);
+    y = MARGIN;
   };
-  window.addEventListener('afterprint', done, { once: true });
-  window.print();
-  // Some phones don't send «afterprint»: the box is hidden on screen anyway, and removed a moment later.
-  setTimeout(() => { if (box.isConnected && !matchMedia('print').matches) done(); }, 60_000);
+  const text = (str, x, yy, size, weight, color, align = 'left') => {
+    ctx.font = fontOf(size, weight);
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.fillText(str, x, yy);
+    ctx.textAlign = 'left';
+  };
+  newPage();
+
+  // Header: Hallway's blue, the icon, the school and the code.
+  const HEAD = 120;
+  const grad = ctx.createLinearGradient(MARGIN, y, MARGIN + W, y + HEAD);
+  grad.addColorStop(0, '#1e4fd8');
+  grad.addColorStop(1, '#1a43b8');
+  ctx.fillStyle = grad;
+  roundRect(ctx, MARGIN, y, W, HEAD, 18);
+  ctx.fill();
+  if (icon) {
+    ctx.save();
+    roundRect(ctx, MARGIN + 24, y + 26, 68, 68, 14);
+    ctx.clip();
+    ctx.drawImage(icon, MARGIN + 24, y + 26, 68, 68);
+    ctx.restore();
+  }
+  text('Hallway', MARGIN + 112, y + 58, 32, 700, '#ffffff');
+  text(school, MARGIN + 112, y + 92, 22, 500, '#d6e0ff');
+  text(t('Código de verificación'), MARGIN + W - 24, y + 52, 18, 500, '#d6e0ff', 'right');
+  text(s.code, MARGIN + W - 24, y + 88, 28, 700, '#ffffff', 'right');
+  y += HEAD + 46;
+
+  // Title, details and who made it.
+  for (const l of wrapText(ctx, doc.title, 40, 700, W)) {
+    text(l, MARGIN, y, 40, 700, '#0f172a');
+    y += 50;
+  }
+  const meta = [
+    ...(doc.subtitle ? wrapText(ctx, doc.subtitle, 22, 400, W) : []),
+    ...wrapText(ctx, `${t('Generado por')} ${s.created_by_name} · ${fmtDateTime(s.created_at)} · ${s.items} ${t(s.items === 1 ? 'elemento' : 'elementos')}`, 22, 400, W),
+  ];
+  for (const l of meta) {
+    text(l, MARGIN, y, 22, 400, '#475569');
+    y += 32;
+  }
+  y += 16;
+
+  // The items, each in its box (a box moves to the next page when it doesn't fit).
+  for (const b of doc.blocks) {
+    const lines = [
+      ...wrapText(ctx, b.title, 26, 700, W - 48).map((l) => [l, 26, 700, '#0f172a', 36]),
+      ...b.lines.flatMap((x) => wrapText(ctx, x, 21, 400, W - 48).map((l) => [l, 21, 400, '#334155', 30])),
+    ];
+    const h = lines.reduce((n, l) => n + l[4], 0) + 28;
+    if (y + h > BOTTOM && y > MARGIN + 10) newPage();
+    if (h <= BOTTOM - MARGIN) {
+      ctx.fillStyle = '#f1f5f9';
+      roundRect(ctx, MARGIN, y, W, h, 14);
+      ctx.fill();
+      ctx.fillStyle = '#1e4fd8';
+      ctx.fillRect(MARGIN, y + 8, 5, h - 16);
+    }
+    let ly = y + 14;
+    for (const [l, size, weight, color, gap] of lines) {
+      if (ly + gap > BOTTOM) {
+        newPage();
+        ly = y;
+      }
+      ly += gap;
+      text(l, MARGIN + 28, ly - 9, size, weight, color);
+    }
+    y = Math.max(y + h, ly + 14) + 12;
+  }
+
+  // The verification box: the QR code, the code and the link.
+  const QR = 230;
+  const info = wrapText(ctx, t('Este documento salió de Hallway. Para comprobar que es auténtico y que no se cambió, escanea el código QR o entra a la dirección de abajo y compáralo con lo que Hallway guardó.'), 20, 400, W - QR - 80);
+  const linkLines = wrapText(ctx, link, 18, 400, W - QR - 80);
+  const VB = Math.max(QR + 40, 130 + info.length * 28 + linkLines.length * 26);
+  if (y + VB + 10 > BOTTOM) newPage();
+  y += 10;
+  ctx.strokeStyle = '#1e4fd8';
+  ctx.lineWidth = 3;
+  roundRect(ctx, MARGIN, y, W, VB, 16);
+  ctx.stroke();
+  const cell = Math.floor(QR / (matrix.length + 4));
+  const qx = MARGIN + 20 + 2 * cell;
+  const qy = y + 20 + 2 * cell;
+  ctx.fillStyle = '#000000';
+  matrix.forEach((row, r) => row.forEach((dark, c) => { if (dark) ctx.fillRect(qx + c * cell, qy + r * cell, cell, cell); }));
+  const tx = MARGIN + QR + 50;
+  text(t('Documento verificable'), tx, y + 48, 26, 700, '#0f172a');
+  text(s.code, tx, y + 92, 30, 700, '#1e4fd8');
+  let iy = y + 128;
+  for (const l of info) {
+    text(l, tx, iy, 20, 400, '#334155');
+    iy += 28;
+  }
+  for (const l of linkLines) {
+    text(l, tx, iy, 18, 400, '#1e4fd8');
+    iy += 26;
+  }
+
+  // Every page: who and the code, and the page number.
+  pages.forEach((c, i) => {
+    ctx = c.getContext('2d');
+    ctx.fillStyle = '#e0e6f0';
+    ctx.fillRect(MARGIN, PAGE_H - MARGIN + 6, W, 2);
+    text(`Hallway · ${school} · ${t('Código')} ${s.code}`, MARGIN, PAGE_H - MARGIN + 36, 18, 400, '#64748b');
+    text(`${t('Página')} ${i + 1} ${t('de')} ${pages.length}`, MARGIN + W, PAGE_H - MARGIN + 36, 18, 400, '#64748b', 'right');
+  });
+  return pages;
+}
+
+/** A PDF file made of the pages (each one a JPEG picture of a Letter page). */
+async function pdfOf(pages, title) {
+  const jpegs = await Promise.all(pages.map((c) => new Promise((resolve, reject) => c.toBlob(
+    (b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a))) : reject(new Error('No se pudo crear el PDF.'))), 'image/jpeg', 0.9))));
+  const enc = new TextEncoder();
+  const parts = [];
+  const offsets = [];
+  let length = 0;
+  const push = (x) => {
+    const bytes = typeof x === 'string' ? enc.encode(x) : x;
+    parts.push(bytes);
+    length += bytes.length;
+  };
+  const object = (id, write) => {
+    offsets[id] = length;
+    push(`${id} 0 obj\n`);
+    write();
+    push('\nendobj\n');
+  };
+  const n = pages.length;
+  // 1 catalog, 2 pages, 3 info; each page: page, contents and picture.
+  const ids = (i) => [4 + i * 3, 5 + i * 3, 6 + i * 3];
+  const pdfText = (str) => `(${String(str).replace(/[^\x20-\x7e]/g, '').replace(/([()\\])/g, '\\$1')})`;
+  push('%PDF-1.4\n%âãÏÓ\n');
+  object(1, () => push('<< /Type /Catalog /Pages 2 0 R >>'));
+  object(2, () => push(`<< /Type /Pages /Kids [${pages.map((_, i) => `${ids(i)[0]} 0 R`).join(' ')}] /Count ${n} >>`));
+  object(3, () => push(`<< /Title ${pdfText(title)} /Producer (Hallway) >>`));
+  jpegs.forEach((jpg, i) => {
+    const [page, contents, image] = ids(i);
+    object(page, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 ${image} 0 R >> >> /Contents ${contents} 0 R >>`));
+    const draw = 'q 612 0 0 792 0 0 cm /Im0 Do Q';
+    object(contents, () => push(`<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`));
+    object(image, () => {
+      push(`<< /Type /XObject /Subtype /Image /Width ${PAGE_W} /Height ${PAGE_H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
+      push(jpg);
+      push('\nendstream');
+    });
+  });
+  const count = 3 + n * 3;
+  const xref = length;
+  push(`xref\n0 ${count + 1}\n0000000000 65535 f \n`);
+  for (let id = 1; id <= count; id++) push(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
+  push(`trailer\n<< /Size ${count + 1} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts, { type: 'application/pdf' });
+}
+
+/** The document as a PDF file in Hallway's layout (no printing needed: it works the same on phones and computers). */
+export async function docPdf(doc, s) {
+  return pdfOf(await docPages(doc, s), doc.title);
+}
+
+/**
+ * «Tu documento está listo»: buttons to share it (WhatsApp, email, Archivos, Imprimir…) or download it. The tap on the
+ * button is what lets the phone open «Compartir»; doing it after waiting for the server doesn't always work.
+ */
+export async function offerFile(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const file = new window.File([blob], name, { type: blob.type });
+  const canShare = !!navigator.canShare?.({ files: [file] });
+  const pending = dialog({
+    title: t('Tu documento está listo'),
+    message: canShare
+      ? t('Compártelo (correo, WhatsApp, Archivos, Imprimir…) o descárgalo.')
+      : t('Descárgalo para guardarlo, enviarlo o imprimirlo.'),
+    body: html`<div class="stack">
+      ${canShare ? html`<button type="button" class="btn btn-primary btn-block" data-share>${t('Compartir o guardar')}</button>` : ''}
+      <a class="btn ${canShare ? 'btn-secondary' : 'btn-primary'} btn-block" href="${url}" download="${name}" target="_blank" rel="noopener" data-download>${t('Descargar')}</a>
+    </div>`,
+    confirmText: t('Listo'),
+    cancelText: '',
+  });
+  const box = document.querySelector('dialog.dialog:last-of-type');
+  box?.querySelector('[data-share]')?.addEventListener('click', () => {
+    navigator.share({ files: [file], title: name }).catch(() => {});
+  });
+  await pending;
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** The PDF of a document already sealed, offered to share or download. */
+export async function savePdf(doc, s, name) {
+  await offerFile(await docPdf(doc, s), name);
 }
 
 // ---- Picture --------------------------------------------------------------------------------------------------

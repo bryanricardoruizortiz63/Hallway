@@ -436,6 +436,61 @@ const actions: Record<string, (b: Record<string, unknown>, c: Caller, sessionHas
     return json({ ok: true });
   },
 
+  // ---- What people say, what failed and who couldn't sign in ----
+
+  /** New ones first: comments and problems people sent from Más › Comentarios y problemas. */
+  async list_feedback(b) {
+    let q = db.from('feedback').select('id, school_id, user_name, kind, message, route, device, app_version, status, reply, replied_at, created_at')
+      .order('created_at', { ascending: false }).limit(200);
+    if (b.status && ['new', 'seen', 'done'].includes(String(b.status))) q = q.eq('status', String(b.status));
+    const [{ data, error }, { data: schools }, { count }] = await Promise.all([
+      q,
+      db.from('schools').select('id, name'),
+      db.from('feedback').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+    ]);
+    if (error) throw error;
+    const names = new Map((schools || []).map((x) => [x.id, x.name]));
+    return json({ feedback: (data || []).map((f) => ({ ...f, school_name: names.get(f.school_id) || null })), new_count: count ?? 0 });
+  },
+
+  /** Marks it seen or done and, with a reply, the person gets a notice and sees it in the app. */
+  async answer_feedback(b, c) {
+    const id = Number(b.id);
+    const status = String(b.status || 'seen');
+    if (!Number.isSafeInteger(id) || !['new', 'seen', 'done'].includes(status)) throw new HttpError(400, 'Solicitud no válida.');
+    const reply = String(b.reply || '').trim().slice(0, 2000) || null;
+    const { data: f, error } = await db.from('feedback').select('id, user_id, reply').eq('id', id).maybeSingle();
+    if (error) throw error;
+    if (!f) throw new HttpError(404, 'No se encontró el mensaje.');
+    const changes: Record<string, unknown> = { status };
+    if (reply && reply !== f.reply) Object.assign(changes, { reply, replied_at: new Date().toISOString() });
+    const { error: updateError } = await db.from('feedback').update(changes).eq('id', id);
+    if (updateError) throw updateError;
+    if (reply && reply !== f.reply && f.user_id) {
+      await db.from('notifications').insert({
+        user_id: f.user_id, title: '💬 Hallway respondió tu mensaje', body: reply.slice(0, 300), link: '#/feedback',
+      });
+    }
+    await audit(c, 'answer_feedback', true, `mensaje ${id}${reply ? ' con respuesta' : ''}`);
+    return json({ ok: true });
+  },
+
+  /** The error history (30 days), newest first; source: app, server or all. */
+  async list_errors(b) {
+    let q = db.from('app_errors').select('*').order('at', { ascending: false }).limit(300);
+    if (['app', 'server', 'database'].includes(String(b.source))) q = q.eq('source', String(b.source));
+    const { data, error } = await q;
+    if (error) throw error;
+    return json({ errors: data || [] });
+  },
+
+  /** Failed sign-ins (30 days), newest first. */
+  async list_login_failures() {
+    const { data, error } = await db.from('login_failures').select('*').order('at', { ascending: false }).limit(300);
+    if (error) throw error;
+    return json({ failures: data || [] });
+  },
+
   // ---- The panel's own security ----
 
   /** Recent activity, open sessions, the email and whether there is a recovery code. */
