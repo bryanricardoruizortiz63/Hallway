@@ -2,7 +2,7 @@ import { changePassword, requestPasswordHelp, schoolBranding, signIn } from '../
 import { appIcon, applyBranding } from '../branding.js';
 import { $, busy, dialog, formValues, html, toast } from '../lib.js';
 import { icon } from '../icons.js';
-import { syncPush } from '../pwa.js';
+import { reportAppVersion, syncPush } from '../pwa.js';
 import { go, homePath, logout, state } from '../store.js';
 import { bindLanguageSwitch, installHint, languageSwitch } from './common.js';
 
@@ -206,6 +206,7 @@ export async function loginView({ el, query }) {
         state.me = me;
         state.platformSession = null;
         syncPush();
+        reportAppVersion(me.user.id);
         if (me.user.must_change_password) return go('/change-password', { replace: true });
         const next = state.nextPath;
         state.nextPath = null;

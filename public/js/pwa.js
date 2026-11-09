@@ -1,5 +1,5 @@
 import { savedAccounts } from './accounts.js';
-import { deletePushSubscription, savePushSubscription } from './backend.js';
+import { deletePushSubscription, savePushSubscription, setMyAppVersion } from './backend.js';
 import { VAPID_PUBLIC_KEY } from './config.js';
 
 let deferredInstall = null;
@@ -68,6 +68,79 @@ function keepUpToDate() {
       swRegistration.update().catch(() => {});
     }
   });
+}
+
+// ---- The app's version ------------------------------------------------------------------------------------
+
+const VERSION_RE = /^lah-[0-9a-f]{12}$/;
+
+/** The version installed on this phone (the name of its saved copy, see sw.js), or null without one. */
+export async function installedVersion() {
+  try {
+    const keys = 'caches' in window ? await caches.keys() : [];
+    return keys.find((k) => VERSION_RE.test(k)) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** The version published on the server right now, or null when it can't be read (no connection). */
+export async function publishedVersion() {
+  try {
+    const res = await fetch('./sw.js', { cache: 'no-store' });
+    const m = res.ok ? (await res.text()).match(/const VERSION = '(lah-[0-9a-f]{12})'/) : null;
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Tells the server which version this phone has (once per account and version). */
+export async function reportAppVersion(userId) {
+  const version = await installedVersion();
+  if (!version || !userId) return;
+  const key = `lah:app-version:${userId}`;
+  try {
+    if (localStorage.getItem(key) === version) return;
+  } catch {
+    /* no storage: report it anyway */
+  }
+  await setMyAppVersion(version).catch(() => null);
+  try {
+    localStorage.setItem(key, version);
+  } catch {
+    /* best effort */
+  }
+}
+
+/** «lah-6cddb6db0f8f» → «6cddb6»: short enough to read aloud or compare on two screens. */
+export const shortVersion = (v) => (v ? v.slice(4, 10) : '—');
+
+/**
+ * «Buscar actualización»: asks the server now. 'current' when this is the latest; 'reloading' when a new one was
+ * installed (the app opens again with it); 'pending' when there is one but it couldn't install yet (it was just
+ * published: the files are still arriving); 'offline' when the server couldn't be reached.
+ */
+export async function checkForUpdate() {
+  const latest = await publishedVersion();
+  if (!latest) return 'offline';
+  if (latest === (await installedVersion())) return 'current';
+  const reg = swRegistration || (await registration());
+  if (!reg) return 'pending';
+  const changed = new Promise((resolve) => {
+    navigator.serviceWorker.addEventListener('controllerchange', () => resolve(true), { once: true });
+    setTimeout(() => resolve(false), 30000);
+  });
+  await reg.update().catch(() => {});
+  // A new version that fails to install (files of another version) is discarded: no need to wait the 30 seconds.
+  const worker = reg.installing || reg.waiting;
+  if (!worker) return 'pending';
+  const failed = new Promise((resolve) => {
+    worker.addEventListener('statechange', () => worker.state === 'redundant' && resolve(false));
+  });
+  if (!(await Promise.race([changed, failed]))) return 'pending';
+  location.reload();
+  return 'reloading';
 }
 
 export const isIos = () =>

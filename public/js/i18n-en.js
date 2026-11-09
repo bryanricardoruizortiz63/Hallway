@@ -319,8 +319,11 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^Hay una versión nueva \((\w+)\)\. Toca «Buscar actualización»\.$/, 'There’s a new version ($1). Tap “Check for updates”.'],
+  [/^\(abrió la app (.+)\)$/, '(opened the app $1)'],
   [/^Cada (\d+) minutos$/, (n) => `Every ${n} minutes`],
   [/^(\d+) minutos$/, (n) => `${n} minutes`],
+  [/^(\d+) veces$/, (n) => `${n} times`],
   [/^Historial de (.+)$/, (who) => `${who}’s history`],
   [/^Historial del personal de (.+)$/, (school) => `${school} staff history`],
   [/^(.+) va al salón$/, (s) => `${s} is going to the classroom`],

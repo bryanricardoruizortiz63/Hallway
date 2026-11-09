@@ -13,7 +13,10 @@ import {
 import { $, busy, can, historyFull, roomName, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
 import { locale } from '../i18n.js';
 import { icon } from '../icons.js';
-import { currentPushSubscription, disablePush, enablePush, isIos, isStandalone, pushSupported } from '../pwa.js';
+import {
+  checkForUpdate, currentPushSubscription, disablePush, enablePush, installedVersion, isIos, isStandalone, publishedVersion, pushSupported,
+  shortVersion,
+} from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
 import { addAccount, authenticator, cancelCode, checkCode, codeGiven, savedAccounts, startAuthenticator, switchAccount } from '../accounts.js';
 
@@ -501,14 +504,53 @@ export async function moreView({ el }) {
           )}</div>
         </section>`,
       )}
+      <section class="section" data-version>
+        <h3 class="section-title">Versión de la app</h3>
+        <div class="card version-card">
+          <div class="version-row">
+            <span class="item-icon">${icon('sparkle')}</span>
+            <span class="item-main"><strong>Versión <span data-version-code>—</span></strong>
+              <span class="item-sub" data-version-state>Revisando…</span></span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-block" data-update>${icon('refresh', 18)} Buscar actualización</button>
+          <p class="hint">La app se actualiza sola: al abrirla revisa si hay una versión nueva y la instala la próxima vez que
+            sales de ella. Este botón lo hace ahora mismo.</p>
+        </div>
+      </section>
       <div class="section">
         <button class="btn btn-ghost-danger btn-block" data-logout>${icon('logout', 18)} Cerrar sesión</button>
       </div>
     </div>`);
   $('[data-logout]', el).addEventListener('click', logout);
+  showVersion(el);
+  const update = $('[data-update]', el);
+  update.addEventListener('click', () => busy(update, async () => {
+    const result = await checkForUpdate();
+    if (result === 'current') toast('Ya tienes la versión más reciente.', 'ok');
+    else if (result === 'offline') toast('No hay conexión con el servidor. Inténtalo de nuevo en un momento.', 'error');
+    else if (result === 'pending') toast('Hay una versión nueva que todavía se está publicando. Inténtalo en unos minutos.');
+    if (result !== 'reloading') showVersion(el);
+  }));
   for (const btn of el.querySelectorAll('[data-switch]')) {
     btn.addEventListener('click', () => busy(btn, () => switchAccount(btn.dataset.switch, state.me)));
   }
+}
+
+/** «Versión 6cddb6 · Al día» in Más: the one on this phone compared with the one published. */
+async function showVersion(el) {
+  const [mine, latest] = await Promise.all([installedVersion(), publishedVersion()]);
+  const code = el.querySelector('[data-version-code]');
+  const note = el.querySelector('[data-version-state]');
+  if (!code || !note) return;
+  code.textContent = shortVersion(mine);
+  note.textContent = !mine
+    ? 'Este navegador no guarda la app; siempre abre la versión publicada.'
+    : !latest
+      ? 'No se pudo revisar si hay una versión nueva (sin conexión).'
+      : latest === mine
+        ? 'Al día: es la versión más reciente.'
+        : `Hay una versión nueva (${shortVersion(latest)}). Toca «Buscar actualización».`;
+  note.classList.toggle('text-warn', !!mine && !!latest && latest !== mine);
 }
 
 // ---- Several accounts on one phone ------------------------------------------------------------
@@ -655,7 +697,14 @@ export async function verifyCodeView({ el }) {
         <div class="otp-head">
           <span class="otp-lock">${icon('shield', 26)}</span>
           <h1>Verificación en dos pasos</h1>
-          <p>${me.user.full_name} · ${me.school.name}</p>
+        </div>
+        <div class="otp-account" data-otp-account>
+          ${avatar(me.user.full_name)}
+          <span class="otp-account-main">
+            <span class="otp-account-label">El código es para esta cuenta</span>
+            <strong>${me.user.full_name}</strong>
+            <span class="otp-account-sub">${[rolesLabel(me.user), me.user.role === 'admin' ? null : `@${me.user.username}`, me.school.name].filter(Boolean).join(' · ')}</span>
+          </span>
         </div>
         ${setup
           ? html`<p><strong>Primera vez con esta cuenta:</strong></p>
@@ -668,7 +717,12 @@ export async function verifyCodeView({ el }) {
               <p class="otp-lead">En tu app saldrá como <strong>${setup.issuer}</strong> · ${setup.account}</p>
               <details><summary>¿No puedes escanearlo?</summary>
                 <p>En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
-          : html`<p class="otp-lead">Escribe el código de 6 números de <strong>Hallway</strong> que sale en tu app de autenticación. Te lo pide una vez al día.</p>`}
+          : html`<p class="otp-lead">En tu app de autenticación busca <strong class="otp-entry">${factor?.friendly_name || 'Hallway'}</strong>
+              y escribe su código de 6 números. Te lo pide una vez al día.</p>
+              ${savedAccounts().length > 1
+                ? html`<p class="otp-hint">Tienes más de una cuenta en este teléfono: cada una tiene su propio código en la app. Usa el de
+                    <strong>${me.user.full_name}</strong>${rolesLabel(me.user) ? html` (${rolesLabel(me.user)})` : ''}.</p>`
+                : ''}`}
         <form data-code novalidate>
           ${otpField()}
           <p class="otp-status" data-otp-status aria-live="polite"></p>

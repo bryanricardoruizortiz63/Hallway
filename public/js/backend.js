@@ -210,6 +210,9 @@ export async function signIn(schoolCode, username, password) {
   return me;
 }
 
+/** Which version of the app this phone has (Personal › the person shows it). */
+export const setMyAppVersion = (version) => rpc('set_my_app_version', { p_version: version });
+
 /** Icon of the school with this code (current or old), for the login screen. Null if unknown. */
 export const schoolBranding = (code) => rpc('school_branding', { p_code: code }).catch(() => null);
 
