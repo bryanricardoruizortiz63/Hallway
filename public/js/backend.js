@@ -1144,18 +1144,35 @@ export const sealDocument = ({ kind, format, title, details = null, ids = null, 
 export const verifyDocument = (code) => rpc('verify_document', { p_code: code });
 
 /**
- * sheets: [{ name, columns: [{ header, width, wrap }], rows }]. Every Excel is sealed: it gets a «Verificación» sheet
- * with its code and QR code. seal: what to seal (by default, a download of the first sheet's rows); if it can't be
- * sealed (no connection), it downloads without it.
+ * sheets: [{ name, columns: [{ header, width, wrap }], rows }]. First asks «¿En qué formato?»: Excel or a PDF in
+ * Hallway's layout (the same tables). Both are sealed: the Excel gets a «Verificación» sheet with its code and QR code,
+ * the PDF the verification box. seal: what to seal (by default, a download of the first sheet's rows); an Excel that
+ * can't be sealed (no connection) downloads without it.
  */
+/** More than this, the PDF would have hundreds of pages: Excel is the right format. */
+const PDF_MAX_ROWS = 1500;
+
 export async function downloadXlsx(filename, sheets, seal = {}) {
+  const docs = await import('./docs.js');
+  const title = seal.title || filename.replace(/\.xlsx$/, '').replace(/_/g, ' ');
+  const format = await docs.chooseFormat(title);
+  if (!format) return;
+  const items = sheets[0]?.rows?.length || 0;
+  if (format === 'pdf') {
+    // Each page is a picture: thousands of rows would be a file too big for a phone.
+    const total = sheets.reduce((n, sh) => n + (sh.rows?.length || 0), 0);
+    if (total > PDF_MAX_ROWS) {
+      throw new ApiError(`Son ${total} filas: demasiadas para un PDF. Descárgalo en Excel o elige un período más corto.`);
+    }
+    const s = await sealDocument({ kind: 'export', items, ...seal, title, format: 'pdf' });
+    const subtitle = [seal.details, sheets.length > 1 ? sheets.map((sh) => sh.name).join(' · ') : null].filter(Boolean).join(' · ');
+    const pdf = await docs.tablesPdf({ title, subtitle: subtitle || null, sheets }, s);
+    await docs.offerFile(pdf, filename.replace(/\.xlsx$/, '.pdf'));
+    return;
+  }
   let all = sheets;
   try {
-    const docs = await import('./docs.js');
-    const title = seal.title || filename.replace(/\.xlsx$/, '').replace(/_/g, ' ');
-    const s = await sealDocument({
-      kind: 'export', items: sheets[0]?.rows?.length || 0, ...seal, title, format: 'excel',
-    });
+    const s = await sealDocument({ kind: 'export', items, ...seal, title, format: 'excel' });
     all = [...sheets, await docs.verifySheet(s, title)];
   } catch (err) {
     console.warn('No se pudo sellar el Excel', err);
@@ -1381,7 +1398,7 @@ export function exportArchiveXlsx(school, data) {
     perEmployee.set(a.user_id, e);
   }
 
-  const blob = buildXlsx([
+  return downloadXlsx(`archivo_${school.code}_${data.from}_${data.to}.xlsx`, [
     { name: 'Ausencias', columns: ABSENCE_COLUMNS, rows: data.absences.map((a) => absenceRow(a, reasons)) },
     {
       name: 'Por empleado',
@@ -1425,8 +1442,7 @@ export function exportArchiveXlsx(school, data) {
         xDateTime(f.created_at), f.for_cover ? 'Sí' : 'No', paths.get(f.id),
       ]),
     },
-  ]);
-  download(`archivo_${school.code}_${data.from}_${data.to}.xlsx`, blob);
+  ], { title: `Archivo de ausencias de ${school.name}`, details: `${data.from} – ${data.to}` });
 }
 
 /** Downloads every document of the period and saves them in one ZIP. onProgress(done, total). */

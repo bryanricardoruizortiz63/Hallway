@@ -2039,4 +2039,19 @@ export const SERVER = {
   'y escribe su código de 6 números. Te lo pide una vez al día.': 'and type its 6-digit code. It asks once a day.',
   'Tienes más de una cuenta en este teléfono: cada una tiene su propio código en la app. Usa el de':
     'You have more than one account on this phone: each has its own code in the app. Use the one for',
+  // ---- Excel or PDF ----
+  'Ausencias del período (Excel o PDF)': 'Absences of the period (Excel or PDF)',
+  'Todas las ausencias (Excel o PDF)': 'All absences (Excel or PDF)',
+  'Lista de personal (Excel o PDF)': 'Staff list (Excel or PDF)',
+  'En Excel (también abre en Google Sheets y Numbers) o en PDF con el diseño de Hallway.': 'In Excel (also opens in Google Sheets and Numbers) or as a PDF with Hallway’s design.',
+  'Descargar (Excel o PDF)': 'Download (Excel or PDF)',
+  'Descargar todo el historial del año (Excel o PDF)': 'Download the whole year’s history (Excel or PDF)',
+  'Excel o PDF': 'Excel or PDF',
+  'Exportar (Excel o PDF)': 'Export (Excel or PDF)',
+  '¿En qué formato?': 'Which format?',
+  'Con el diseño de Hallway, listo para imprimir o enviar.': 'With Hallway’s design, ready to print or send.',
+  'Para ordenar, filtrar o sacar cuentas (también abre en Google Sheets y Numbers).': 'To sort, filter or do the math (also opens in Google Sheets and Numbers).',
+  'Sin datos en este período.': 'No data in this period.',
+  '1. Descargar el año (Excel o PDF)': '1. Download the year (Excel or PDF)',
+  'Descargado. Guárdalo en un lugar seguro (por ejemplo OneDrive).': 'Downloaded. Keep it somewhere safe (for example OneDrive).',
 };

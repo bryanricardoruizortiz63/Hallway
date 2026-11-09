@@ -57,7 +57,7 @@ export async function historyPeopleView({ el }) {
     <section class="card stack">
       <h2 class="card-title">${icon('download')} Respaldo del año escolar</h2>
       <p class="hint">${KEEP_HINT}</p>
-      <button type="button" class="btn btn-secondary btn-block" data-download-all>${icon('download', 18)} Descargar todo el historial del año (Excel)</button>
+      <button type="button" class="btn btn-secondary btn-block" data-download-all>${icon('download', 18)} Descargar todo el historial del año (Excel o PDF)</button>
       <p class="hint">${full
         ? 'Incluye una hoja con el récord de cada turno: el estudiante, su grupo, el motivo y cómo terminó.'
         : 'El récord de los turnos con los estudiantes solo lo descargan Admin y Director(a).'}</p>
@@ -139,7 +139,7 @@ export async function historyView({ el, params, setTitle }) {
     <div class="list-head no-print">
       <p class="muted" data-count></p>
       <span class="quick">
-        <button type="button" class="btn btn-secondary btn-sm" data-xlsx>${icon('download', 16)} Excel</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-xlsx>${icon('download', 16)} Excel o PDF</button>
         <button type="button" class="btn btn-secondary btn-sm" data-print>${icon('download', 16)} PDF</button>
       </span>
     </div>

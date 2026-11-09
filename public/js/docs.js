@@ -6,8 +6,10 @@
 //     verification box; the code at the bottom of every page).
 //   * Picture (PNG): the same, drawn.
 //   * Excel: a «Verificación» sheet with the code, the link and the QR code.
+//   * Exports (Datos y reportes, the services' panels, the history, the year's archive): the person chooses Excel or
+//     PDF; the PDF has the same sheets as tables in Hallway's layout (very wide ones, one box per row).
 import { sealDocument } from './backend.js';
-import { CATEGORIES, dialog, fmtDateTime, fmtLongDate, fmtTime, html } from './lib.js';
+import { CATEGORIES, dialog, fmtDate, fmtDateTime, fmtLongDate, fmtTime, html } from './lib.js';
 import { t } from './i18n.js';
 import { appIcon } from './branding.js';
 import { state } from './store.js';
@@ -103,9 +105,7 @@ export function historyBlock(r) {
 
 // ---- PDF ------------------------------------------------------------------------------------------------------
 
-// Letter pages at 150 dpi.
-const PAGE_W = 1275;
-const PAGE_H = 1650;
+// Letter pages at 150 dpi (1275 × 1650, or 1650 × 1275 landscape).
 const MARGIN = 80;
 
 const fontOf = (size, weight = 400) => `${weight} ${size}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
@@ -114,7 +114,16 @@ function wrapText(ctx, text, size, weight, width) {
   ctx.font = fontOf(size, weight);
   const out = [];
   let line = '';
-  for (const w of String(text).split(' ')) {
+  for (let w of String(text).split(' ')) {
+    // A word wider than the space (a long address in a narrow column) is cut where it runs out.
+    while (ctx.measureText(w).width > width && w.length > 1) {
+      let n = w.length - 1;
+      while (n > 1 && ctx.measureText(w.slice(0, n)).width > width) n--;
+      if (line) out.push(line);
+      out.push(w.slice(0, n));
+      line = '';
+      w = w.slice(n);
+    }
     const next = line ? `${line} ${w}` : w;
     if (ctx.measureText(next).width > width && line) {
       out.push(line);
@@ -130,6 +139,9 @@ async function docPages(doc, s) {
   const school = doc.school || state.me?.school?.name || '';
   const link = verifyLink(s.code);
   const [icon, matrix] = await Promise.all([loadImage(appIcon()), qrMatrix(link)]);
+  // Tables with many columns go on landscape pages.
+  const PAGE_W = doc.landscape ? 1650 : 1275;
+  const PAGE_H = doc.landscape ? 1275 : 1650;
   const W = PAGE_W - MARGIN * 2;
   const BOTTOM = PAGE_H - MARGIN - 30;
   const pages = [];
@@ -190,8 +202,8 @@ async function docPages(doc, s) {
   }
   y += 16;
 
-  // The items, each in its box (a box moves to the next page when it doesn't fit).
-  for (const b of doc.blocks) {
+  // An item in its box (a box moves to the next page when it doesn't fit).
+  const drawBlock = (b) => {
     const lines = [
       ...wrapText(ctx, b.title, 26, 700, W - 48).map((l) => [l, 26, 700, '#0f172a', 36]),
       ...b.lines.flatMap((x) => wrapText(ctx, x, 21, 400, W - 48).map((l) => [l, 21, 400, '#334155', 30])),
@@ -215,7 +227,102 @@ async function docPages(doc, s) {
       text(l, MARGIN + 28, ly - 9, size, weight, color);
     }
     y = Math.max(y + h, ly + 14) + 12;
+  };
+
+  // Tables (exports): a blue header row repeated on every page, rows with a soft stripe. A sheet with too many
+  // columns to read as a table: one box per row, «Column: value».
+  for (const table of doc.tables || []) {
+    const cols = table.columns;
+    if (cols.length > 14) {
+      if (doc.tables.length > 1) {
+        if (y + 120 > BOTTOM) newPage();
+        text(table.heading || table.name, MARGIN, y + 30, 26, 700, '#0f172a');
+        y += 48;
+      }
+      if (!table.rows.length) {
+        text(t('Sin datos en este período.'), MARGIN, y + 24, 20, 400, '#64748b');
+        y += 44;
+      }
+      for (const row of table.rows) drawBlock(rowBlock(cols, row));
+      y += 20;
+      continue;
+    }
+    const size = doc.fontSize || 17;
+    const LH = Math.round(size * 1.35);
+    const PAD = 8;
+    const total = cols.reduce((n, c) => n + (c.width || 12), 0);
+    // Each column at least as wide as the longest word of its title; the rest shared as in the Excel.
+    ctx.font = fontOf(size, 700);
+    const longest = (str) => Math.max(0, ...String(str).split(/[\s]+/).map((w) => ctx.measureText(w).width));
+    const minW = cols.map((c, i) => {
+      const head = longest(c.header);
+      ctx.font = fontOf(size, 400);
+      // Short values (a phone, a date) stay on one line too, without taking over the page.
+      const data = Math.min(220, Math.max(0, ...table.rows.slice(0, 200).map((r) => longest(cellText(r[i])))));
+      ctx.font = fontOf(size, 700);
+      return Math.max(head, data) + PAD * 2 + 2;
+    });
+    // Too many columns for their minimums: all of them shrink alike.
+    const minSum = minW.reduce((n, w) => n + w, 0);
+    if (minSum > W * 0.9) minW.forEach((w, i) => { minW[i] = (w / minSum) * W * 0.9; });
+    let widths = cols.map((c) => ((c.width || 12) / total) * W);
+    for (let round = 0; round < 3; round++) {
+      const short = widths.map((w, i) => w < minW[i]);
+      const need = widths.reduce((n, w, i) => n + (short[i] ? minW[i] - w : 0), 0);
+      if (need <= 0) break;
+      const spare = widths.reduce((n, w, i) => n + (short[i] ? 0 : w - minW[i]), 0);
+      widths = widths.map((w, i) => (short[i] ? minW[i] : w - ((w - minW[i]) / spare) * need));
+    }
+    const xs = widths.reduce((acc, w, i) => [...acc, acc[i] + w], [MARGIN]);
+    const cellLines = (value, i, weight) => {
+      const out = [];
+      for (const part of String(value).split('\n')) out.push(...wrapText(ctx, part, size, weight, widths[i] - PAD * 2));
+      return out.length ? out : [''];
+    };
+    const headLines = cols.map((c, i) => cellLines(c.header, i, 700));
+    const headH = Math.max(...headLines.map((l) => l.length)) * LH + PAD * 2;
+    const drawHead = () => {
+      ctx.fillStyle = '#1e4fd8';
+      roundRect(ctx, MARGIN, y, W, headH, 8);
+      ctx.fill();
+      headLines.forEach((ls, i) => ls.forEach((l, k) => text(l, xs[i] + PAD, y + PAD + (k + 1) * LH - 5, size, 700, '#ffffff')));
+      y += headH;
+    };
+    if (doc.tables.length > 1 || table.heading) {
+      if (y + 60 + headH + LH * 2 > BOTTOM) newPage();
+      text(table.heading || table.name, MARGIN, y + 30, 26, 700, '#0f172a');
+      y += 48;
+    }
+    if (y + headH + LH * 2 > BOTTOM) newPage();
+    drawHead();
+    if (!table.rows.length) {
+      text(t('Sin datos en este período.'), MARGIN + PAD, y + LH + 4, size, 400, '#64748b');
+      y += LH + PAD * 2;
+    }
+    table.rows.forEach((row, r) => {
+      let lines = cols.map((_, i) => cellLines(cellText(row[i]), i, 400));
+      // A cell taller than a page is cut, so the row always fits.
+      const maxLines = Math.floor((BOTTOM - MARGIN - headH - 300) / LH);
+      lines = lines.map((ls) => (ls.length > maxLines ? [...ls.slice(0, maxLines - 1), '…'] : ls));
+      const h = Math.max(...lines.map((l) => l.length)) * LH + PAD * 2;
+      if (y + h > BOTTOM) {
+        newPage();
+        drawHead();
+      }
+      if (r % 2) {
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillRect(MARGIN, y, W, h);
+      }
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(MARGIN, y + h - 1, W, 1);
+      lines.forEach((ls, i) => ls.forEach((l, k) => text(l, xs[i] + PAD, y + PAD + (k + 1) * LH - 5, size, 400, '#1e293b')));
+      y += h;
+    });
+    y += 30;
   }
+
+  // The items, each in its box.
+  for (const b of doc.blocks || []) drawBlock(b);
 
   // The verification box: the QR code, the code and the link.
   const QR = 230;
@@ -286,11 +393,13 @@ async function pdfOf(pages, title) {
   object(3, () => push(`<< /Title ${pdfText(title)} /Producer (Hallway) >>`));
   jpegs.forEach((jpg, i) => {
     const [page, contents, image] = ids(i);
-    object(page, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 ${image} 0 R >> >> /Contents ${contents} 0 R >>`));
-    const draw = 'q 612 0 0 792 0 0 cm /Im0 Do Q';
+    const wide = pages[i].width > pages[i].height;
+    const [pw, ph] = wide ? [792, 612] : [612, 792];
+    object(page, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${image} 0 R >> >> /Contents ${contents} 0 R >>`));
+    const draw = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
     object(contents, () => push(`<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`));
     object(image, () => {
-      push(`<< /Type /XObject /Subtype /Image /Width ${PAGE_W} /Height ${PAGE_H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
+      push(`<< /Type /XObject /Subtype /Image /Width ${pages[i].width} /Height ${pages[i].height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
       push(jpg);
       push('\nendstream');
     });
@@ -301,6 +410,45 @@ async function pdfOf(pages, title) {
   for (let id = 1; id <= count; id++) push(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
   push(`trailer\n<< /Size ${count + 1} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(parts, { type: 'application/pdf' });
+}
+
+const TITLE_COLUMNS = ['Empleado', 'Nombre', 'Persona', 'Estudiante'];
+
+/** A row of a wide sheet as a box: the person as its title, then «Column: value» (long texts on their own line). */
+function rowBlock(cols, row) {
+  let ti = cols.findIndex((c) => TITLE_COLUMNS.includes(c.header));
+  if (ti < 0) ti = 0;
+  const short = [];
+  const long = [];
+  cols.forEach((c, i) => {
+    if (i === ti) return;
+    const v = cellText(row[i]);
+    if (!v) return;
+    (c.wrap || v.length > 40 ? long : short).push(`${t(c.header)}: ${v.replace(/\n/g, ' · ')}`);
+  });
+  const lines = [];
+  for (let i = 0; i < short.length; i += 3) lines.push(short.slice(i, i + 3).join('   ·   '));
+  return { title: cellText(row[ti]) || '—', lines: [...lines, ...long] };
+}
+
+/** What an Excel cell shows, as text: dates and moments as people read them. */
+function cellText(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(Math.round(v * 100) / 100) : '';
+  if (typeof v === 'object' && v.date) return fmtDate(v.date, { day: 'numeric', month: 'short', year: 'numeric' });
+  if (typeof v === 'object' && v.datetime) return fmtDateTime(v.datetime);
+  return String(v);
+}
+
+/**
+ * The sheets of an Excel as a PDF in Hallway's layout: one table per sheet. Many columns: landscape and a smaller
+ * letter so they fit.
+ */
+export async function tablesPdf({ title, subtitle, sheets }, s) {
+  const widest = Math.max(0, ...sheets.filter((sh) => sh.columns.length <= 14).map((sh) => sh.columns.reduce((n, c) => n + (c.width || 12), 0)));
+  const landscape = widest > 110;
+  const fontSize = widest > 260 ? 12 : widest > 200 ? 13 : widest > 150 ? 15 : 17;
+  return pdfOf(await docPages({ title, subtitle, tables: sheets, landscape, fontSize }, s), title);
 }
 
 /** The document as a PDF file in Hallway's layout (no printing needed: it works the same on phones and computers). */
@@ -334,6 +482,54 @@ export async function offerFile(blob, name) {
   });
   await pending;
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/**
+ * «¿En qué formato?»: 'pdf', 'excel' or null (closed). The same choice for every export of the app; the last one
+ * chosen comes first next time.
+ */
+export function chooseFormat(title) {
+  let last = 'excel';
+  try {
+    last = localStorage.getItem('lah:export-format') || 'excel';
+  } catch {
+    /* no storage */
+  }
+  return new Promise((resolve) => {
+    let picked = null;
+    const pending = dialog({
+      title: t('¿En qué formato?'),
+      message: title,
+      body: html`<div class="format-pick">
+        <button type="button" class="format-option ${last === 'pdf' ? 'is-last' : ''}" data-format="pdf">
+          <span class="format-badge is-pdf">PDF</span>
+          <span><strong>PDF</strong><small>${t('Con el diseño de Hallway, listo para imprimir o enviar.')}</small></span>
+        </button>
+        <button type="button" class="format-option ${last === 'excel' ? 'is-last' : ''}" data-format="excel">
+          <span class="format-badge is-xlsx">XLSX</span>
+          <span><strong>Excel</strong><small>${t('Para ordenar, filtrar o sacar cuentas (también abre en Google Sheets y Numbers).')}</small></span>
+        </button>
+      </div>`,
+      confirmText: t('Cancelar'),
+      cancelText: '',
+    });
+    const box = document.querySelector('dialog.dialog:last-of-type');
+    // Choosing is the action: it closes with ✕ or a tap outside.
+    const actions = box?.querySelector('.dialog-actions');
+    if (actions) actions.hidden = true;
+    for (const b of box?.querySelectorAll('[data-format]') || []) {
+      b.addEventListener('click', () => {
+        picked = b.dataset.format;
+        try {
+          localStorage.setItem('lah:export-format', picked);
+        } catch {
+          /* best effort */
+        }
+        box.querySelector('[type=submit]').click();
+      });
+    }
+    pending.then(() => resolve(picked));
+  });
 }
 
 /** The PDF of a document already sealed, offered to share or download. */

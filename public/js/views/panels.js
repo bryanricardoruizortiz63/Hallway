@@ -289,7 +289,7 @@ export async function servicePanelView(ctx) {
       byPerson.set(t.created_by_name, x);
     }
     const avg = (f) => whole(average(turns.map(f)));
-    downloadXlsx(`${slug(service.name)}_${r.from}_${r.to}.xlsx`, [
+    return downloadXlsx(`${slug(service.name)}_${r.from}_${r.to}.xlsx`, [
       {
         name: 'Resumen',
         columns: [{ header: 'Dato', width: 34 }, { header: 'Valor', width: 14 }],
@@ -357,7 +357,7 @@ export async function servicePanelView(ctx) {
       if (t.reason) s.reasons.add(t.reason);
       byStudent.set(t.student_key, s);
     }
-    downloadXlsx(`${slug(service.name)}_${r.from}_${r.to}.xlsx`, [
+    return downloadXlsx(`${slug(service.name)}_${r.from}_${r.to}.xlsx`, [
       {
         name: 'Visitas',
         columns: [
@@ -433,7 +433,7 @@ export async function servicePanelView(ctx) {
           <h2 class="card-title">${icon('download')} Descargar</h2>
           <p class="muted">Un Excel con el resumen del período, cada pedido (fecha, hora, quién lo pidió, dónde, motivo, gravedad,
             resultado, qué se hizo y tiempos) y los pedidos por motivo, por salón y por persona.</p>
-          <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar Excel</button>
+          <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar (Excel o PDF)</button>
         </section>
         ${bars('Motivos', 'list', countBy(turns, (t) => t.reason || 'Sin motivo'))}
         ${bars('Resultado', 'check', countBy(rows, resultOf))}
@@ -469,7 +469,7 @@ export async function servicePanelView(ctx) {
       <section class="card stack">
         <h2 class="card-title">${icon('download')} Descargar</h2>
         <p class="muted">Un Excel con cada turno (fecha, hora, estudiante, grupo, motivo, gravedad, resultado y tiempos), las visitas por estudiante y por motivo.</p>
-        <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar Excel</button>
+        <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar (Excel o PDF)</button>
       </section>
       ${bars('Motivos', 'list', countBy(turns, (t) => t.reason || 'Sin motivo'))}
       ${bars('Resultado', 'check', countBy(rows, resultOf))}
@@ -484,8 +484,7 @@ export async function servicePanelView(ctx) {
   function bind() {
     $('[data-export]', body)?.addEventListener('click', (e) =>
       busy(e.currentTarget, async () => {
-        exportExcel();
-        if (!downloaded) {
+        if ((await exportExcel()) && !downloaded) {
           downloaded = true;
           body.innerHTML = String(render());
           sizeBars(body);
@@ -612,7 +611,7 @@ export async function maintenancePanelView({ el, isCurrent }) {
       <section class="card stack">
         <h2 class="card-title">${icon('download')} Descargar</h2>
         <p class="muted">Un Excel con cada solicitud (tipo, lugar, urgencia, quién la pidió y la atendió, y cuánto tardó) y un resumen por lugar.</p>
-        <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar Excel</button>
+        <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar (Excel o PDF)</button>
       </section>
       ${bars('Por tipo', 'wrench', countBy(rows, kindOf))}
       ${bars('Lugares con más solicitudes', 'door', [...places.values()].sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'es')).slice(0, 10))}
@@ -702,7 +701,7 @@ export async function roomsPanelView({ el, isCurrent }) {
       <section class="card stack">
         <h2 class="card-title">${icon('download')} Descargar</h2>
         <p class="muted">Un Excel con cada reserva del período: día, horas, para qué, estado y quién la pidió y la aprobó.</p>
-        <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar Excel</button>
+        <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar (Excel o PDF)</button>
       </section>
       ${bars('Horas por persona', 'users', [...byPerson].map(([label, value]) => ({ label, value }))
         .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'es')).slice(0, 10), { format: hoursFmt })}

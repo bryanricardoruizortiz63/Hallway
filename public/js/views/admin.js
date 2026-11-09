@@ -927,10 +927,10 @@ export async function dataView({ el, isCurrent }) {
       <div data-stats><div class="loading"><span class="spinner"></span></div></div>
       <section class="card stack">
         <h2 class="card-title">${icon('download')} Exportar datos de la escuela</h2>
-        <p class="muted">Archivos de Excel (también abren en Google Sheets y Numbers).</p>
-        <button type="button" class="btn btn-secondary btn-block" data-export="range">${icon('download', 18)} Ausencias del período (Excel)</button>
-        <button type="button" class="btn btn-secondary btn-block" data-export="all">${icon('download', 18)} Todas las ausencias (Excel)</button>
-        <button type="button" class="btn btn-secondary btn-block" data-export="employees">${icon('download', 18)} Lista de personal (Excel)</button>
+        <p class="muted">En Excel (también abre en Google Sheets y Numbers) o en PDF con el diseño de Hallway.</p>
+        <button type="button" class="btn btn-secondary btn-block" data-export="range">${icon('download', 18)} Ausencias del período (Excel o PDF)</button>
+        <button type="button" class="btn btn-secondary btn-block" data-export="all">${icon('download', 18)} Todas las ausencias (Excel o PDF)</button>
+        <button type="button" class="btn btn-secondary btn-block" data-export="employees">${icon('download', 18)} Lista de personal (Excel o PDF)</button>
         <button type="button" class="btn btn-ghost btn-block" data-export="backup">${icon('shield', 18)} Respaldo completo (JSON)</button>
       </section>
       <section class="card stack">
