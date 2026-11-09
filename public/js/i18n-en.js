@@ -321,6 +321,7 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 export const EN_PATTERNS = [
   [/^Cada (\d+) minutos$/, (n) => `Every ${n} minutes`],
   [/^(\d+) minutos$/, (n) => `${n} minutes`],
+  [/^(\d+) veces$/, (n) => `${n} times`],
   [/^Historial de (.+)$/, (who) => `${who}’s history`],
   [/^Historial del personal de (.+)$/, (school) => `${school} staff history`],
   [/^(.+) va al salón$/, (s) => `${s} is going to the classroom`],

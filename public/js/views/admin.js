@@ -444,6 +444,8 @@ const FOR = [5, 10, 15, 20, 30, 45, 60];
 
 function urgentCard(school) {
   const saved = school.urgent_repeat || {};
+  const call = { every: 3, times: 4, ...(saved.call_reminder || {}) };
+  const answer = saved.return_answer?.minutes ?? 3;
   return html`<form class="card stack" data-urgent>
     <h2 class="card-title">${icon('bell')} Avisos urgentes</h2>
     <p class="muted">Los avisos urgentes suenan como alarma y se repiten hasta que alguien los abre. Elige cada cuánto se
@@ -461,6 +463,24 @@ function urgentCard(school) {
       </div>`;
     })}
     <p class="hint">Deja de sonar en cuanto alguien abre el aviso (y el relevo, en cuanto alguien lo toma). Con la app abierta, cada vez suena unos segundos.</p>
+    <h3 class="card-title">${icon('clock')} Tiempos de los turnos</h3>
+    <div class="urgent-row">
+      <div><strong>Recordar que envíen al estudiante</strong>
+        <small class="hint">Cuando el servicio llama a un estudiante y nadie toca «Ya salió», se les recuerda a sus maestros; después se avisa al servicio.</small></div>
+      <div class="grid2">
+        <label class="field"><span>Cada</span>
+          <select name="call_every">${[1, 2, 3, 4, 5, 10].map((n) => html`<option value="${n}" ${n === call.every ? 'selected' : ''}>${n} ${n === 1 ? 'minuto' : 'minutos'}</option>`)}</select></label>
+        <label class="field"><span>Veces</span>
+          <select name="call_times">${[1, 2, 3, 4, 5, 6, 8, 10].map((n) => html`<option value="${n}" ${n === call.times ? 'selected' : ''}>${n} ${n === 1 ? 'vez' : 'veces'}</option>`)}</select></label>
+      </div>
+    </div>
+    <div class="urgent-row">
+      <div><strong>Responder «¿Ya llegó al salón?»</strong>
+        <small class="hint">Cuando se acaba el tiempo de regreso, se pregunta a sus maestros; si nadie responde en este tiempo, se avisa a Seguridad.</small></div>
+      <label class="field"><span>Tiempo para responder</span>
+        <select name="return_minutes">${[1, 2, 3, 4, 5, 10, 15].map((n) => html`<option value="${n}" ${n === answer ? 'selected' : ''}>${n} ${n === 1 ? 'minuto' : 'minutos'}</option>`)}</select></label>
+    </div>
+    <p class="hint">El tiempo que tiene cada estudiante para llegar a un servicio se cambia en Servicios.</p>
     <button class="btn btn-secondary" type="submit">Guardar</button>
   </form>`;
 }
@@ -470,7 +490,7 @@ function bindUrgentCard(el, school) {
   if (!form) return;
   form.addEventListener('change', (e) => {
     const row = e.target.closest('[data-kind]');
-    if (row && e.target.name.endsWith('_every')) $('[data-for]', row).hidden = e.target.value === '0';
+    if (row && e.target.name.endsWith('_every') && $('[data-for]', row)) $('[data-for]', row).hidden = e.target.value === '0';
   });
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -478,6 +498,8 @@ function bindUrgentCard(el, school) {
       const settings = Object.fromEntries(URGENT_KINDS.map(([key]) => [key, {
         every: Number(form[`${key}_every`].value), for: Number(form[`${key}_for`].value),
       }]));
+      settings.call_reminder = { every: Number(form.call_every.value), times: Number(form.call_times.value) };
+      settings.return_answer = { minutes: Number(form.return_minutes.value) };
       school.urgent_repeat = await setUrgentRepeat(settings);
       toast('Avisos urgentes guardados', 'ok');
     });
