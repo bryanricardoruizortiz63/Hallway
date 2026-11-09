@@ -2033,4 +2033,10 @@ export const SERVER = {
   '· Al día': '· Up to date',
   '· Tiene una versión anterior: se actualiza sola la próxima vez que abra la app con conexión.':
     '· Has an older version: it updates itself the next time they open the app online.',
+  // ---- Daily code: which account ----
+  'El código es para esta cuenta': 'The code is for this account',
+  'En tu app de autenticación busca': 'In your authenticator app look for',
+  'y escribe su código de 6 números. Te lo pide una vez al día.': 'and type its 6-digit code. It asks once a day.',
+  'Tienes más de una cuenta en este teléfono: cada una tiene su propio código en la app. Usa el de':
+    'You have more than one account on this phone: each has its own code in the app. Use the one for',
 };

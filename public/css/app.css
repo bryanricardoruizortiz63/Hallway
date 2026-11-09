@@ -5005,3 +5005,16 @@ details.card > summary.card-title::-webkit-details-marker {
 .version-row .item-main { display: grid; gap: 2px; min-width: 0; }
 .text-warn { color: var(--warn); font-weight: 600; }
 .text-ok { color: var(--ok); font-weight: 600; }
+
+/* Verificación en dos pasos: which account the code is for */
+.otp-account {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.22); color: #fff;
+}
+.otp-account .avatar { flex: none; }
+.otp-account-main { display: grid; gap: 1px; min-width: 0; }
+.otp-account-main strong { font-size: 1.05rem; overflow-wrap: anywhere; }
+.otp-account-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255, 255, 255, 0.7); }
+.otp-account-sub { font-size: 0.85rem; color: rgba(255, 255, 255, 0.82); overflow-wrap: anywhere; }
+.otp-entry { color: #fff; background: rgba(255, 255, 255, 0.16); padding: 1px 8px; border-radius: 6px; white-space: nowrap; }
+.otp-hint { margin: 0; font-size: 0.85rem; text-align: center; color: rgba(255, 255, 255, 0.78); }

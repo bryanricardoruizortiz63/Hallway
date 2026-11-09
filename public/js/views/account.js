@@ -697,7 +697,14 @@ export async function verifyCodeView({ el }) {
         <div class="otp-head">
           <span class="otp-lock">${icon('shield', 26)}</span>
           <h1>Verificación en dos pasos</h1>
-          <p>${me.user.full_name} · ${me.school.name}</p>
+        </div>
+        <div class="otp-account" data-otp-account>
+          ${avatar(me.user.full_name)}
+          <span class="otp-account-main">
+            <span class="otp-account-label">El código es para esta cuenta</span>
+            <strong>${me.user.full_name}</strong>
+            <span class="otp-account-sub">${[rolesLabel(me.user), me.user.role === 'admin' ? null : `@${me.user.username}`, me.school.name].filter(Boolean).join(' · ')}</span>
+          </span>
         </div>
         ${setup
           ? html`<p><strong>Primera vez con esta cuenta:</strong></p>
@@ -710,7 +717,12 @@ export async function verifyCodeView({ el }) {
               <p class="otp-lead">En tu app saldrá como <strong>${setup.issuer}</strong> · ${setup.account}</p>
               <details><summary>¿No puedes escanearlo?</summary>
                 <p>En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
-          : html`<p class="otp-lead">Escribe el código de 6 números de <strong>Hallway</strong> que sale en tu app de autenticación. Te lo pide una vez al día.</p>`}
+          : html`<p class="otp-lead">En tu app de autenticación busca <strong class="otp-entry">${factor?.friendly_name || 'Hallway'}</strong>
+              y escribe su código de 6 números. Te lo pide una vez al día.</p>
+              ${savedAccounts().length > 1
+                ? html`<p class="otp-hint">Tienes más de una cuenta en este teléfono: cada una tiene su propio código en la app. Usa el de
+                    <strong>${me.user.full_name}</strong>${rolesLabel(me.user) ? html` (${rolesLabel(me.user)})` : ''}.</p>`
+                : ''}`}
         <form data-code novalidate>
           ${otpField()}
           <p class="otp-status" data-otp-status aria-live="polite"></p>
