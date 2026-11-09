@@ -2015,4 +2015,22 @@ export const SERVER = {
   'Ej. Rivera': 'E.g. Rivera',
   'Ej. Torres': 'E.g. Torres',
   'Escribe el primer apellido del estudiante.': 'Type the student’s first last name.',
+  // ---- App version ----
+  'Versión de la app': 'App version',
+  'Versión': 'Version',
+  'Revisando…': 'Checking…',
+  'Buscar actualización': 'Check for updates',
+  'La app se actualiza sola: al abrirla revisa si hay una versión nueva y la instala la próxima vez que sales de ella. Este botón lo hace ahora mismo.':
+    'The app updates itself: when it opens it checks for a new version and installs it the next time you leave it. This button does it right now.',
+  'Ya tienes la versión más reciente.': 'You already have the latest version.',
+  'No hay conexión con el servidor. Inténtalo de nuevo en un momento.': 'Can’t reach the server. Try again in a moment.',
+  'Hay una versión nueva que todavía se está publicando. Inténtalo en unos minutos.': 'A new version is still being published. Try again in a few minutes.',
+  'Este navegador no guarda la app; siempre abre la versión publicada.': 'This browser doesn’t keep the app; it always opens the published version.',
+  'No se pudo revisar si hay una versión nueva (sin conexión).': 'Couldn’t check for a new version (offline).',
+  'Al día: es la versión más reciente.': 'Up to date: it’s the latest version.',
+  'Versión de la app: todavía no la ha reportado': 'App version: not reported yet',
+  'Versión de la app:': 'App version:',
+  '· Al día': '· Up to date',
+  '· Tiene una versión anterior: se actualiza sola la próxima vez que abra la app con conexión.':
+    '· Has an older version: it updates itself the next time they open the app online.',
 };

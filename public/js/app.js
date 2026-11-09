@@ -1,7 +1,7 @@
 import { getMe, markAlertsRead, sendErrorReport } from './backend.js';
 import { can, historyFull, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, setErrorReporter, toast } from './lib.js';
 import { icon } from './icons.js';
-import { initPwa, syncPush } from './pwa.js';
+import { initPwa, reportAppVersion, syncPush } from './pwa.js';
 import { go, homePath, refreshUnread, setUnread, state } from './store.js';
 import { navItems } from './nav.js';
 import { blinkTitle, showAlarm, unlockAudio } from './alarm.js';
@@ -450,7 +450,10 @@ async function boot() {
   });
   poll(refreshUnread, 60000);
 
-  if (state.me) syncPush();
+  if (state.me) {
+    syncPush();
+    reportAppVersion(state.me.user.id);
+  }
   if (!location.hash || location.hash === '#' || location.hash === '#/') go(homePath(), { replace: true });
   else router();
 }

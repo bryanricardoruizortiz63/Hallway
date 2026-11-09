@@ -48,6 +48,7 @@ import {
 } from '../backend.js';
 import { APP_URL } from '../config.js';
 import { icon } from '../icons.js';
+import { publishedVersion, shortVersion } from '../pwa.js';
 import { go, state } from '../store.js';
 import { bindPasswordToggles, rememberSchool } from './auth.js';
 import { archiveSection } from './archive.js';
@@ -207,6 +208,19 @@ export async function employeesView({ el }) {
   await load();
 }
 
+/** «· al día» or «· versión anterior», compared with the one published now (once it can be read). */
+async function markVersion(el, version) {
+  const latest = await publishedVersion();
+  const line = el.querySelector('[data-employee-version]');
+  if (!latest || !line) return;
+  const tag = document.createElement('span');
+  tag.className = latest === version ? 'text-ok' : 'text-warn';
+  tag.textContent = latest === version
+    ? ' · Al día'
+    : ' · Tiene una versión anterior: se actualiza sola la próxima vez que abra la app con conexión.';
+  line.append(tag);
+}
+
 export async function employeeFormView({ el, params, setTitle }) {
   const isNew = params[0] === 'new';
   const me = state.me.user;
@@ -293,7 +307,10 @@ export async function employeeFormView({ el, params, setTitle }) {
                 placeholder="Vacía = se genera automáticamente"><button type="button" class="pw-toggle" data-pw>Ver</button></span></label>`
           : html`<label class="toggle"><input type="checkbox" name="active" ${employee.active ? 'checked' : ''} ${self ? 'disabled' : ''}>
               <span class="toggle-ui"></span><span>Cuenta activa</span></label>
-              <p class="hint">Último acceso: ${employee.last_login_at ? timeAgo(employee.last_login_at) : 'nunca'}</p>`}
+              <p class="hint">Último acceso: ${employee.last_login_at ? timeAgo(employee.last_login_at) : 'nunca'}</p>
+              <p class="hint" data-employee-version>Versión de la app: ${employee.app_version
+                ? html`<strong>${shortVersion(employee.app_version)}</strong> (abrió la app ${timeAgo(employee.app_version_at)})`
+                : 'todavía no la ha reportado'}</p>`}
       </section>
 
       <button class="btn btn-primary btn-block btn-lg" type="submit">${isNew ? html`${icon('plus')} Crear empleado` : 'Guardar cambios'}</button>
@@ -317,6 +334,7 @@ export async function employeeFormView({ el, params, setTitle }) {
     </form>`);
 
   bindPasswordToggles(el);
+  if (!isNew && employee.app_version) markVersion(el, employee.app_version);
   const form = $('[data-form]', el);
 
   const roleSelect = $('[data-role]', el);

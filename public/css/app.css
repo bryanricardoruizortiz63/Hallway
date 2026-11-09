@@ -4998,3 +4998,10 @@ details.card > summary.card-title::-webkit-details-marker {
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
+
+/* Más › Versión de la app */
+.version-card { display: grid; gap: 12px; }
+.version-row { display: flex; align-items: center; gap: 12px; }
+.version-row .item-main { display: grid; gap: 2px; min-width: 0; }
+.text-warn { color: var(--warn); font-weight: 600; }
+.text-ok { color: var(--ok); font-weight: 600; }
