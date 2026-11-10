@@ -1316,6 +1316,11 @@ button.item:last-child {
   color: var(--ok);
 }
 
+.badge-info {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
 .badge-warn {
   background: var(--warn-soft);
   color: var(--warn);
@@ -1642,6 +1647,19 @@ button.item:last-child {
 
 .status-note.muted {
   color: var(--muted);
+}
+
+/* A class covered while the teacher is on school work (not an absence). */
+.status-note.info {
+  align-items: flex-start;
+  color: var(--primary);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.status-note.info svg {
+  flex: none;
+  margin-top: 2px;
 }
 
 .details {

@@ -1,5 +1,5 @@
 import { dashboard, exportAbsencesXlsx, listEmployees, myCoverages, pendingBookings, schoolAbsences } from '../backend.js';
-import { $, addDays, busy, can, fmtLongDate, html, poll, reportsOwn, todayStr } from '../lib.js';
+import { $, busy, can, fmtLongDate, html, poll, reportsOwn, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
 import { absenceList, empty, installHint } from './common.js';
@@ -91,7 +91,8 @@ export async function absencesListView({ el, query, isCurrent }) {
   const filters = {
     q: query.get('q') || '',
     status: query.get('status') || 'active',
-    from: query.has('from') ? query.get('from') : addDays(today, -30),
+    // Today first; change the dates to see others.
+    from: query.has('from') ? query.get('from') : today,
     to: query.get('to') || '',
     user_id: query.get('user_id') || '',
   };

@@ -37,6 +37,7 @@ function answerText(v) {
 function visitTag(v) {
   if (v.status === 'waiting') return { label: 'Sin respuesta', cls: 'tag-warn' };
   if (v.status === 'done') return { label: 'Atendida', cls: 'tag-ok' };
+  if (v.unconfirmed) return { label: 'Sin confirmar', cls: 'tag-warn' };
   if (v.status === 'cancelled') return { label: 'Se fue', cls: '' };
   return { label: answerText(v), cls: ['wait', 'other'].includes(v.answer) ? 'tag-info' : 'tag-ok' };
 }
@@ -311,7 +312,7 @@ function steps(v) {
     [v.answer ? answerText(v) : 'Respuesta', v.answer && v.answer !== 'on_the_way' ? v.answered_by_name : null, v.answered_at],
   ];
   if (v.status === 'done') list.push(['Atendida', v.closed_by_name, v.closed_at]);
-  if (v.status === 'cancelled') list.push(['Se fue', v.closed_by_name, v.closed_at]);
+  if (v.status === 'cancelled') list.push([v.unconfirmed ? 'Sin confirmar' : 'Se fue', v.closed_by_name, v.closed_at]);
   return html`<ol class="timeline steps">
     ${list.map(([label, name, at]) => html`<li class="${at ? 'is-done' : ''}"><strong>${label}</strong>${at ? html`${name ? ` · ${name}` : ''}<small>${timeAgo(at)}</small>` : ''}</li>`)}
   </ol>`;
@@ -359,6 +360,7 @@ export async function visitDetailView(ctx) {
             ${v.answer === 'other' ? fact('Respuesta', `«${v.answer_note}»`) : ''}
           </div>
           ${steps(v)}
+          ${v.unconfirmed ? html`<p class="status-note warn">${icon('clock', 16)} Se cerró al terminar el horario escolar: nunca se confirmó en la app.</p>` : ''}
         </section>
         ${forMe && open
           ? html`<button type="button" class="btn ${v.status === 'waiting' ? 'btn-primary btn-lg' : 'btn-secondary'} btn-block" data-answer="on_the_way">${icon('send')} Voy en camino</button>

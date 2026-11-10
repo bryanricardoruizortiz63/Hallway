@@ -46,7 +46,12 @@ export const CATEGORIES = {
   familiar: 'Emergencia familiar',
   oficial: 'Capacitación / oficial',
   otro: 'Otro',
+  actividad: 'Actividad de la escuela',
 };
+
+/** A class to cover without an absence: the teacher is out on school work (see migration 080). */
+export const DUTY = 'actividad';
+export const isDuty = (a) => a?.category === DUTY;
 
 export const STATUS = {
   pending: { label: 'Enviada', cls: 'badge-warn' },
