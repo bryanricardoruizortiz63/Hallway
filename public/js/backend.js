@@ -1190,7 +1190,8 @@ function absenceDays(a, from, to) {
 }
 
 export async function stats(from, to) {
-  const rows = await schoolAbsences({ from, to, status: 'active' });
+  // Classes covered while the teacher was on school work aren't absences.
+  const rows = (await schoolAbsences({ from, to, status: 'active' })).filter((a) => a.category !== 'actividad');
   const byEmployee = new Map();
   const byCategory = new Map();
   let totalDays = 0;

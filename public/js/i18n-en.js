@@ -107,6 +107,7 @@ export const EN = {
   'Asunto personal': 'Personal matter',
   'Emergencia familiar': 'Family emergency',
   'Capacitación / oficial': 'Training / official',
+  'Actividad de la escuela': 'School activity',
   'Otro': 'Other',
   'Enviada': 'Sent',
   'Recibida': 'Received',
@@ -319,6 +320,7 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^Actividad de la escuela: no es una ausencia\. La anotó (.+?) · (.+)$/, 'School activity: not an absence. Noted by $1 · $2'],
   [/^Son (\d+) filas: demasiadas para un PDF\. Descárgalo en Excel o elige un período más corto\.$/, '$1 rows: too many for a PDF. Download it in Excel or choose a shorter period.'],
   [/^Hay una versión nueva \((\w+)\)\. Toca «Buscar actualización»\.$/, 'There’s a new version ($1). Tap “Check for updates”.'],
   [/^\(abrió la app (.+)\)$/, '(opened the app $1)'],

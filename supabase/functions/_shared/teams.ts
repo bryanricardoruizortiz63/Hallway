@@ -21,6 +21,7 @@ export const CATEGORIES: Record<string, string> = {
   familiar: 'Emergencia familiar',
   oficial: 'Capacitación / oficial',
   otro: 'Otro',
+  actividad: 'Actividad de la escuela',
 };
 
 export function fmtDateEs(date: string): string {

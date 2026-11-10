@@ -7,6 +7,7 @@
 export const NOTICES = {
   '💬 Hallway respondió tu mensaje': '💬 Hallway answered your message',
   // ---- Absences and coverage ----
+  'Tu clase se va a cubrir': 'Your class will be covered',
   'Nuevo documento en una ausencia': 'New document on an absence',
   'Tu ausencia fue cancelada': 'Your absence was cancelled',
   'Se registró una ausencia a tu nombre': 'An absence was recorded in your name',
@@ -98,6 +99,9 @@ export const NOTICE_PATTERNS = [
   [/^Nuevo comentario de (.+)$/, 'New comment from $1'],
   [/^Ausencia cancelada: (.+)$/, 'Absence cancelled: $1'],
   [/^Nueva ausencia: (.+)$/, 'New absence: $1'],
+  [/^Clase por cubrir: (.+)$/, 'Class to cover: $1'],
+  [/^Actividad de la escuela: (.+)$/, 'School activity: $1'],
+  [/^(.+) anotó que estarás en: (.+) \((.+)\)\. No cuenta como ausencia\.$/, '$1 noted you’ll be at: $2 ($3). It doesn’t count as an absence.'],
   [/^Ausencia modificada: (.+)$/, 'Absence changed: $1'],
   [/^(.+) registró tu ausencia para (.+)\.$/, '$1 recorded your absence for $2.'],
   [/^(.+) la cambió: (.+)$/, (who, what) => `${who} changed it: ${what}`],
@@ -227,6 +231,7 @@ export const NOTICE_PATTERNS = [
     (left) => `${{ 'Falta 1 mes': '1 month left', 'Faltan 2 semanas': '2 weeks left', 'Falta 1 semana': '1 week left', 'Falta 1 día': '1 day left' }[left] || left}: the school year ends on June 30 and on July 1 its absences, turns, notices and staff history are deleted, so the database doesn’t fill up. Download the backup first in More › Data and reports and in More › Staff history.`],
   // ---- Daily summary ----
   [/^Resumen del día · (.+)$/, 'Daily summary · $1'],
+  [/^(\d+) en actividad de la escuela(?: \((\d+) sin cubrir\))?$/, (k, u) => `${k} on school activity${u ? ` (${u} not covered)` : ''}`],
   [/^(\d+) ausencias?(?: \((\d+) sin cubrir\))?$/, (k, u) => `${n(k, 'absence', 'absences')}${u ? ` (${u} not covered)` : ''}`],
   [/^(\d+) turnos?(?: \((\d+) no (?:llegó|llegaron) a tiempo\))?$/, (k, l) => `${n(k, 'turn', 'turns')}${l ? ` (${l} didn’t arrive in time)` : ''}`],
   [/^(\d+) de mantenimiento pendientes?$/, '$1 maintenance pending'],

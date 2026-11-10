@@ -438,6 +438,7 @@ export async function moreView({ el }) {
         : null,
       reportsOwn(user) && isStaff(user) ? ['#/home', 'calendar', 'Mis ausencias', 'Tus propias ausencias y su estado'] : null,
       isStaff(user) ? ['#/absences', 'list', 'Todas las ausencias', 'Busca por persona o fechas y exporta a Excel'] : null,
+      can(user, 'register') ? ['#/report?duty=1', 'users', 'Cubrir una clase sin ausencia', 'Un maestro está en una actividad de la escuela y su grupo se queda'] : null,
       can(user, 'absence_search') ? ['#/search/absences', 'search', 'Buscar ausencias', 'Por nombre, fechas y grupo; guárdalas como PDF o foto'] : null,
       can(user, 'own_absence_search') ? ['#/search/my-absences', 'search', 'Buscar mis ausencias', 'Tus ausencias por fechas; guárdalas como PDF o foto'] : null,
     ]],

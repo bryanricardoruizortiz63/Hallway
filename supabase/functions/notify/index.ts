@@ -139,6 +139,25 @@ async function absenceCard(schoolName: string | undefined, settings: Settings, p
     });
   }
 
+  // A class to cover while the teacher is on school work: not an absence, and where they are isn't private.
+  if (a.category === 'actividad') {
+    return buildCard({
+      title: '📋 Clase por cubrir (actividad de la escuela)',
+      subtitle: schoolName,
+      facts: [
+        employee,
+        { title: 'Puesto', value: a.employee_position },
+        { title: 'Fecha', value: range },
+        { title: 'Horario', value: scheduleText(a) },
+        { title: 'Dónde estará', value: clip(a.reason) },
+        { title: 'Notas para cubrir', value: a.coverage_notes },
+        { title: 'Anotada por', value: a.created_by_name },
+      ],
+      text: 'No es una ausencia: el maestro está haciendo labor de la escuela.',
+      linkUrl,
+    });
+  }
+
   const onBehalf = a.created_by && a.created_by !== a.user_id;
   return buildCard({
     title: '🗓️ Nueva ausencia reportada',

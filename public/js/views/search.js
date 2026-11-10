@@ -99,7 +99,8 @@ function absenceSearch({ el }, own) {
   const search = async () => {
     const v = Object.fromEntries(new FormData(form));
     if (v.from && v.to && v.to < v.from) throw new Error('La fecha final debe ser después de la inicial.');
-    rows = own ? await searchMyAbsences(v) : await searchAbsences(v);
+    // Only absences: a class covered while the teacher was on school work isn't one.
+    rows = (own ? await searchMyAbsences(v) : await searchAbsences(v)).filter((r) => r.category !== 'actividad');
     picked.clear();
     draw();
   };

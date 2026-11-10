@@ -1,6 +1,8 @@
 import {
   $,
   CATEGORIES,
+  DUTY,
+  isDuty,
   NO_COVER,
   addDays,
   busy,
@@ -101,6 +103,8 @@ export async function homeView({ el }) {
 
 /** The employee (while the absence hasn't passed) or whoever registers the staff's absences can edit or cancel it. */
 function canChange(a, me) {
+  // A class to cover without an absence: only the dirección.
+  if (isDuty(a)) return a.status !== 'cancelled' && can(me, 'register');
   return a.status !== 'cancelled' && (can(me, 'register') || (a.user_id === me.id && a.end_date >= todayStr()));
 }
 
@@ -132,13 +136,16 @@ function savedItems(items, me, kind) {
   })}</ul>`;
 }
 
-async function absenceForm({ el, query }, absence, saved = null) {
+async function absenceForm({ el, query, setTitle }, absence, saved = null) {
   const me = state.me.user;
   const editing = !!absence;
+  // «Cubrir una clase sin ausencia»: the teacher is out on school work (an activity, a trip, a meeting).
+  const duty = editing ? isDuty(absence) : query.get('duty') === '1' && can(me, 'register');
+  if (duty) setTitle?.(editing ? 'Modificar clase por cubrir' : 'Cubrir una clase sin ausencia');
   // Whoever registers the staff's absences (and the Administración account) can report one for someone else;
   // the Administración account and the roles that don't report their own always do, the rest also their own.
   const forOthers = !editing && can(me, 'register');
-  const onlyOthers = !reportsOwn(me);
+  const onlyOthers = duty || !reportsOwn(me);
   const today = todayStr();
   const [employees, closures] = await Promise.all([
     forOthers ? listEmployees().then((list) => list.filter((e) => e.active && e.role !== 'admin' && e.id !== me.id)) : [],
@@ -156,7 +163,8 @@ async function absenceForm({ el, query }, absence, saved = null) {
   const initialRole = editing ? absence.employee_role : roleOf(preselect);
   const startTime = absence?.start_time?.slice(0, 5) || '08:00';
   const endTime = absence?.end_time?.slice(0, 5) || '';
-  const category = v0.category || '';
+  const category = duty ? DUTY : v0.category || '';
+  const dutyChips = ['Actividad extracurricular', 'Excursión', 'Reunión', 'Adiestramiento', 'Gestión de la escuela'];
   // While editing: what is already saved, and what will be removed on «Guardar cambios».
   const savedExcuses = (saved?.attachments || []).filter((f) => !f.for_cover);
   const savedCover = (saved?.attachments || []).filter((f) => f.for_cover);
@@ -167,7 +175,12 @@ async function absenceForm({ el, query }, absence, saved = null) {
     <form class="stack" data-form novalidate>
       ${forOthers
         ? html`<section class="card">
-            <label class="field"><span>¿Quién va a faltar?</span>
+            ${duty
+              ? html`<p class="status-note info">${icon('users', 16)} Para cuando un maestro no está ausente sino haciendo
+                  labor de la escuela (una actividad, una excursión, una reunión) y su grupo se queda: anótalo aquí y
+                  después elige quién cubre. No cuenta como ausencia. Si el maestro sí faltó, usa «Registrar una ausencia».</p>`
+              : ''}
+            <label class="field"><span>${duty ? '¿De quién es la clase?' : '¿Quién va a faltar?'}</span>
               <select name="user_id" ${onlyOthers ? 'required' : ''}>
                 ${onlyOthers
                   ? html`<option value="" ${preselect ? '' : 'selected'} disabled>Selecciona un empleado…</option>`
@@ -212,29 +225,40 @@ async function absenceForm({ el, query }, absence, saved = null) {
         <p class="status-note warn" data-closure-note hidden></p>
       </section>
 
-      <section class="card stack">
+      ${duty
+        ? html`<section class="card stack">
+            <h2 class="card-title">${icon('chat')} ¿Dónde estará?</h2>
+            <input type="hidden" name="category" value="${DUTY}">
+            <div class="chips">${dutyChips.map((c) => html`<button type="button" class="chip-btn" data-duty-chip="${c}">${c}</button>`)}</div>
+            <label class="field"><span>Razón</span>
+              <textarea name="reason" rows="3" maxlength="1000" required
+                placeholder="Ej.: Actividad extracurricular: torneo de baloncesto en el Coliseo.">${v0.reason || ''}</textarea>
+            </label>
+            <p class="hint">La ven el maestro, quien cubra y la dirección.</p>
+          </section>`
+        : html`<section class="card stack">
         <h2 class="card-title">${icon('chat')} Motivo <em class="optional">opcional</em></h2>
         <div class="chips" role="radiogroup" aria-label="Tipo de ausencia">
           <label class="chip"><input type="radio" name="category" value="" ${category ? '' : 'checked'}><span>Prefiero no decir</span></label>
-          ${Object.entries(CATEGORIES).map(
+          ${Object.entries(CATEGORIES).filter(([value]) => value !== DUTY).map(
             ([value, label]) => html`<label class="chip"><input type="radio" name="category" value="${value}" ${category === value ? 'checked' : ''}><span>${label}</span></label>`,
           )}
         </div>
         <label class="field"><span>Causa</span>
           <textarea name="reason" rows="3" maxlength="1000" placeholder="Puedes dejarlo en blanco si prefieres no especificar.">${v0.reason || ''}</textarea>
         </label>
-      </section>
+      </section>`}
 
-      <section class="card stack" data-coverage-notes ${needsCoverage(initialRole) || v0.coverage_notes || savedCover.length || savedLinks.length ? '' : 'hidden'}>
+      <section class="card stack" data-coverage-notes ${duty || needsCoverage(initialRole) || v0.coverage_notes || savedCover.length || savedLinks.length ? '' : 'hidden'}>
         <h2 class="card-title">${icon('users')} Para cubrir la clase <em class="optional">opcional</em></h2>
-        <label class="field"><span>Instrucciones para quien te cubra</span>
+        <label class="field"><span>${duty ? 'Instrucciones para quien cubra' : 'Instrucciones para quien te cubra'}</span>
           <textarea name="coverage_notes" rows="3" maxlength="1000"
             placeholder="Ej.: El plan está en el escritorio. Grupo 3-B: lectura pág. 45.">${v0.coverage_notes || ''}</textarea>
         </label>
         ${savedItems(savedLinks, me, 'link')}
         ${savedItems(savedCover, me, 'file')}
         <div class="stack-sm" data-cover-links>
-          <label class="field"><span>${editing ? 'Añadir enlace' : 'Enlace para quien te cubra'} <em class="optional">opcional</em></span>
+          <label class="field"><span>${editing ? 'Añadir enlace' : duty ? 'Enlace para quien cubra' : 'Enlace para quien te cubra'} <em class="optional">opcional</em></span>
             <input name="cover_link" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://docs.google.com/…"></label>
         </div>
         <button type="button" class="link-btn" data-more-link ${savedLinks.length + 1 >= MAX_LINKS ? 'hidden' : ''}>${icon('plus', 16)} Otro enlace</button>
@@ -246,7 +270,7 @@ async function absenceForm({ el, query }, absence, saved = null) {
         <p class="hint">Quien te cubra ve las instrucciones, los enlaces (un Google Doc, una presentación, un video…) y los archivos, y su aviso le dice que están en la app. Archivos: PDF, foto o Word, hasta ${MAX_FILES}.</p>
       </section>
 
-      <section class="card stack">
+      ${duty ? '' : html`<section class="card stack">
         <h2 class="card-title">${icon('clip')} Excusa o evidencia <em class="optional">opcional</em></h2>
         ${savedItems(savedExcuses, me, 'file')}
         <label class="dropzone">
@@ -257,7 +281,7 @@ async function absenceForm({ el, query }, absence, saved = null) {
         </label>
         <ul class="file-list" data-files></ul>
         <p class="hint">Solo la ve la dirección; quien te cubra, no.</p>
-      </section>
+      </section>`}
 
       ${editing
         ? html`<section class="card stack">
@@ -269,8 +293,10 @@ async function absenceForm({ el, query }, absence, saved = null) {
         : ''}
 
       <button class="btn btn-primary btn-block btn-lg" type="submit">
-        ${editing ? html`${icon('check')} Guardar cambios` : html`${icon('send')} Enviar ausencia`}</button>
-      <p class="hint center">${!editing
+        ${editing ? html`${icon('check')} Guardar cambios` : duty ? html`${icon('send')} Guardar y elegir quién cubre` : html`${icon('send')} Enviar ausencia`}</button>
+      <p class="hint center">${duty
+        ? 'Al maestro le llega un aviso. Después, en la siguiente pantalla, eliges quién cubre.'
+        : !editing
         ? 'La dirección recibirá una notificación al instante.'
         : absence.status === 'received'
           ? 'La dirección verá el cambio. Si cambias la fecha o la hora, tendrá que confirmarla de nuevo.'
@@ -318,6 +344,15 @@ async function absenceForm({ el, query }, absence, saved = null) {
         start.value = addDays(today, Number(b.dataset.quick));
       }
       update();
+    });
+  }
+  for (const chip of el.querySelectorAll('[data-duty-chip]')) {
+    chip.addEventListener('click', () => {
+      const r = form.reason;
+      const rest = r.value.replace(/^[^:]*:\s*/, '');
+      r.value = `${chip.dataset.dutyChip}: ${dutyChips.some((c) => r.value.startsWith(`${c}:`)) || !r.value ? rest : r.value}`;
+      for (const c of el.querySelectorAll('[data-duty-chip]')) c.classList.toggle('active', c === chip);
+      r.focus();
     });
   }
   start.addEventListener('change', update);
@@ -389,7 +424,8 @@ async function absenceForm({ el, query }, absence, saved = null) {
     e.preventDefault();
     busy(form.querySelector('[type=submit]'), async () => {
       const v = formValues(form);
-      if (onlyOthers && !v.user_id) throw new Error('Selecciona el empleado que va a faltar.');
+      if (onlyOthers && !v.user_id) throw new Error(duty ? 'Elige el maestro cuya clase hay que cubrir.' : 'Selecciona el empleado que va a faltar.');
+      if (duty && !String(v.reason || '').trim()) throw new Error('Escribe dónde estará el maestro (por ejemplo, la actividad).');
       if (!v.start_date) throw new Error('Selecciona la fecha.');
       if (v.partial === '1' && !v.start_time) throw new Error('Indica desde qué hora vas a faltar.');
       if (v.partial === '1' && !v.end_time) throw new Error('Indica hasta qué hora vas a faltar.');
@@ -420,7 +456,7 @@ async function absenceForm({ el, query }, absence, saved = null) {
         await addCoverLinks(id, coverLinks.map((url) => ({ url }))).catch((err) =>
           toast(`La ausencia se envió, pero no se guardó el enlace: ${err.message}`, 'error'));
       }
-      toast('Ausencia enviada. La dirección fue notificada.', 'ok');
+      toast(duty ? 'Anotado. Ahora elige quién cubre la clase.' : 'Ausencia enviada. La dirección fue notificada.', 'ok');
       go(`/absence/${id}`, { replace: true });
     });
   });
@@ -1069,7 +1105,7 @@ function bindDownloads(root, files) {
   }
 }
 
-export async function absenceView({ el, params }) {
+export async function absenceView({ el, params, setTitle }) {
   const id = params[0];
   const me = state.me.user;
   const staff = isStaff(me);
@@ -1082,7 +1118,9 @@ export async function absenceView({ el, params }) {
     // The plan or material for whoever covers, and the excuse or evidence (private).
     const forCover = attachments.filter((f) => f.for_cover);
     const excuses = attachments.filter((f) => !f.for_cover);
-    const coverable = roleNeedsCoverage(a.employee_role);
+    const duty = isDuty(a);
+    if (duty) setTitle?.('Clase por cubrir');
+    const coverable = duty || roleNeedsCoverage(a.employee_role);
     const cancelled = a.status === 'cancelled';
     const days = a.partial ? null : weekdays(a.start_date, a.end_date);
     const editable = canChange(a, me);
@@ -1107,7 +1145,7 @@ export async function absenceView({ el, params }) {
               <h2>${a.employee_name}</h2>
               <p class="muted">${a.employee_position || roleLabel(a.employee_role)}</p>
             </div>
-            ${statusBadge(a.status)}
+            ${duty && !cancelled ? html`<span class="badge badge-info">Actividad</span>` : statusBadge(a.status)}
           </div>
           <div class="when">
             ${icon('calendar')}
@@ -1116,7 +1154,9 @@ export async function absenceView({ el, params }) {
               <span>${scheduleText(a)}${days && days > 1 ? ` · ${days} días laborables` : ''}</span>
             </div>
           </div>
-          ${a.status === 'received'
+          ${duty && !cancelled
+            ? html`<p class="status-note info">${icon('users', 16)} Actividad de la escuela: no es una ausencia. La anotó ${a.created_by_name || 'la dirección'} · ${fmtDateTime(a.created_at)}</p>`
+            : a.status === 'received'
             ? html`<p class="status-note ok">${icon('check', 16)} Recibida por ${a.received_by_name || 'la dirección'} · ${fmtDateTime(a.received_at)}</p>`
             : a.status === 'pending'
               ? html`<p class="status-note warn">${icon('clock', 16)} ${staff ? 'Pendiente de confirmar recibo' : 'Enviada · esperando que la dirección la confirme'}</p>`
@@ -1128,9 +1168,9 @@ export async function absenceView({ el, params }) {
         <section class="card">
           <dl class="details">
             <div><dt>Tipo</dt><dd>${a.category ? CATEGORIES[a.category] : html`<span class="muted">No especificado</span>`}</dd></div>
-            <div><dt>Causa</dt><dd class="pre">${a.reason || html`<span class="muted">No especificada</span>`}</dd></div>
+            <div><dt>${duty ? 'Dónde estará' : 'Causa'}</dt><dd class="pre">${a.reason || html`<span class="muted">No especificada</span>`}</dd></div>
             ${a.coverage_notes ? html`<div><dt>Instrucciones para cubrir</dt><dd class="pre">${a.coverage_notes}</dd></div>` : ''}
-            <div><dt>Reportada</dt><dd>${fmtDateTime(a.created_at)}${a.created_by && a.created_by !== a.user_id ? ` · registrada por ${a.created_by_name}` : ''}</dd></div>
+            <div><dt>${duty ? 'Anotada' : 'Reportada'}</dt><dd>${fmtDateTime(a.created_at)}${a.created_by && a.created_by !== a.user_id ? ` · registrada por ${a.created_by_name}` : ''}</dd></div>
           </dl>
         </section>
 
@@ -1146,12 +1186,12 @@ export async function absenceView({ el, params }) {
             </section>`
           : ''}
 
-        <section class="card stack" data-excuse-files>
+        ${duty ? '' : html`<section class="card stack" data-excuse-files>
           <h3 class="card-title">${icon('clip')} Documentos ${excuses.length ? html`<span class="count">${excuses.length}</span>` : ''}</h3>
           ${excuses.length ? fileGrid(excuses, null) : html`<p class="muted">No hay documentos adjuntos.</p>`}
           ${editable ? html`<p class="hint">Para añadir o quitar documentos, toca «Modificar».</p>` : ''}
           ${coverable ? html`<p class="hint">La excusa o evidencia solo la ven ${mine ? 'tú' : 'el empleado'} y la dirección; quien cubre, no.</p>` : ''}
-        </section>
+        </section>`}
 
         <section class="card stack">
           <h3 class="card-title">${icon('chat')} Comentarios ${comments.length ? html`<span class="count">${comments.length}</span>` : ''}</h3>
