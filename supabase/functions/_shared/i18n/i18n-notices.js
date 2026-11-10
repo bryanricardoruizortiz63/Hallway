@@ -36,6 +36,8 @@ export const NOTICES = {
   'Media': 'Medium',
   'Alta': 'High',
   // ---- Pickups, relief, visits ----
+  'Su salida no se confirmó en la app antes de terminar el día. Toca para decir si se entregó o no.':
+    'Their pickup wasn’t confirmed in the app before the day ended. Tap to say whether they were handed over.',
   'Tenlo listo para salir.': 'Have them ready to leave.',
   'Se resolvió.': 'It was resolved.',
   'Va en camino.': 'On the way.',
@@ -132,6 +134,7 @@ export const NOTICE_PATTERNS = [
   [/^La canceló (.+?)\.?$/, 'Cancelled by $1.'],
   // ---- Pickups ----
   [/^Salida: (.+)$/, 'Pickup: $1'],
+  [/^¿Se entregó\? (.+)$/, 'Handed over? $1'],
   [/^Lo vienen a buscar(?: a las (.+))?$/, (at) => (at ? `Being picked up at ${at}` : 'Being picked up')],
   [/^Llegó el encargado de (.+)$/, '$1’s guardian arrived'],
   [/^Prepáralo: Seguridad pasa a buscarlo al salón (.+)\.$/, 'Get them ready: Security is coming to room $1.'],

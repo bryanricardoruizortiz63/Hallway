@@ -710,6 +710,9 @@ async function one(table, id, message) {
   return row;
 }
 export const getMissingAlert = (id) => one('student_alerts_v', id, 'No se encontró la alerta.');
+/** Seguridad says whether a pickup left unconfirmed was handed over (the next day). */
+export const answerPickupFollowup = (id, delivered, note) =>
+  rpc('answer_pickup_followup', { p_id: id, p_delivered: delivered, p_note: note || null });
 export const getPickup = (id) => one('student_pickups_v', id, 'No se encontró la salida.');
 export const getRelief = (id) => one('relief_requests', id, 'No se encontró el pedido de relevo.');
 

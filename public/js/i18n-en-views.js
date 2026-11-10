@@ -2084,4 +2084,16 @@ export const SERVER = {
   'Actividad': 'Activity',
   'Instrucciones para quien cubra': 'Instructions for whoever covers',
   'Enlace para quien cubra': 'Link for whoever covers',
+  // ---- Closed when the school day ends ----
+  'Se cerró al terminar el horario escolar: nunca se confirmó en la app.': 'Closed when the school day ended: it was never confirmed in the app.',
+  'Se entregó (confirmado después)': 'Handed over (confirmed later)',
+  'Se entregó': 'Handed over',
+  'No se entregó': 'Not handed over',
+  'Sí, se entregó': 'Yes, handed over',
+  '¿Se entregó al estudiante? Tu respuesta queda registrada.': 'Was the student handed over? Your answer is recorded.',
+  'Ej. Lo recogió su mamá a las 2:30.': 'E.g. Picked up by their mom at 2:30.',
+  'Ej. El encargado no llegó; se llamó a la casa.': 'E.g. The guardian didn’t come; we called home.',
+  'Respuesta guardada': 'Answer saved',
+  'Solo Seguridad puede responder esto.': 'Only Security can answer this.',
+  'Esta salida no quedó sin confirmar.': 'This pickup wasn’t left unconfirmed.',
 };

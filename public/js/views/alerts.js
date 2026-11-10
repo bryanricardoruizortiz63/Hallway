@@ -3,6 +3,7 @@
 // 24 hours; their names disappear from these screens after that.
 import {
   advancePickup,
+  answerPickupFollowup,
   cancelRelief,
   createPickup,
   createStudentAlert,
@@ -44,6 +45,14 @@ const PICKUP_STATUS = {
   cancelled: { label: 'Cancelada', cls: '' },
 };
 
+/** A pickup closed by Hallway when the school day ended: nobody confirmed it in the app. */
+const pickupTag = (k) =>
+  k.unconfirmed
+    ? k.followup === 'delivered' ? { label: 'Se entregó (confirmado después)', cls: 'tag-ok' }
+      : k.followup === 'not_delivered' ? { label: 'No se entregó', cls: 'tag-danger' }
+        : { label: 'Sin confirmar', cls: 'tag-warn' }
+    : PICKUP_STATUS[k.status] || PICKUP_STATUS.scheduled;
+
 const studentLabel = (row) => `${row.student_name || 'Estudiante'} (${row.group_name})`;
 const minutesBetween = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
 const isToday = (iso) => !!iso && new Date(iso).toDateString() === new Date().toDateString();
@@ -80,7 +89,7 @@ function missingItem(a) {
 }
 
 function pickupItem(k) {
-  const s = PICKUP_STATUS[k.status] || PICKUP_STATUS.scheduled;
+  const s = pickupTag(k);
   const done = k.status === 'delivered' || k.status === 'cancelled';
   return html`<a class="item alert-item ${k.status === 'arrived' ? 'is-urgent' : ''} ${done ? 'is-muted' : ''}" href="#/alerts/pickup/${k.id}">
     <span class="item-icon">${icon('logout')}</span>
@@ -100,6 +109,7 @@ function reliefItem(r, me) {
   const open = reliefOpen(r);
   let status;
   if (r.taken_at) status = html`<span class="tag tag-ok">${mine ? `${r.taken_by_name} va a relevarte` : `Lo releva ${r.taken_by_name}`}</span>`;
+  else if (r.unconfirmed) status = html`<span class="tag tag-warn">Sin confirmar</span>`;
   else if (r.cancelled_at) status = html`<span class="tag">Ya no lo necesita</span>`;
   else if (!open) status = html`<span class="tag">Sin respuesta</span>`;
   else status = html`<span class="tag tag-danger">${icon('clock', 14)} ${timeAgo(r.created_at)}</span>`;
@@ -509,8 +519,14 @@ export async function pickupDetailView(ctx) {
     const security = isSecurity(me);
     const teacher = k.created_by === me.id || (me.groups || []).includes(k.group_name);
     const done = k.status === 'delivered' || k.status === 'cancelled';
-    const s = PICKUP_STATUS[k.status];
+    const s = pickupTag(k);
     const buttons = [];
+    // The next day Seguridad says whether a pickup left unconfirmed was handed over.
+    const askFollowup = k.unconfirmed && !k.followup && security;
+    if (askFollowup) {
+      buttons.push(html`<button type="button" class="btn btn-primary btn-block btn-lg" data-followup="1">${icon('check')} Sí, se entregó</button>`);
+      buttons.push(html`<button type="button" class="btn btn-secondary btn-block" data-followup="0">No se entregó</button>`);
+    }
     if (!done) {
       if (k.status === 'scheduled' && (teacher || security)) {
         buttons.push(html`<button type="button" class="btn btn-primary btn-block btn-lg" data-step="arrived">${icon('bell')} Llegó el encargado</button>`);
@@ -542,16 +558,40 @@ export async function pickupDetailView(ctx) {
               const [name, at] = who(k);
               return html`<li class="${at ? 'is-done' : ''}"><strong>${label}</strong>${at ? html` · ${name}<small>${timeAgo(at)}</small>` : ''}</li>`;
             })}
-            ${k.status === 'cancelled' ? html`<li class="is-done"><strong>Cancelada</strong> · ${k.cancelled_by_name}<small>${timeAgo(k.cancelled_at)}</small></li>` : ''}
+            ${k.status === 'cancelled' && !k.unconfirmed ? html`<li class="is-done"><strong>Cancelada</strong> · ${k.cancelled_by_name}<small>${timeAgo(k.cancelled_at)}</small></li>` : ''}
+            ${k.unconfirmed ? html`<li class="is-done"><strong>Sin confirmar</strong> · Hallway<small>${timeAgo(k.cancelled_at)}</small></li>` : ''}
+            ${k.followup ? html`<li class="is-done"><strong>${k.followup === 'delivered' ? 'Se entregó' : 'No se entregó'}</strong> · ${k.followup_by_name}<small>${timeAgo(k.followup_at)}</small></li>` : ''}
           </ol>
+          ${k.unconfirmed ? html`<p class="status-note warn">${icon('clock', 16)} Se cerró al terminar el horario escolar: nunca se confirmó en la app.</p>` : ''}
+          ${k.followup_note ? html`<p class="pre">${k.followup_note}</p>` : ''}
+          ${askFollowup ? html`<p class="hint">¿Se entregó al estudiante? Tu respuesta queda registrada.</p>` : ''}
         </section>
         ${buttons}
-        <p class="hint">${security
+        ${done ? '' : html`<p class="hint">${security
           ? 'Cuando llegue el encargado, márcalo para avisar al maestro. Luego «Voy al salón» y «Entregado».'
-          : 'Si el encargado te avisa a ti, toca «Llegó el encargado» y Seguridad pasa a buscarlo.'}</p>
+          : 'Si el encargado te avisa a ti, toca «Llegó el encargado» y Seguridad pasa a buscarlo.'}</p>`}
         <a class="btn btn-ghost btn-block" href="#/alerts">${icon('back', 18)} Todas las alertas</a>
       </div>`);
 
+    for (const btn of el.querySelectorAll('[data-followup]')) {
+      btn.addEventListener('click', () =>
+        busy(btn, async () => {
+          const delivered = btn.dataset.followup === '1';
+          const v = await dialog({
+            title: delivered ? 'Sí, se entregó' : 'No se entregó',
+            message: studentLabel(k),
+            body: html`<label class="field"><span>Nota <em class="optional">opcional</em></span>
+              <textarea name="note" rows="2" maxlength="300" placeholder="${delivered ? 'Ej. Lo recogió su mamá a las 2:30.' : 'Ej. El encargado no llegó; se llamó a la casa.'}"></textarea></label>`,
+            confirmText: 'Guardar',
+            collect: true,
+          });
+          if (!v) return;
+          await answerPickupFollowup(id, delivered, v.note);
+          toast('Respuesta guardada', 'ok');
+          await load();
+        }),
+      );
+    }
     for (const btn of el.querySelectorAll('[data-step]')) {
       btn.addEventListener('click', () =>
         busy(btn, async () => {
@@ -600,6 +640,7 @@ export async function reliefDetailView(ctx) {
     const canTake = open && !mine && (me.coverage || isStaff(me));
     let status;
     if (r.taken_at) status = `${mine ? `${r.taken_by_name} va a relevarte` : `Lo releva ${r.taken_by_name}`} · ${timeAgo(r.taken_at)}`;
+    else if (r.unconfirmed) status = 'Se cerró al terminar el horario escolar: nunca se confirmó en la app.';
     else if (r.cancelled_at) status = 'Ya no lo necesita';
     else if (!open) status = 'Nadie respondió';
     else status = 'Esperando a que alguien vaya';

@@ -4,7 +4,7 @@
 //   #/search/my-absences  «Buscar mis ausencias»: one's own, by dates; saved the same way.
 //   #/search/turns        «Buscar turnos»: today's and earlier days' turns.
 import { searchAbsences, searchMyAbsences, searchTurns, servicesOverview } from '../backend.js';
-import { $, can, addDays, busy, fmtDateTime, fmtLongDate, html, schoolCalendar, todayStr } from '../lib.js';
+import { $, can, busy, fmtDateTime, fmtLongDate, html, schoolCalendar, todayStr } from '../lib.js';
 import { absenceBlock, docImage, offerFile, savePdf, seal, turnBlock } from '../docs.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
@@ -17,8 +17,6 @@ const groupOptions = (selected = '') => {
   return html`<option value="">${'Todos'}</option>${groups.map((g) => html`<option value="${g}" ${g === selected ? 'selected' : ''}>${g}</option>`)}`;
 };
 
-/** Monday… of this school year: the default «Desde» (the last 30 days). */
-const defaultFrom = () => addDays(todayStr(), -30);
 
 /** «Buscar ausencias» and «Buscar mis ausencias». */
 function absenceSearch({ el }, own) {
@@ -32,8 +30,8 @@ function absenceSearch({ el }, own) {
         : html`<label class="field"><span>Nombre</span>
             <input type="search" name="name" placeholder="Ej. Ana Torres" autocomplete="off"></label>`}
       <div class="grid2">
-        <label class="field"><span>Desde</span><input type="date" name="from" value="${defaultFrom()}"></label>
-        <label class="field"><span>Hasta</span><input type="date" name="to" value="${addDays(todayStr(), 30)}"></label>
+        <label class="field"><span>Desde</span><input type="date" name="from" value="${todayStr()}"></label>
+        <label class="field"><span>Hasta</span><input type="date" name="to" value="${todayStr()}"></label>
       </div>
       ${own ? '' : html`<label class="field"><span>Grado o grupo</span><select name="group">${groupOptions()}</select></label>`}
       <button class="btn btn-primary btn-block" type="submit">${icon('search', 18)} Buscar</button>
