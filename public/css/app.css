@@ -2815,7 +2815,8 @@ input[type='color'] {
 
 /* Links for whoever covers: as typed (docs.google.com, not Docs.google.com). */
 [data-links] .item-main strong::first-letter,
-[data-links] .item-sub::first-letter {
+[data-links] .item-sub::first-letter,
+[data-second-step] .item-main strong::first-letter {
   text-transform: none;
 }
 
@@ -5036,6 +5037,16 @@ details.card > summary.card-title::-webkit-details-marker {
 .otp-account-sub { font-size: 0.85rem; color: rgba(255, 255, 255, 0.82); overflow-wrap: anywhere; }
 .otp-entry { color: #fff; background: rgba(255, 255, 255, 0.16); padding: 1px 8px; border-radius: 6px; white-space: nowrap; }
 .otp-hint { margin: 0; font-size: 0.85rem; text-align: center; color: rgba(255, 255, 255, 0.78); }
+
+/* Verificación: passkey or the app's code */
+.otp-ways { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.2); }
+.otp-way {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 8px 10px;
+  border: 0; border-radius: 10px; background: transparent; color: rgba(255, 255, 255, 0.85); font: inherit; font-weight: 700; font-size: 0.92rem; cursor: pointer;
+}
+.otp-way.is-on { background: #fff; color: #1e4fd8; box-shadow: 0 2px 8px rgb(15 23 42 / 0.18); }
+.otp-way:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.7); outline-offset: 2px; }
+.otp-card [data-panel] .btn-primary { background: #fff; color: #1e4fd8; border-color: #fff; }
 
 /* «¿En qué formato?» (Excel or PDF) */
 .format-pick { display: grid; gap: 10px; }

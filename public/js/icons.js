@@ -24,6 +24,7 @@ const PATHS = {
   chart: '<path d="M3 3v18h18"/><path d="M7 16v-4M12 16V8M17 16v-6"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   school: '<path d="M3 21h18M5 21V9l7-5 7 5v12"/><path d="M10 21v-5h4v5"/><path d="M12 10h.01"/>',
+  fingerprint: '<path d="M12 10a2 2 0 0 0-2 2c0 3 .5 5.5 1.5 8"/><path d="M14 13.1c0 2.4-.3 4.7-1 6.9"/><path d="M17.3 19c.4-1.9.7-4.2.7-7a6 6 0 0 0-9-5.2"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .1-5.4 0-6"/><path d="M5 19.5c.5-1.6 1-3.8 1-7.5a6 6 0 0 1 .8-3"/><path d="M8.7 22c.3-.9.7-2 .9-3"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>',
   phone: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>',
