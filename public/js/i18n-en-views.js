@@ -2137,4 +2137,7 @@ export const SERVER = {
   'Si es la única forma que tienes de verificar, la próxima vez tendrás que configurar la app de autenticación.': 'If it’s your only way to verify, next time you’ll have to set up the authenticator app.',
   'Sí, quitar': 'Yes, remove',
   'Si el teléfono te muestra varias, elige la de': 'If the phone shows several, pick the one for',
+  'Primero escribe el código de tu app de autenticación; después podrás seguir con la passkey.': 'First type your authenticator app’s code; then you can continue with the passkey.',
+  'Primero, el código de tu app': 'First, your app’s code',
+  'Para añadir o quitar passkeys, escribe el código de 6 números que te sale para Hallway en tu app de autenticación.': 'To add or remove passkeys, type the 6-digit code your authenticator app shows for Hallway.',
 };

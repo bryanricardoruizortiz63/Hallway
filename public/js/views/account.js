@@ -19,7 +19,7 @@ import {
 } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
 import {
-  PASSKEY_HOST, addAccount, addPasskey, cancelCode, checkCode, checkPasskey, codeGiven, lastStep, passkeyHere, passkeysHere, rememberStep,
+  PASSKEY_HOST, addAccount, addPasskey, cancelCode, checkCode, checkPasskey, codeGiven, lastStep, needsCodeForPasskeys, passkeyHere, passkeysHere, rememberStep,
   removePasskey, savedAccounts, secondSteps, startAuthenticator, switchAccount,
 } from '../accounts.js';
 
@@ -419,6 +419,23 @@ export async function profileView({ el }) {
 }
 
 /**
+ * Before adding or removing a passkey on an account with the authenticator app: its code, when this session hasn't
+ * passed it yet (Supabase asks for it). False when the person closes the window.
+ */
+async function codeFirst(steps) {
+  if (!steps.totp || !(await needsCodeForPasskeys())) return true;
+  const ok = await dialog({
+    title: 'Primero, el código de tu app',
+    message: 'Para añadir o quitar passkeys, escribe el código de 6 números que te sale para Hallway en tu app de autenticación.',
+    body: html`<label class="field"><span>Código de 6 números</span>
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" required></label>`,
+    confirmText: 'Verificar',
+    onSubmit: (v) => checkCode(steps.totp.id, v.code),
+  });
+  return !!ok;
+}
+
+/**
  * Mi perfil › Verificación en dos pasos: the ways this account has (the authenticator app and its passkeys) and, at
  * app.hallwayedu.com, a passkey for this device: Face ID, the fingerprint or the device's PIN instead of the code.
  */
@@ -456,6 +473,7 @@ async function secondStepCard(slot, me) {
         : html`<button type="button" class="btn btn-secondary" data-add-passkey>${icon('fingerprint', 18)} Añadir passkey de este equipo</button>`
       : html`<p class="hint">Las passkeys se añaden desde <strong>${PASSKEY_HOST}</strong>, en un teléfono o computadora que las acepte.</p>`}`);
   $('[data-add-passkey]', slot)?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+    if (!(await codeFirst(steps))) return;
     await addPasskey(me);
     toast('Passkey añadida. La próxima vez puedes usarla en vez del código.', 'ok');
     await secondStepCard(slot, me);
@@ -463,6 +481,7 @@ async function secondStepCard(slot, me) {
   for (const b of slot.querySelectorAll('[data-remove-passkey]')) {
     b.addEventListener('click', async () => {
       const f = steps.passkeys.find((x) => x.id === b.dataset.removePasskey);
+      if (!(await codeFirst(steps))) return;
       const ok = await dialog({
         title: 'Quitar passkey',
         message: `«${passkeyName(f)}» ya no podrá usarse para la verificación en dos pasos.`,

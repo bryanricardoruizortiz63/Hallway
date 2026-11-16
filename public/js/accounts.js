@@ -292,6 +292,7 @@ function passkeyError(error) {
   const text = `${error?.name || ''} ${error?.code || ''} ${error?.message || ''} ${error?.originalError?.name || ''}`;
   if (/NotAllowed|abort|cancel/i.test(text)) return 'Se canceló o se acabó el tiempo. Inténtalo otra vez.';
   if (/InvalidState|already registered|excluded/i.test(text)) return 'Este equipo ya tiene una passkey para esta cuenta.';
+  if (/insufficient_aal|AAL2/i.test(text)) return 'Primero escribe el código de tu app de autenticación; después podrás seguir con la passkey.';
   if (/passkey.*(disabled|not enabled)|feature.*disabled|not_enabled/i.test(text))
     return 'Las passkeys todavía no están activas para Hallway. Habla con quien administra la app.';
   if (/network|fetch/i.test(text)) return 'No se pudo conectar. Revisa tu internet e inténtalo de nuevo.';
@@ -305,6 +306,15 @@ function deviceName() {
     : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /CrOS/.test(ua) ? 'Chromebook' : 'Este equipo';
   const day = new Date().toLocaleDateString('es-PR', { day: 'numeric', month: 'short', year: 'numeric' });
   return `${device} · ${day}`;
+}
+
+/**
+ * With the authenticator app set up, Supabase only lets passkeys be added or removed after this session passed its code
+ * (so a password alone can't add one). True when the code is needed first.
+ */
+export async function needsCodeForPasskeys() {
+  const { data } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  return data?.currentLevel !== 'aal2' && data?.nextLevel === 'aal2';
 }
 
 /** Makes a passkey on this device for the open account (Face ID, huella o PIN). Returns its id. */
