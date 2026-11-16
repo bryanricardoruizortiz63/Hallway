@@ -325,6 +325,8 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^Esa passkey es de la cuenta de (.+)\. Elige la de (.+)\.$/, 'That passkey belongs to $1’s account. Pick the one for $2.'],
+  [/^Esa passkey es de otra cuenta\. Elige la de (.+)\.$/, 'That passkey belongs to another account. Pick the one for $1.'],
   [/^Passkey · (este|otro) equipo$/, (w) => `Passkey · ${w === 'este' ? 'this' : 'another'} device`],
   [/^«(.+)» ya no podrá usarse para la verificación en dos pasos\.$/, '“$1” won’t be usable for two-step verification anymore.'],
   [/^Ya se respondió: (se entregó|no se entregó)\.$/, (a) => `Already answered: ${a === 'se entregó' ? 'handed over' : 'not handed over'}.`],
