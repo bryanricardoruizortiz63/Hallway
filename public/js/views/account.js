@@ -453,8 +453,7 @@ async function secondStepCard(slot, me) {
     ${here
       ? mine
         ? html`<p class="hint">Este equipo ya tiene tu passkey.</p>`
-        : html`<button type="button" class="btn btn-secondary" data-add-passkey>${icon('fingerprint', 18)} Añadir passkey de este equipo</button>
-          <p class="hint">Al añadirla, Supabase cierra tu sesión en los otros equipos y allí tendrás que entrar de nuevo.</p>`
+        : html`<button type="button" class="btn btn-secondary" data-add-passkey>${icon('fingerprint', 18)} Añadir passkey de este equipo</button>`
       : html`<p class="hint">Las passkeys se añaden desde <strong>${PASSKEY_HOST}</strong>, en un teléfono o computadora que las acepte.</p>`}`);
   $('[data-add-passkey]', slot)?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
     await addPasskey(me);
@@ -798,10 +797,10 @@ export async function verifyCodeView({ el }) {
               <button type="button" class="btn btn-primary btn-block btn-lg" data-passkey-new>${icon('fingerprint', 20)} Crear passkey</button>
               ${steps.totp ? html`<p class="otp-hint">Para crearla, primero verifica hoy con el código de tu app.</p>` : ''}`
             : html`<p class="otp-lead">Usa Face ID, tu huella o el PIN de este equipo.</p>
-              ${mine || passkeys.length === 1
-                ? html`<button type="button" class="btn btn-primary btn-block btn-lg" data-passkey="${(mine || passkeys[0]).id}">${icon('fingerprint', 20)} Usar passkey</button>`
-                : html`<p class="otp-hint">Esta cuenta tiene passkeys en varios equipos. Elige la de este:</p>
-                  <div class="stack">${passkeys.map((f) => html`<button type="button" class="btn btn-secondary btn-block" data-passkey="${f.id}">${icon('fingerprint', 18)} ${passkeyName(f)}</button>`)}</div>`}
+              <button type="button" class="btn btn-primary btn-block btn-lg" data-passkey>${icon('fingerprint', 20)} Usar passkey</button>
+              ${savedAccounts().length > 1
+                ? html`<p class="otp-hint">Si el teléfono te muestra varias, elige la de <strong>${me.user.full_name}</strong>.</p>`
+                : ''}
               <p class="otp-hint">¿Este equipo no tiene tu passkey? Usa el código de la app${steps.totp ? '' : ' o crea una nueva en Mi perfil después de entrar'}.</p>`}
           <p class="otp-status" data-passkey-status aria-live="polite"></p>
         </div>
@@ -889,16 +888,18 @@ export async function verifyCodeView({ el }) {
     pkStatus.textContent = '¡Listo!';
     await done('passkey');
   });
-  for (const b of el.querySelectorAll('[data-passkey]')) {
-    b.addEventListener('click', () => usePasskey(b, () => checkPasskey(b.dataset.passkey)));
-  }
+  $('[data-passkey]', el)?.addEventListener('click', (e) => usePasskey(e.currentTarget, () => checkPasskey(me)));
   $('[data-passkey-new]', el)?.addEventListener('click', (e) => {
     const b = e.currentTarget;
     if (steps.totp) {
       toast('Primero verifica con el código de tu app. Después, en Mi perfil, añade la passkey.', 'info');
       return show('code');
     }
-    usePasskey(b, () => addPasskey(me));
+    // Made, and then used once: that is today's second step.
+    usePasskey(b, async () => {
+      await addPasskey(me);
+      await checkPasskey(me);
+    });
   });
 
   // ---- Which way ----

@@ -2136,4 +2136,5 @@ export const SERVER = {
   'Quitar passkey': 'Remove passkey',
   'Si es la única forma que tienes de verificar, la próxima vez tendrás que configurar la app de autenticación.': 'If it’s your only way to verify, next time you’ll have to set up the authenticator app.',
   'Sí, quitar': 'Yes, remove',
+  'Si el teléfono te muestra varias, elige la de': 'If the phone shows several, pick the one for',
 };
