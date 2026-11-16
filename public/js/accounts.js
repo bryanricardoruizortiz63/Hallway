@@ -214,12 +214,15 @@ export async function afterSignOut(id) {
 
 // ---- The daily code ------------------------------------------------------------------------------
 
+const SECOND_STEP = new Set(['totp', 'webauthn', 'mfa/totp', 'mfa/webauthn']);
+
 /** When the open session last passed the authenticator code (seconds), from the signed token. */
 function codeTime(session) {
   try {
     const part = session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const claims = JSON.parse(atob(part + '='.repeat((4 - (part.length % 4)) % 4)));
-    return (claims.amr || []).find((m) => m.method === 'totp')?.timestamp || null;
+    // The code of the authenticator app or a passkey: either one is the second step.
+    return (claims.amr || []).filter((m) => SECOND_STEP.has(m.method)).reduce((t, m) => Math.max(t, m.timestamp || 0), 0) || null;
   } catch {
     return null;
   }
@@ -236,11 +239,98 @@ export async function needsDailyCode(me) {
   return !t || new Date(t * 1000).toDateString() !== new Date().toDateString();
 }
 
-/** The account's authenticator, or null when it doesn't have one yet. */
-export async function authenticator() {
+// ---- Passkeys (Face ID, huella o el PIN del equipo) as the second step -----------------------------
+
+/** Passkeys belong to the app's address: Supabase is set up for this one (Authentication › Passkeys). */
+export const PASSKEY_HOST = 'app.hallwayedu.com';
+const webauthn = () => ({ rpId: PASSKEY_HOST, rpOrigins: [`https://${PASSKEY_HOST}`] });
+
+/** True where a passkey can be used: the app's address, in a browser that has them. */
+export const passkeysHere = () => location.hostname === PASSKEY_HOST && typeof window.PublicKeyCredential === 'function';
+
+/** The ways this account can pass the second step: { totp: factor|null, passkeys: [factor] } (only confirmed ones). */
+export async function secondSteps() {
   const { data, error } = await sb.auth.mfa.listFactors();
   if (error) throw new Error('No se pudo revisar la verificación. Revisa tu internet.');
-  return data.totp.find((f) => f.status === 'verified') || null;
+  const all = data.all || [];
+  return {
+    totp: all.find((f) => f.factor_type === 'totp' && f.status === 'verified') || null,
+    passkeys: all.filter((f) => f.factor_type === 'webauthn' && f.status === 'verified'),
+  };
+}
+
+// On this phone: which passkey was made here and which way was used last (per account).
+const localKey = (kind, userId) => `lah:${kind}:${userId}`;
+function local(kind, userId, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(localKey(kind, userId));
+    if (value === null) localStorage.removeItem(localKey(kind, userId));
+    else localStorage.setItem(localKey(kind, userId), value);
+  } catch {
+    /* private mode */
+  }
+  return null;
+}
+/** 'passkey' or 'code': the way this account used last on this phone. */
+export const lastStep = (userId) => local('mfa-way', userId);
+export const rememberStep = (userId, way) => local('mfa-way', userId, way);
+/** The passkey made on this phone, if it's one of the account's. */
+export const passkeyHere = (userId, passkeys) => passkeys.find((f) => f.id === local('passkey', userId)) || null;
+
+/** What went wrong with a passkey, in words. */
+function passkeyError(error) {
+  const text = `${error?.name || ''} ${error?.code || ''} ${error?.message || ''} ${error?.originalError?.name || ''}`;
+  if (/NotAllowed|abort|cancel/i.test(text)) return 'Se canceló o se acabó el tiempo. Inténtalo otra vez.';
+  if (/InvalidState|already registered|excluded/i.test(text)) return 'Este equipo ya tiene una passkey para esta cuenta.';
+  if (/aal2|AAL2|insufficient_aal/i.test(text)) return 'Primero entra con el código de tu app de autenticación; después podrás añadir la passkey.';
+  if (/not.*(enabled|supported)|disabled|webauthn/i.test(text) && /enable|disabled|not supported|feature/i.test(text))
+    return 'Las passkeys todavía no están activas para Hallway. Habla con quien administra la app.';
+  if (/network|fetch/i.test(text)) return 'No se pudo conectar. Revisa tu internet e inténtalo de nuevo.';
+  return 'No se pudo usar la passkey. Inténtalo otra vez o usa el código de tu app.';
+}
+
+/** A name for the passkey that says which device it is: «iPhone · 15 nov 2026». */
+function deviceName() {
+  const ua = navigator.userAgent;
+  const device = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /CrOS/.test(ua) ? 'Chromebook' : 'Este equipo';
+  const day = new Date().toLocaleDateString('es-PR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return `${device} · ${day} · ${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
+ * Makes a passkey on this device for the open account (Face ID, huella o PIN). It also counts as today's second step.
+ * Supabase closes the account's sessions on other devices, as with the authenticator app.
+ */
+export async function addPasskey(me) {
+  if (!passkeysHere()) throw new Error(`Las passkeys se crean desde ${PASSKEY_HOST}, en un navegador que las acepte.`);
+  const { data: factors } = await sb.auth.mfa.listFactors();
+  // An earlier attempt that never finished.
+  for (const f of factors?.all || []) {
+    if (f.factor_type === 'webauthn' && f.status !== 'verified') await sb.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+  }
+  const friendlyName = deviceName();
+  const { error } = await sb.auth.mfa.webauthn.register({ friendlyName, webauthn: webauthn() });
+  if (error) throw new Error(passkeyError(error));
+  const id = (await secondSteps()).passkeys.find((f) => f.friendly_name === friendlyName)?.id;
+  if (id) local('passkey', me.user.id, id);
+  rememberStep(me.user.id, 'passkey');
+  return id;
+}
+
+/** Today's second step with a passkey of the account. */
+export async function checkPasskey(factorId) {
+  const { error } = await sb.auth.mfa.webauthn.authenticate({ factorId, webauthn: webauthn() });
+  if (error) throw new Error(passkeyError(error));
+}
+
+/** Removes a passkey from the account (its device can't use it anymore). */
+export async function removePasskey(me, factorId) {
+  const { error } = await sb.auth.mfa.unenroll({ factorId });
+  if (error) throw new Error(/aal2|insufficient/i.test(`${error.code} ${error.message}`)
+    ? 'Primero pasa la verificación de hoy; después podrás quitarla.'
+    : 'No se pudo quitar la passkey. Revisa tu internet e inténtalo de nuevo.');
+  if (local('passkey', me.user.id) === factorId) local('passkey', me.user.id, null);
 }
 
 /**

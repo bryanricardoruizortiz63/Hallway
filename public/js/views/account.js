@@ -10,7 +10,7 @@ import {
   updateAdminProfile,
   updateMyContact,
 } from '../backend.js';
-import { $, busy, can, historyFull, roomName, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
+import { $, busy, can, dialog, historyFull, roomName, fmtTime, formValues, html, isAdmin, isManager, isStaff, moduleOn, pathModule, raw, reportsOwn, rolesLabel, timeAgo, toast, todayStr } from '../lib.js';
 import { locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import {
@@ -18,7 +18,10 @@ import {
   shortVersion,
 } from '../pwa.js';
 import { go, homePath, logout, setUnread, state } from '../store.js';
-import { addAccount, authenticator, cancelCode, checkCode, codeGiven, savedAccounts, startAuthenticator, switchAccount } from '../accounts.js';
+import {
+  PASSKEY_HOST, addAccount, addPasskey, cancelCode, checkCode, checkPasskey, codeGiven, lastStep, passkeyHere, passkeysHere, rememberStep,
+  removePasskey, savedAccounts, secondSteps, startAuthenticator, switchAccount,
+} from '../accounts.js';
 
 /** Under a saved account whose session Supabase closed. */
 const REOPEN_HINT = 'Toca para escribir su contraseña otra vez';
@@ -350,6 +353,8 @@ export async function profileView({ el }) {
         <button class="btn btn-secondary" type="submit">Cambiar contraseña</button>
       </form>
 
+      <section class="card stack" data-second-step><div class="loading"><span class="spinner"></span></div></section>
+
       <button class="btn btn-ghost-danger btn-block" data-logout>${icon('logout', 18)} Cerrar sesión</button>
       <p class="hint center">Hallway</p>
     </div>`);
@@ -410,6 +415,68 @@ export async function profileView({ el }) {
       toast('Contraseña actualizada', 'ok');
     });
   });
+  secondStepCard($('[data-second-step]', el), state.me);
+}
+
+/**
+ * Mi perfil › Verificación en dos pasos: the ways this account has (the authenticator app and its passkeys) and, at
+ * app.hallwayedu.com, a passkey for this device: Face ID, the fingerprint or the device's PIN instead of the code.
+ */
+async function secondStepCard(slot, me) {
+  let steps;
+  try {
+    steps = await secondSteps();
+  } catch {
+    slot.remove();
+    return;
+  }
+  const here = passkeysHere();
+  const mine = passkeyHere(me.user.id, steps.passkeys);
+  slot.innerHTML = String(html`
+    <h2 class="card-title">${icon('shield')} Verificación en dos pasos</h2>
+    <p class="hint">Cuando Hallway te pide el segundo paso, puedes usar el código de tu app de autenticación o una passkey: Face ID,
+      tu huella o el PIN del equipo. Si tienes las dos, eliges cuál usar.</p>
+    <div class="list">
+      <div class="item">
+        <span class="item-icon">${icon('key')}</span>
+        <span class="item-main"><strong>App de autenticación</strong>
+          <span class="item-sub">${steps.totp ? steps.totp.friendly_name || 'Hallway' : 'No configurada. Se configura la primera vez que te pide el código.'}</span></span>
+        ${steps.totp ? html`<span class="tag tag-ok">Activa</span>` : ''}
+      </div>
+      ${steps.passkeys.map((f) => html`<div class="item">
+        <span class="item-icon">${icon('fingerprint')}</span>
+        <span class="item-main"><strong>${passkeyName(f)}</strong>
+          <span class="item-sub">Passkey · ${mine?.id === f.id ? 'este equipo' : 'otro equipo'}</span></span>
+        <button type="button" class="btn btn-ghost-danger btn-sm" data-remove-passkey="${f.id}">Quitar</button>
+      </div>`)}
+    </div>
+    ${here
+      ? mine
+        ? html`<p class="hint">Este equipo ya tiene tu passkey.</p>`
+        : html`<button type="button" class="btn btn-secondary" data-add-passkey>${icon('fingerprint', 18)} Añadir passkey de este equipo</button>
+          <p class="hint">Al añadirla, Supabase cierra tu sesión en los otros equipos y allí tendrás que entrar de nuevo.</p>`
+      : html`<p class="hint">Las passkeys se añaden desde <strong>${PASSKEY_HOST}</strong>, en un teléfono o computadora que las acepte.</p>`}`);
+  $('[data-add-passkey]', slot)?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+    await addPasskey(me);
+    toast('Passkey añadida. La próxima vez puedes usarla en vez del código.', 'ok');
+    await secondStepCard(slot, me);
+  }));
+  for (const b of slot.querySelectorAll('[data-remove-passkey]')) {
+    b.addEventListener('click', async () => {
+      const f = steps.passkeys.find((x) => x.id === b.dataset.removePasskey);
+      const ok = await dialog({
+        title: 'Quitar passkey',
+        message: `«${passkeyName(f)}» ya no podrá usarse para la verificación en dos pasos.`,
+        confirmText: 'Quitar',
+        danger: true,
+        doubleCheck: 'Si es la única forma que tienes de verificar, la próxima vez tendrás que configurar la app de autenticación.',
+        onSubmit: () => removePasskey(me, f.id),
+      });
+      if (!ok) return;
+      toast('Passkey quitada', 'ok');
+      await secondStepCard(slot, me);
+    });
+  }
 }
 
 // ---- Más ------------------------------------------------------------------------
@@ -676,19 +743,29 @@ export async function addAccountView({ el, query }) {
   });
 }
 
-/** With two or more accounts on this phone: the code of the authenticator app, once a day per account. */
+/** The passkey's name without the few letters that keep two of them apart («iPhone · 15 nov 2026»). */
+const passkeyName = (f) => String(f.friendly_name || 'Passkey').replace(/ · [a-z0-9]{4}$/, '');
+
+/**
+ * The second step, once a day per account (two or more accounts on this phone, or turned on for this person): the
+ * code of the authenticator app or a passkey (Face ID, huella o el PIN del equipo). With both, the person picks; the
+ * one used last on this phone comes first.
+ */
 export async function verifyCodeView({ el }) {
   const me = state.me;
-  const factor = await authenticator().catch(() => null);
+  const steps = await secondSteps().catch(() => ({ totp: null, passkeys: [] }));
+  const canPasskey = passkeysHere();
+  const passkeys = canPasskey ? steps.passkeys : [];
+  const mine = passkeyHere(me.user.id, passkeys);
+  // Nothing set up yet that works here: the person chooses how to start.
+  const first = !steps.totp && !passkeys.length;
+  const ways = [...(canPasskey ? ['passkey'] : []), 'code'];
+  const last = lastStep(me.user.id);
+  let way = ways.length === 1 ? 'code'
+    : last === 'code' && (steps.totp || first) ? 'code'
+      : last === 'passkey' || mine || (passkeys.length && !steps.totp) || first ? 'passkey' : 'code';
   let setup = null;
-  if (!factor) {
-    try {
-      setup = await startAuthenticator(me);
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  }
-  const factorId = setup?.factorId || factor?.id;
+
   el.innerHTML = String(html`
     <div class="otp-screen">
       <span class="otp-blob otp-blob-1" aria-hidden="true"></span>
@@ -702,38 +779,89 @@ export async function verifyCodeView({ el }) {
         <div class="otp-account" data-otp-account>
           ${avatar(me.user.full_name)}
           <span class="otp-account-main">
-            <span class="otp-account-label">El código es para esta cuenta</span>
+            <span class="otp-account-label">La verificación es para esta cuenta</span>
             <strong>${me.user.full_name}</strong>
             <span class="otp-account-sub">${[rolesLabel(me.user), me.user.role === 'admin' ? null : `@${me.user.username}`, me.school.name].filter(Boolean).join(' · ')}</span>
           </span>
         </div>
-        ${setup
-          ? html`<p><strong>Primera vez con esta cuenta:</strong></p>
-              <ol class="steps-list">
-                <li>Instala <strong>Google Authenticator</strong> o <strong>Microsoft Authenticator</strong> en tu teléfono.</li>
-                <li>En la app toca <strong>+</strong> y escanea este código.</li>
-                <li>Escribe aquí el código de 6 números que te sale para «Hallway».</li>
-              </ol>
-              <div class="mfa-qr">${raw(setup.qr)}</div>
-              <p class="otp-lead">En tu app saldrá como <strong>${setup.issuer}</strong> · ${setup.account}</p>
-              <details><summary>¿No puedes escanearlo?</summary>
-                <p>En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`
-          : html`<p class="otp-lead">En tu app de autenticación busca <strong class="otp-entry">${factor?.friendly_name || 'Hallway'}</strong>
-              y escribe su código de 6 números. Te lo pide una vez al día.</p>
-              ${savedAccounts().length > 1
-                ? html`<p class="otp-hint">Tienes más de una cuenta en este teléfono: cada una tiene su propio código en la app. Usa el de
-                    <strong>${me.user.full_name}</strong>${rolesLabel(me.user) ? html` (${rolesLabel(me.user)})` : ''}.</p>`
-                : ''}`}
-        <form data-code novalidate>
-          ${otpField()}
-          <p class="otp-status" data-otp-status aria-live="polite"></p>
-        </form>
+        ${ways.length > 1
+          ? html`<div class="otp-ways" role="group" aria-label="Cómo verificar">
+              <button type="button" class="otp-way" data-way="passkey">${icon('fingerprint', 18)} Passkey</button>
+              <button type="button" class="otp-way" data-way="code">${icon('key', 18)} Código</button>
+            </div>`
+          : ''}
+
+        <div class="stack" data-panel="passkey" hidden>
+          ${first || !passkeys.length
+            ? html`<p class="otp-lead"><strong>Crea una passkey en este equipo.</strong> Desde mañana entras con Face ID, tu huella o el
+                PIN del equipo, sin escribir códigos.</p>
+              <button type="button" class="btn btn-primary btn-block btn-lg" data-passkey-new>${icon('fingerprint', 20)} Crear passkey</button>
+              ${steps.totp ? html`<p class="otp-hint">Para crearla, primero verifica hoy con el código de tu app.</p>` : ''}`
+            : html`<p class="otp-lead">Usa Face ID, tu huella o el PIN de este equipo.</p>
+              ${mine || passkeys.length === 1
+                ? html`<button type="button" class="btn btn-primary btn-block btn-lg" data-passkey="${(mine || passkeys[0]).id}">${icon('fingerprint', 20)} Usar passkey</button>`
+                : html`<p class="otp-hint">Esta cuenta tiene passkeys en varios equipos. Elige la de este:</p>
+                  <div class="stack">${passkeys.map((f) => html`<button type="button" class="btn btn-secondary btn-block" data-passkey="${f.id}">${icon('fingerprint', 18)} ${passkeyName(f)}</button>`)}</div>`}
+              <p class="otp-hint">¿Este equipo no tiene tu passkey? Usa el código de la app${steps.totp ? '' : ' o crea una nueva en Mi perfil después de entrar'}.</p>`}
+          <p class="otp-status" data-passkey-status aria-live="polite"></p>
+        </div>
+
+        <div class="stack" data-panel="code" hidden>
+          <div data-code-intro></div>
+          <form data-code novalidate>
+            ${otpField()}
+            <p class="otp-status" data-otp-status aria-live="polite"></p>
+          </form>
+        </div>
+        ${!canPasskey && steps.passkeys.length && !steps.totp
+          ? html`<p class="otp-hint">Esta cuenta usa passkey, que solo funciona en ${PASSKEY_HOST}. Ábrela allí o configura la app de autenticación.</p>`
+          : ''}
         <button type="button" class="btn btn-secondary btn-block" data-cancel>Cancelar</button>
       </div>
     </div>`);
-  const form = $('[data-code]', el);
+
+  const done = async (used) => {
+    rememberStep(me.user.id, used);
+    state.needsCode = false;
+    codeGiven();
+    go(homePath(), { replace: true });
+  };
+
+  // ---- The code of the authenticator app (the first time, its QR code) ----
+  const codeIntro = $('[data-code-intro]', el);
+  const showCodeIntro = async () => {
+    if (steps.totp) {
+      codeIntro.innerHTML = String(html`<p class="otp-lead">En tu app de autenticación busca <strong class="otp-entry">${steps.totp.friendly_name || 'Hallway'}</strong>
+          y escribe su código de 6 números. Te lo pide una vez al día.</p>
+        ${savedAccounts().length > 1
+          ? html`<p class="otp-hint">Tienes más de una cuenta en este teléfono: cada una tiene su propio código en la app. Usa el de
+              <strong>${me.user.full_name}</strong>${rolesLabel(me.user) ? html` (${rolesLabel(me.user)})` : ''}.</p>`
+          : ''}`);
+      return;
+    }
+    if (setup) return;
+    codeIntro.innerHTML = String(html`<div class="loading"><span class="spinner"></span></div>`);
+    try {
+      setup = await startAuthenticator(me);
+    } catch (err) {
+      codeIntro.innerHTML = '';
+      toast(err.message, 'error');
+      return;
+    }
+    codeIntro.innerHTML = String(html`<p><strong>Primera vez con esta cuenta:</strong></p>
+      <ol class="steps-list">
+        <li>Instala <strong>Google Authenticator</strong> o <strong>Microsoft Authenticator</strong> en tu teléfono.</li>
+        <li>En la app toca <strong>+</strong> y escanea este código.</li>
+        <li>Escribe aquí el código de 6 números que te sale para «Hallway».</li>
+      </ol>
+      <div class="mfa-qr">${raw(setup.qr)}</div>
+      <p class="otp-lead">En tu app saldrá como <strong>${setup.issuer}</strong> · ${setup.account}</p>
+      <details><summary>¿No puedes escanearlo?</summary>
+        <p>En la app elige «Escribir una clave» y pon: <code class="mfa-secret">${setup.secret}</code></p></details>`);
+  };
   const status = $('[data-otp-status]', el);
   bindOtp($('[data-otp]', el), async (code, otp) => {
+    const factorId = steps.totp?.id || setup?.factorId;
     if (!factorId) return otp.fail('No se pudo preparar la verificación.');
     status.textContent = 'Verificando…';
     try {
@@ -744,12 +872,52 @@ export async function verifyCodeView({ el }) {
     }
     status.textContent = '¡Listo!';
     await otp.succeed();
-    state.needsCode = false;
-    codeGiven();
-    go(homePath(), { replace: true });
+    await done('code');
   });
-  form.addEventListener('submit', (e) => e.preventDefault());
-  // Only the code or «Cancelar»: back to the account it came from (one just added is forgotten), else sign out.
+  $('[data-code]', el).addEventListener('submit', (e) => e.preventDefault());
+
+  // ---- Passkey (the browser asks for Face ID, the fingerprint or the PIN; it must start from a tap) ----
+  const pkStatus = $('[data-passkey-status]', el);
+  const usePasskey = (button, run) => busy(button, async () => {
+    pkStatus.textContent = 'Esperando la passkey…';
+    try {
+      await run();
+    } catch (err) {
+      pkStatus.textContent = '';
+      throw err;
+    }
+    pkStatus.textContent = '¡Listo!';
+    await done('passkey');
+  });
+  for (const b of el.querySelectorAll('[data-passkey]')) {
+    b.addEventListener('click', () => usePasskey(b, () => checkPasskey(b.dataset.passkey)));
+  }
+  $('[data-passkey-new]', el)?.addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    if (steps.totp) {
+      toast('Primero verifica con el código de tu app. Después, en Mi perfil, añade la passkey.', 'info');
+      return show('code');
+    }
+    usePasskey(b, () => addPasskey(me));
+  });
+
+  // ---- Which way ----
+  const show = (next) => {
+    way = next;
+    for (const p of el.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== way;
+    for (const b of el.querySelectorAll('[data-way]')) {
+      b.classList.toggle('is-on', b.dataset.way === way);
+      b.setAttribute('aria-pressed', String(b.dataset.way === way));
+    }
+    if (way === 'code') {
+      showCodeIntro();
+      setTimeout(() => $('.otp-input', el)?.focus(), 50);
+    }
+  };
+  for (const b of el.querySelectorAll('[data-way]')) b.addEventListener('click', () => show(b.dataset.way));
+  show(way);
+
+  // Only the second step or «Cancelar»: back to the account it came from (one just added is forgotten), else sign out.
   $('[data-cancel]', el).addEventListener('click', (e) =>
     busy(e.currentTarget, async () => {
       if (!(await cancelCode(me))) await logout();

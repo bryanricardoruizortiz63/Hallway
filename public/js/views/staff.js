@@ -1,5 +1,5 @@
-import { dashboard, exportAbsencesXlsx, listEmployees, myCoverages, pendingBookings, schoolAbsences } from '../backend.js';
-import { $, busy, can, fmtLongDate, html, poll, reportsOwn, todayStr } from '../lib.js';
+import { dashboard, exportAbsencesXlsx, listClosures, listEmployees, myCoverages, pendingBookings, schoolAbsences } from '../backend.js';
+import { $, busy, can, closuresIn, fmtLongDate, html, poll, reportsOwn, schoolCalendar, toDate, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
 import { absenceList, empty, installHint } from './common.js';
@@ -7,18 +7,29 @@ import { approvesBookings, waitingCard } from './rooms.js';
 import { coveringSection } from './absences.js';
 import { guideHint } from './guide.js';
 
+/** Why there are no classes on a day (the school's days and its closures), or null on a school day. */
+function noClassesToday(day, closures) {
+  const closed = closuresIn(closures, day)[0];
+  if (closed) return closed.name || 'La escuela está cerrada hoy.';
+  const weekday = toDate(day).getDay() || 7; // 1 = lunes … 7 = domingo, like school_days
+  if (schoolCalendar(state.me.school).school_days.includes(weekday)) return null;
+  return weekday === 6 ? 'Es sábado.' : weekday === 7 ? 'Es domingo.' : 'Hoy no es día de clases en esta escuela.';
+}
+
 export async function dashboardView({ el, onLeave, isCurrent }) {
   const me = state.me.user;
   const firstName = me.role === 'admin' ? '' : `, ${me.full_name.replace(/^(dra?|sra?|lcda?)\.?\s+/i, '').split(' ')[0]}`;
 
   const load = async () => {
-    const [d, bookings, covering] = await Promise.all([
+    const [d, bookings, covering, closures] = await Promise.all([
       dashboard(todayStr()),
       approvesBookings(me) ? pendingBookings(todayStr()).catch(() => []) : [],
       myCoverages(todayStr()).catch(() => []),
+      listClosures({ from: todayStr() }).catch(() => []),
     ]);
     if (!isCurrent()) return;
     const c = d.counts;
+    const off = noClassesToday(d.today, closures);
     el.innerHTML = String(html`
       <div class="hello">
         <p class="muted capitalize">${fmtLongDate(d.today)}</p>
@@ -39,7 +50,9 @@ export async function dashboardView({ el, onLeave, isCurrent }) {
         <h3 class="section-title">Ausentes hoy</h3>
         ${d.today_list.length
           ? absenceList(d.today_list, { on: d.today })
-          : empty('check', '¡Todo el personal está presente hoy!', 'No hay ausencias reportadas para hoy.')}
+          : off
+            ? empty('calendar', 'Hoy no hay clases', off)
+            : empty('check', '¡Todo el personal está presente hoy!', 'No hay ausencias reportadas para hoy.')}
       </section>
 
       ${d.pending.length

@@ -144,7 +144,7 @@ export function addDays(dateStr, days) {
   return todayStr(d);
 }
 
-function toDate(dateStr) {
+export function toDate(dateStr) {
   return new Date(`${dateStr}T12:00:00`);
 }
 
