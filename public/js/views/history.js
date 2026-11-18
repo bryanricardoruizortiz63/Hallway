@@ -1,6 +1,6 @@
 // Historial del personal (permission «history»): what each person did in the app, the day and the time (Puerto Rico,
 // 12 hours) and the details, newest first, grouped by day. It can be printed and downloaded in Excel. The turns'
-// records (the student and the turn) only reach the Admin and Director(a). It lasts one school year: on July 1 the
+// records (the student and the turn) only reach the Admin and whoever has turn_details. It lasts one school year: on July 1 the
 // year that ended is deleted, so it is downloaded before as a backup.
 import { activityHistory, activityHistoryAll, exportPersonHistoryXlsx, exportSchoolHistoryXlsx, historyPeople } from '../backend.js';
 import { $, busy, dialog, historyFull, html, roleLabel, toast } from '../lib.js';
@@ -110,7 +110,7 @@ export async function historyPeopleView({ el }) {
       <button type="button" class="btn btn-secondary btn-block" data-download-all>${icon('download', 18)} Descargar todo el historial del año (Excel o PDF)</button>
       <p class="hint">${full
         ? 'Incluye una hoja con el récord de cada turno: el estudiante, su grupo, el motivo y cómo terminó.'
-        : 'El récord de los turnos con los estudiantes solo lo descargan Admin y Director(a).'}</p>
+        : 'El récord de los turnos con los estudiantes solo lo descarga quien tiene «Ver el detalle de los turnos».'}</p>
     </section>
     <label class="field"><span>Buscar</span><input type="search" data-search placeholder="Buscar por nombre o puesto…" autocomplete="off"></label>
     <div data-people></div>
@@ -198,8 +198,8 @@ export async function historyView({ el, params, setTitle }) {
     </div>
     <div data-rows></div>
     <p class="hint">Las horas son de Puerto Rico. ${historyFull(state.me.user)
-      ? 'El récord de los turnos (estudiante, motivo y resultado) solo lo ven Admin y Director(a).'
-      : 'El récord de los turnos con los estudiantes solo lo ven Admin y Director(a).'}</p>
+      ? 'El récord de los turnos (estudiante, motivo y resultado) solo lo ve quien tiene «Ver el detalle de los turnos».'
+      : 'El récord de los turnos con los estudiantes solo lo ve quien tiene «Ver el detalle de los turnos».'}</p>
     <p class="hint no-print">${KEEP_HINT}</p>
   </div>`);
   $('[data-period]', el).addEventListener('change', (e) => {

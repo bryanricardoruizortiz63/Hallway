@@ -34,7 +34,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PERMISSIONS = [
   'absences', 'register', 'staff', 'settings', 'services', 'messages', 'reports',
   'live', 'calendar', 'rooms', 'security', 'visitors', 'maintenance', 'summary', 'history',
-  'absence_search', 'turn_search', 'own_absence_search',
+  'absence_search', 'turn_search', 'own_absence_search', 'turn_details',
 ];
 /** Duties rather than powers over other people's data: whoever manages the staff can give them. */
 const DUTIES = ['maintenance'];
@@ -63,7 +63,7 @@ async function currentUser(req: Request): Promise<Me> {
   if (!data.user) throw new HttpError(401, 'Tu sesión expiró. Vuelve a iniciar sesión.');
   const { data: me } = await db
     .from('profiles')
-    .select('id, school_id, role, extra_roles, full_name, email, language, active, must_change_password, school:schools(code, name, active, icon_version)')
+    .select('*, school:schools(code, name, active, icon_version)')
     .eq('id', data.user.id)
     .maybeSingle();
   // deno-lint-ignore no-explicit-any
@@ -77,11 +77,18 @@ async function currentUser(req: Request): Promise<Me> {
   if (error) throw new Error(error.message);
   const roles = new Map((rows as Role[]).map((r) => [r.key, r]));
   const extra = (me.extra_roles || []) as string[];
-  // Whatever any of their roles can do; the admin account and whoever also has Admin, everything.
+  // Whatever any of their roles can do, plus what the Admin gave them, minus what the Admin took (as in
+  // private.perms_of); the admin account and whoever also has Admin, everything.
+  const grants = (me.perm_grants || []) as string[];
+  const denials = (me.perm_denials || []) as string[];
   const permissions = me.role === 'admin' || extra.includes('admin')
     ? PERMISSIONS
-    : PERMISSIONS.filter((p) => [me.role, ...extra].some((k) => roles.get(k)?.permissions.includes(p)));
-  return { ...me, language: langOf(me.language), extra_roles: extra, school, permissions, roles } as Me;
+    : PERMISSIONS.filter((p) => !denials.includes(p)
+      && (grants.includes(p) || [me.role, ...extra].some((k) => roles.get(k)?.permissions.includes(p))));
+  return {
+    id: me.id, school_id: me.school_id, role: me.role, full_name: me.full_name, email: me.email, active: me.active,
+    must_change_password: me.must_change_password, language: langOf(me.language), extra_roles: extra, school, permissions, roles,
+  } as Me;
 }
 
 /** The school's admin account, or someone who also has the Admin role: can do everything in their school. */
@@ -986,6 +993,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   maintenance: 'Mantenimiento', messages: 'Enviar mensajes', live: 'En vivo', reports: 'Datos y reportes',
   settings: 'Configurar la escuela', services: 'Configurar Turnos', history: 'Historial del personal',
   absence_search: 'Buscar ausencias', own_absence_search: 'Buscar mis ausencias', turn_search: 'Buscar turnos', summary: 'Resumen del día',
+  turn_details: 'Ver el detalle de los turnos',
 };
 const permLabel = (k: string) => PERMISSION_LABELS[k] || k;
 

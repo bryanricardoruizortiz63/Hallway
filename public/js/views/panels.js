@@ -1328,7 +1328,7 @@ function liveFacts(t) {
   const level = t.level > t.severity ? ` · subió a ${SEVERITY[t.level].label} por la espera` : '';
   return html`<div class="facts" data-facts>
     ${t.details_hidden
-      ? html`<p class="status-note info">${icon('shield', 16)} <span>El motivo, la nota y cómo terminó solo los ven quien atiende el servicio, quien pidió el turno, Director(a) y Admin.</span></p>`
+      ? html`<p class="status-note info">${icon('shield', 16)} <span>El motivo, la nota y cómo terminó solo los ven quien atiende el servicio, quien pidió el turno y quien tiene «Ver el detalle de los turnos».</span></p>`
       : html`${support ? '' : fact('Motivo', t.reason)}
         ${support ? fact('Detalle', t.note) : fact('Nota del maestro', t.note || 'No dejó nota')}`}
     ${fact('Gravedad', `${(SEVERITY[t.severity] || SEVERITY[1]).label}${level}`)}

@@ -5180,3 +5180,96 @@ details.card > summary.card-title::-webkit-details-marker {
 }
 .format-badge.is-pdf { background: #d93025; }
 .format-badge.is-xlsx { background: #1d7a46; }
+
+/* ---- Permisos de una persona (ficha del empleado, solo Admin) ---- */
+.perms-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.perms-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.perm-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.perm-row:first-child {
+  border-top: 0;
+}
+
+.perm-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+
+.perm-text strong {
+  font-size: 15px;
+}
+
+.perm-hint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.perm-seg .seg {
+  min-height: 34px;
+  font-size: 14px;
+}
+
+.perm-seg .seg-grant.active {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.perm-seg .seg-deny.active {
+  background: var(--danger-soft, var(--warn-soft));
+  color: var(--danger, var(--warn));
+}
+
+.perm-row[data-mode='grant'],
+.perm-row[data-mode='deny'] {
+  margin: 4px -10px;
+  padding: 12px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ok-soft);
+}
+
+.perm-row[data-mode='deny'] {
+  background: var(--danger-soft);
+}
+
+.perm-row[data-mode='grant'] + .perm-row,
+.perm-row[data-mode='deny'] + .perm-row {
+  border-top: 0;
+}
+
+.perm-row[data-mode='grant'] .perm-seg,
+.perm-row[data-mode='deny'] .perm-seg {
+  background: var(--surface);
+}
+
+.perm-row[data-mode='grant'] .perm-seg .seg-grant.active,
+.perm-row[data-mode='deny'] .perm-seg .seg-deny.active {
+  background: var(--ok);
+  color: var(--surface);
+}
+
+.perm-row[data-mode='deny'] .perm-seg .seg-deny.active {
+  background: var(--danger);
+}

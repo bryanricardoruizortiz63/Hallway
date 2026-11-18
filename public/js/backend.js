@@ -592,6 +592,10 @@ export async function getEmployee(id) {
   return withRoleLabel(row);
 }
 
+/** The Admin gives (grants) or takes (denials) permissions to one person, besides those of their roles. */
+export const setUserPermissions = (id, grants, denials) =>
+  run(sb.rpc('set_user_permissions', { p_user: id, p_grants: grants, p_denials: denials }));
+
 export const createEmployee = (v) => callFunction('admin', { action: 'create_employee', ...v });
 export const updateEmployee = (id, v) => callFunction('admin', { action: 'update_employee', id, ...v });
 /** password: the temporary one chosen by whoever resets it (empty: one is generated). */

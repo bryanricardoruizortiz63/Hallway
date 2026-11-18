@@ -327,6 +327,7 @@ const until = (u) => u.replace(/^hoy$/, 'today').replace(/^hasta las? /, 'until 
 
 /** [regular expression over the one-line Spanish text, English (with $1…) or a function of the parts]. */
 export const EN_PATTERNS = [
+  [/^Cambió los permisos de (.+)$/, 'Changed the permissions of $1'],
   [/^(\d+) cambios?$/, (k) => `${k} ${k === '1' ? 'change' : 'changes'}`],
   [/^Esa passkey es de la cuenta de (.+)\. Elige la de (.+)\.$/, 'That passkey belongs to $1’s account. Pick the one for $2.'],
   [/^Esa passkey es de otra cuenta\. Elige la de (.+)\.$/, 'That passkey belongs to another account. Pick the one for $1.'],
