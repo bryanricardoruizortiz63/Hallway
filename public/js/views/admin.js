@@ -280,31 +280,6 @@ export async function employeeFormView({ el, params, setTitle }) {
         <label class="field"><span>Usuario para entrar</span>
           <input name="username" maxlength="100" value="${employee.username || ''}" autocapitalize="none" spellcheck="false"
             placeholder="${isNew ? 'Si lo dejas vacío se usa el correo' : ''}"></label>
-        <label class="field"><span>Rol</span>
-          <select name="role" ${self ? 'disabled' : ''} data-role>
-            ${roles.map(
-              (r) => html`<option value="${r.key}" ${employee.role === r.key ? 'selected' : ''} ${canGive(r) ? '' : 'disabled'}>${r.name}</option>`,
-            )}
-            ${isAdmin(me) && !self ? html`<option value="${NEW_ROLE}">+ Nuevo rol…</option>` : ''}
-          </select>
-        </label>
-        <p class="hint role-summary" data-role-summary></p>
-        <div class="field"><span>Otros roles <em class="optional">opcional</em></span>
-          <div class="chips extra-roles" data-extra-roles>
-            ${isAdmin(me) || employee.extra_roles?.includes('admin')
-              ? html`<label class="chip"><input type="checkbox" value="admin" ${employee.extra_roles?.includes('admin') ? 'checked' : ''}
-                  ${self || !isAdmin(me) ? 'disabled' : ''}><span>${roleLabel('admin')}</span></label>`
-              : ''}
-            ${roles.map(
-              (r) => html`<label class="chip" data-extra="${r.key}"><input type="checkbox" value="${r.key}"
-                  ${employee.extra_roles?.includes(r.key) ? 'checked' : ''} ${self || !canGive(r) ? 'disabled' : ''}><span>${r.name}</span></label>`,
-            )}
-          </div>
-          <p class="hint">Si además tiene otro puesto (por ejemplo, Directora y Admin, o Coordinador de IT y Admin). Puede hacer
-            lo de todos sus roles y atiende sus servicios; <strong>Admin</strong> puede hacer todo en la escuela. Si sus ausencias
-            necesitan cobertura lo dice su rol principal.</p>
-        </div>
-        ${isAdmin(me) ? html`<a class="btn btn-ghost btn-sm" href="#/roles">${icon('shield', 16)} Roles y permisos</a>` : ''}
         ${isNew
           ? html`<label class="field"><span>Contraseña temporal <em class="optional">opcional</em></span>
               <span class="pw"><input name="password" type="password" minlength="8" autocomplete="new-password"
@@ -317,9 +292,41 @@ export async function employeeFormView({ el, params, setTitle }) {
                 : 'todavía no la ha reportado'}</p>`}
       </section>
 
-      <button class="btn btn-primary btn-block btn-lg" type="submit">${isNew ? html`${icon('plus')} Crear empleado` : 'Guardar cambios'}</button>
+      <details class="card role-perms" data-role-perms ${isNew ? 'open' : ''}>
+        <summary class="role-perms-head">
+          <span class="role-perms-icon" aria-hidden="true">${icon('shield', 20)}</span>
+          <span class="role-perms-title"><strong>Rol y permisos</strong><small data-rp-summary></small></span>
+          <span class="role-perms-chevron" aria-hidden="true">${icon('chevron', 18)}</span>
+        </summary>
+        <div class="role-perms-body stack">
+        <label class="field"><span>Rol</span>
+          <select name="role" ${self ? 'disabled' : ''} data-role>
+            ${roles.map(
+              (r) => html`<option value="${r.key}" ${employee.role === r.key ? 'selected' : ''} ${canGive(r) ? '' : 'disabled'}>${r.name}</option>`,
+            )}
+            ${isAdmin(me) && !self ? html`<option value="${NEW_ROLE}">+ Nuevo rol…</option>` : ''}
+          </select>
+        </label>
+        ${personalPerms ? '' : html`<p class="hint role-summary" data-role-summary></p>`}
+        <div class="field"><span>Otros roles <em class="optional">opcional</em></span>
+          <div class="chips extra-roles" data-extra-roles>
+            ${isAdmin(me) || employee.extra_roles?.includes('admin')
+              ? html`<label class="chip"><input type="checkbox" value="admin" ${employee.extra_roles?.includes('admin') ? 'checked' : ''}
+                  ${self || !isAdmin(me) ? 'disabled' : ''}><span>${roleLabel('admin')}</span></label>`
+              : ''}
+            ${roles.map(
+              (r) => html`<label class="chip" data-extra="${r.key}"><input type="checkbox" value="${r.key}"
+                  ${employee.extra_roles?.includes(r.key) ? 'checked' : ''} ${self || !canGive(r) ? 'disabled' : ''}><span>${r.name}</span></label>`,
+            )}
+          </div>
+          <p class="hint">Si además tiene otro puesto (por ejemplo, Directora y Admin). <strong>Admin</strong> puede hacer todo.</p>
+        </div>
+          ${personalPerms ? permsList(employee) : ''}
+          ${isAdmin(me) ? html`<a class="btn btn-ghost btn-sm" href="#/roles">${icon('shield', 16)} Cambiar lo que da cada rol</a>` : ''}
+        </div>
+      </details>
 
-      ${personalPerms ? permsCard(employee) : ''}
+      <button class="btn btn-primary btn-block btn-lg" type="submit">${isNew ? html`${icon('plus')} Crear empleado` : 'Guardar cambios'}</button>
 
       ${isNew
         ? ''
@@ -347,7 +354,9 @@ export async function employeeFormView({ el, params, setTitle }) {
   let lastRole = roleSelect.value;
   const describeRole = () => {
     const role = roles.find((r) => r.key === roleSelect.value);
-    $('[data-role-summary]', el).textContent = role
+    const summary = $('[data-role-summary]', el);
+    if (!summary) return;
+    summary.textContent = role
       ? `Puede: reportar sus ausencias${role.permissions.length ? ` · ${permissionSummary(role)}` : ''}.${role.coverage ? ' Sus ausencias necesitan cobertura.' : ''}`
       : '';
   };
@@ -377,7 +386,18 @@ export async function employeeFormView({ el, params, setTitle }) {
     syncExtra();
   });
   describeRole();
-  if (personalPerms) bindPermsCard(el, employee, roles);
+  // «Secretaría · 6 permisos · 1 quitado»: what the section has, closed.
+  const perms = personalPerms ? bindPermsList(el, employee, roles) : null;
+  const summarize = () => {
+    const main = roles.find((r) => r.key === roleSelect.value);
+    const extra = [...el.querySelectorAll('[data-extra-roles] input:checked')].map((c) => (c.value === 'admin' ? roleLabel('admin') : roles.find((r) => r.key === c.value)?.name)).filter(Boolean);
+    const parts = [[main?.name, ...extra].filter(Boolean).join(' + ') || 'Sin rol'];
+    if (perms) parts.push(...perms.summary());
+    $('[data-rp-summary]', el).textContent = parts.join(' · ');
+  };
+  $('[data-role-perms]', el).addEventListener('change', summarize);
+  roleSelect.addEventListener('change', summarize);
+  summarize();
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -401,6 +421,8 @@ export async function employeeFormView({ el, params, setTitle }) {
           delete v.extra_roles;
         }
         await updateEmployee(employee.id, v);
+        // The permissions given or taken to this person go with the same button.
+        if (perms?.changed()) await setUserPermissions(employee.id, ...perms.value());
         toast('Cambios guardados', 'ok');
         go('/employees');
       }
@@ -457,19 +479,20 @@ const permMode = (employee, key) =>
   employee.perm_grants?.includes(key) ? 'grant' : employee.perm_denials?.includes(key) ? 'deny' : 'role';
 
 /**
- * A compact list: one switch per permission, on if the person can. It starts as their roles say; turning one the
- * other way gives it or takes it from this person only. Only for the Admin. The switches aren't part of the
- * employee's form (form="perms-own" points nowhere): they have their own button.
+ * Every permission with a switch, on if the person can: first those their role gives (on unless the Admin took one),
+ * then the others (off unless the Admin gave one). Only for the Admin. The switches aren't part of the employee's
+ * form fields (form="perms-own" points nowhere): the form's button saves them with setUserPermissions.
  */
-function permsCard(employee) {
-  return html`<section class="card stack perms-card" data-perms>
-    <div class="perms-head">
-      <h2 class="card-title">${icon('shield')} Permisos de esta persona</h2>
-      <span class="badge badge-muted" data-perms-count>Según su rol</span>
-    </div>
-    <p class="hint">Empieza como dice su rol. Si enciendes o apagas uno, cambia solo para esta persona.</p>
+function permsList(employee) {
+  return html`<div class="perms" data-perms>
     <p class="status-note info" data-perms-admin hidden>${icon('shield', 16)} <span>Tiene el rol Admin: puede hacer todo.</span></p>
-    <ul class="perms-list">
+    <h3 class="perms-group-title">Permisos de su rol <span data-perms-n="role"></span></h3>
+    <p class="hint perms-group-hint" data-perms-hint="role">Vienen con su rol. Apaga uno para quitárselo solo a esta persona.</p>
+    <ul class="perms-list" data-perm-list="role"></ul>
+    <details class="perms-more" ${employee.perm_grants?.length ? 'open' : ''}>
+    <summary class="perms-group-title">${icon('chevron', 16)} Otros permisos <span data-perms-n="other"></span></summary>
+    <p class="hint perms-group-hint">Su rol no los da. Enciende uno para dárselo solo a esta persona.</p>
+    <ul class="perms-list" data-perm-list="other">
       ${PERMISSIONS.map((p) => html`<li class="perm-row" data-perm="${p.key}" data-mode="${permMode(employee, p.key)}">
         <label class="perm-switch" title="${p.hint}">
           <span class="perm-text"><strong>${p.label}</strong><small data-perm-state></small></span>
@@ -478,67 +501,83 @@ function permsCard(employee) {
         <button type="button" class="perm-undo" data-perm-undo hidden>Volver a su rol</button>
       </li>`)}
     </ul>
-    <button type="button" class="btn btn-secondary btn-block" data-perms-save>${icon('check', 18)} Guardar permisos</button>
-  </section>`;
+    </details>
+  </div>`;
 }
 
-function bindPermsCard(el, employee, roles) {
-  const card = $('[data-perms]', el);
+/** The switches as the roles chosen in the form say. Returns what the form needs to show and save them. */
+function bindPermsList(el, employee, roles) {
+  const box = $('[data-perms]', el);
+  const lists = { role: $('[data-perm-list="role"]', box), other: $('[data-perm-list="other"]', box) };
   // What their roles give, as the form says now (main role and the others).
   const fromRoles = () => {
     const keys = [$('[data-role]', el).value,
       ...[...el.querySelectorAll('[data-extra-roles] input:checked')].map((c) => c.value)];
     return { admin: keys.includes('admin'), perms: new Set(roles.filter((r) => keys.includes(r.key)).flatMap((r) => r.permissions)) };
   };
-  const rows = [...card.querySelectorAll('[data-perm]')];
+  const rows = [...box.querySelectorAll('[data-perm]')];
+  const pick = (mode) => rows.filter((row) => row.dataset.mode === mode).map((row) => row.dataset.perm);
+  const start = JSON.stringify([[...(employee.perm_grants || [])].sort(), [...(employee.perm_denials || [])].sort()]);
   const paint = () => {
     const { admin, perms } = fromRoles();
-    card.querySelector('[data-perms-admin]').hidden = !admin;
-    let changed = 0;
+    box.querySelector('[data-perms-admin]').hidden = !admin;
     for (const row of rows) {
       const byRole = perms.has(row.dataset.perm);
       // Giving what the role already gives (or taking what it doesn't) is the same as following the role.
       if ((row.dataset.mode === 'grant' && byRole) || (row.dataset.mode === 'deny' && !byRole)) row.dataset.mode = 'role';
       const mode = row.dataset.mode;
-      const box = row.querySelector('input');
-      box.checked = admin || mode === 'grant' || (mode === 'role' && byRole);
-      box.disabled = admin;
-      if (mode !== 'role' && !admin) changed += 1;
+      const input = row.querySelector('input');
+      input.checked = admin || mode === 'grant' || (mode === 'role' && byRole);
+      input.disabled = admin;
       row.querySelector('[data-perm-state]').textContent = admin ? 'Es Admin'
-        : mode === 'grant' ? 'Se lo diste a esta persona' : mode === 'deny' ? 'Se lo quitaste a esta persona'
-          : byRole ? 'Por su rol' : 'Su rol no lo tiene';
+        : mode === 'grant' ? 'Se lo diste a esta persona' : mode === 'deny' ? 'Se lo quitaste a esta persona' : '';
       row.querySelector('[data-perm-undo]').hidden = admin || mode === 'role';
+      // In its group, keeping the order of the list.
+      const list = byRole ? lists.role : lists.other;
+      if (row.parentElement !== list) list.append(row);
     }
-    const badge = card.querySelector('[data-perms-count]');
-    badge.className = `badge ${changed ? 'badge-info' : 'badge-muted'}`;
-    badge.textContent = changed ? `${changed} ${changed === 1 ? 'cambio' : 'cambios'}` : 'Según su rol';
+    for (const list of Object.values(lists)) {
+      for (const row of rows) if (row.parentElement === list) list.append(row);
+    }
+    const n = (k) => lists[k].children.length;
+    $('[data-perms-n="role"]', box).textContent = n('role');
+    $('[data-perms-n="other"]', box).textContent = n('other');
+    $('[data-perms-hint="role"]', box).textContent = n('role')
+      ? 'Vienen con su rol. Apaga uno para quitárselo solo a esta persona.'
+      : 'Su rol no da ningún permiso; puede reportar sus ausencias.';
   };
-  card.addEventListener('change', (e) => {
+  box.addEventListener('change', (e) => {
     const row = e.target.closest('[data-perm]');
     if (!row) return;
     const byRole = fromRoles().perms.has(row.dataset.perm);
     row.dataset.mode = e.target.checked === byRole ? 'role' : e.target.checked ? 'grant' : 'deny';
     paint();
   });
-  card.addEventListener('click', (e) => {
+  box.addEventListener('click', (e) => {
     const undo = e.target.closest('[data-perm-undo]');
     if (!undo) return;
     undo.closest('[data-perm]').dataset.mode = 'role';
     paint();
+    el.querySelector('[data-role-perms]').dispatchEvent(new Event('change'));
   });
   $('[data-role]', el).addEventListener('change', paint);
   $('[data-extra-roles]', el)?.addEventListener('change', paint);
   paint();
-  card.querySelector('[data-perms-save]').addEventListener('click', (e) =>
-    busy(e.currentTarget, async () => {
-      const pick = (mode) => rows.filter((row) => row.dataset.mode === mode).map((row) => row.dataset.perm);
-      const grants = pick('grant');
-      const denials = pick('deny');
-      await setUserPermissions(employee.id, grants, denials);
-      employee.perm_grants = grants;
-      employee.perm_denials = denials;
-      toast('Permisos guardados', 'ok');
-    }));
+  return {
+    value: () => [pick('grant'), pick('deny')],
+    changed: () => JSON.stringify([pick('grant').sort(), pick('deny').sort()]) !== start,
+    summary: () => {
+      const { admin, perms } = fromRoles();
+      if (admin) return ['puede hacer todo'];
+      const on = rows.filter((row) => row.querySelector('input').checked).length;
+      const given = pick('grant').length;
+      const taken = pick('deny').length;
+      return [`${on} ${on === 1 ? 'permiso' : 'permisos'}`,
+        given ? `${given} ${given === 1 ? 'dado' : 'dados'} aparte` : null,
+        taken ? `${taken} ${taken === 1 ? 'quitado' : 'quitados'}` : null,
+        !given && !taken && perms.size ? 'según su rol' : null].filter(Boolean);
+    },
+  };
 }
 
 // ---- Escuela y Teams -----------------------------------------------------------
