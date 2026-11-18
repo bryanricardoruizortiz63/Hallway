@@ -735,30 +735,41 @@ const TURN_STATUS = {
 const PICKUP_STATUS = { scheduled: 'Por llegar el encargado', arrived: 'Llegó el encargado', on_the_way: 'Seguridad va al salón' };
 const who = (name, group) => html`${name || 'Estudiante'} <span class="nowrap">(${group})</span>`;
 
-function liveTurn(t, service) {
+/** "12 min" since then, short, for the counters on the right. */
+const since = (ts) => minutesText(minutesBetween(ts, new Date().toISOString())) || '';
+
+function liveTurn(t, service, place = null) {
   const support = service.mode === 'support';
   const status = t.late ? 'No ha llegado' : support && t.status === 'on_the_way' ? `${service.name} va en camino` : TURN_STATUS[t.status]?.(service) || t.status;
   const sev = SEVERITY[t.level] || SEVERITY[1];
-  return html`<a class="item ${t.late ? 'alert-item is-urgent' : ''}" href="#/live/turn/${t.id}" data-live-turn="${t.id}">
-    <span class="item-icon ${t.late ? 'is-danger' : t.status === 'waiting' ? '' : 'is-ok'}">${icon(support ? 'wrench' : 'pulse')}</span>
+  return html`<a class="item live-turn ${t.late ? 'alert-item is-urgent' : `sev-${t.level || 1}`}" href="#/live/turn/${t.id}" data-live-turn="${t.id}">
+    ${place
+      ? html`<span class="live-place" aria-label="Turno ${place}">${place}</span>`
+      : html`<span class="item-icon ${t.late ? 'is-danger' : 'is-ok'}">${icon(t.late ? 'alert' : support ? 'wrench' : 'pulse')}</span>`}
     <span class="item-main">
       <strong>${support ? html`${t.created_by_name}${t.room ? html` <span class="nowrap">(${t.room})</span>` : ''}` : who(t.student, t.group)}</strong>
       ${t.reason ? html`<span class="item-sub" data-reason>${t.reason}</span>` : ''}
-      <span class="item-sub">${[status, t.handled_by_name && t.status !== 'waiting' ? t.handled_by_name : null, timeAgo(t.since)].filter(Boolean).join(' · ')}</span>
+      <span class="item-sub">${[status, t.handled_by_name && t.status !== 'waiting' ? t.handled_by_name : null].filter(Boolean).join(' · ')}</span>
     </span>
-    <span class="tag ${sev.cls}">${sev.label}</span>
-    ${icon('chevron', 18)}
+    <span class="live-side">
+      <span class="live-mins ${t.late ? 'is-danger' : ''}">${since(t.since)}</span>
+      <span class="tag ${sev.cls}">${sev.label}</span>
+    </span>
   </a>`;
 }
 
-/** Who attends a service and how they are now (Disponible, En reunión hasta…). */
-const staffTags = (s) => html`<div class="chips">${s.staff.length
+/** Who attends a service and how they are now (Disponible, En reunión hasta…), with a dot of its color. */
+const staffTags = (s) => html`<div class="staff-chips">${s.staff.length
   ? s.staff.map((p) => {
     // An absence reported for now wins over the status the person set.
     const out = absentNow(p);
-    if (out) return html`<span class="tag tag-danger">${p.name} · Ausente ${out.until}</span>`;
-    if (p.busy && p.status === 'available') return html`<span class="tag tag-warn">${p.name} · Atendiendo un turno</span>`;
-    return html`<span class="tag ${p.status === 'available' ? 'tag-ok' : 'tag-warn'}">${p.name} · ${STAFF_STATUS[p.status] || p.status}${p.until ? ` hasta ${fmtTime(new Date(p.until))}` : ''}</span>`;
+    const [cls, text] = out
+      ? ['st-out', `Ausente ${out.until}`]
+      : p.busy && p.status === 'available'
+        ? ['st-busy', 'Atendiendo un turno']
+        : [p.status === 'available' ? 'st-ok' : 'st-busy',
+          `${STAFF_STATUS[p.status] || p.status}${p.until ? ` hasta ${fmtTime(new Date(p.until))}` : ''}`];
+    return html`<span class="staff-chip ${cls}"><i aria-hidden="true"></i><strong>${p.name}</strong><small>${text}</small></span>`;
   })
   : html`<span class="muted">Nadie tiene un rol que atienda este servicio.</span>`}</div>`;
 
@@ -769,33 +780,115 @@ const serviceChips = (services, current = null) => html`<div class="quick live-s
 
 /** filtered: only a grade's or group's turns show (the day's numbers are the whole service's); link: to its day. */
 function liveService(s, { filtered = false, link = true } = {}) {
-  // Late first, then whoever is out of the room, then the queue by level.
-  const rank = (t) => (t.late ? 0 : t.status === 'waiting' ? 2 : 1);
-  const active = [...s.active].sort((a, b) => rank(a) - rank(b) || (rank(a) === 2 ? b.level - a.level : 0));
-  const waiting = s.active.filter((t) => t.status === 'waiting').length;
+  const support = s.mode === 'support';
+  // With them now (whoever didn't arrive first), then the line: most serious first, then who asked first.
+  const withThem = s.active.filter((t) => t.status !== 'waiting').sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0));
+  const line = s.active.filter((t) => t.status === 'waiting')
+    .sort((a, b) => b.level - a.level || String(a.since).localeCompare(String(b.since)));
   const d = s.today;
   const summary = [
     `${d.requested} ${d.requested === 1 ? 'pedido' : 'pedidos'}`,
     `${d.done} ${d.done === 1 ? 'terminado' : 'terminados'}`,
-    s.mode !== 'support' && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
-    d.referred ? (s.mode === 'support' ? `${d.referred} con seguimiento` : `${d.referred} referido${d.referred === 1 ? '' : 's'}`) : null,
+    !support && d.picked_up ? `${d.picked_up} ${d.picked_up === 1 ? 'recogido' : 'recogidos'}` : null,
+    d.referred ? (support ? `${d.referred} con seguimiento` : `${d.referred} referido${d.referred === 1 ? '' : 's'}`) : null,
     d.late ? `${d.late} no ${d.late === 1 ? 'llegó' : 'llegaron'} a tiempo` : null,
     // Like the Resumen del día: every turn of the day is counted somewhere.
     d.cancelled ? `${d.cancelled} ${d.cancelled === 1 ? 'cancelado' : 'cancelados'}` : null,
     d.expired ? `${d.expired} sin tomar (${d.expired === 1 ? 'lo cerró' : 'los cerró'} el sistema al terminar el horario escolar)` : null,
-    s.active.length ? `${s.active.length} en curso` : null,
   ].filter(Boolean).join(' · ');
-  return html`<section class="card stack live-service" data-live-service="${s.id}">
-    <div class="card-head">
-      <h2 class="card-title">${icon(s.mode === 'support' ? 'wrench' : 'pulse')} ${s.name}</h2>
-      <span class="count ${waiting ? 'warn' : ''}">${waiting} en fila</span>
+  const late = s.active.some((t) => t.late);
+  return html`<section class="card stack live-service ${support ? 'is-support' : ''} ${late ? 'has-late' : ''}" data-live-service="${s.id}" id="live-service-${s.id}">
+    <div class="live-service-head">
+      <span class="live-service-icon" aria-hidden="true">${icon(support ? 'wrench' : 'pulse', 22)}</span>
+      <div class="live-service-name">
+        <h2 class="card-title">${s.name}</h2>
+        <span class="hint">${filtered && !support ? 'Hoy, en todo el servicio' : 'Hoy'}: ${summary}.</span>
+      </div>
+      <span class="live-queue ${line.length ? 'is-on' : ''}"><strong>${line.length}</strong><small>en fila</small></span>
     </div>
     ${staffTags(s)}
-    ${active.length ? html`<div class="list flat">${active.map((t) => liveTurn(t, s))}</div>` : html`<p class="muted">Nadie en fila ni en atención.</p>`}
-    <p class="hint">${filtered && s.mode !== 'support' ? 'Hoy, en todo el servicio' : 'Hoy'}: ${summary}.</p>
-    ${link ? html`<a class="btn btn-secondary btn-block" href="#/live/service/${s.id}">${icon('list', 18)} Ver todos los turnos de hoy</a>` : ''}
+    ${!s.active.length ? html`<p class="live-empty">${icon('check', 18)} Nadie en fila ni en atención.</p>` : ''}
+    ${withThem.length ? html`<div class="live-group">
+      <h3 class="live-group-title">${support ? 'Atendiendo ahora' : 'Con ellos ahora'} <span>${withThem.length}</span></h3>
+      <div class="list flat">${withThem.map((t) => liveTurn(t, s))}</div>
+    </div>` : ''}
+    ${line.length ? html`<div class="live-group">
+      <h3 class="live-group-title">En fila <span>${line.length}</span></h3>
+      <div class="list flat">${line.map((t, i) => liveTurn(t, s, i + 1))}</div>
+    </div>` : ''}
+    ${link ? html`<a class="btn btn-secondary btn-sm btn-block" href="#/live/service/${s.id}">${icon('list', 16)} Ver todos los turnos de hoy</a>` : ''}
   </section>`;
 }
+
+/**
+ * «Necesita atención ahora»: what someone has to look at, most serious first — a student who didn't arrive, a
+ * teacher asking for relief, an urgent turn waiting in line for 5 minutes or more, urgent maintenance nobody took.
+ */
+function attentionNow(b) {
+  const now = Date.now();
+  const list = [
+    ...b.alerts.map((a) => ({
+      key: `alert-${a.id}`, rank: 0, icon: 'alert', title: who(a.student, a.group), since: a.created_at,
+      what: 'No ha llegado', sub: [a.place ? `venía de ${a.place}` : null, `avisó ${a.created_by_name}`], link: `#/alerts/missing/${a.id}`,
+    })),
+    ...b.services.flatMap((s) => s.active.filter((t) => t.late).map((t) => ({
+      key: `late-${t.id}`, rank: 0, icon: 'alert', title: who(t.student, t.group), since: t.out_since || t.since,
+      what: `No ha llegado a ${s.name}`, sub: [t.reason], link: `#/live/turn/${t.id}`,
+    }))),
+    ...b.relief.map((x) => ({
+      key: `relief-${x.id}`, rank: 1, icon: 'users', title: x.name, since: x.created_at,
+      what: 'Pide relevo', sub: [x.room ? `Salón ${x.room}` : null], link: `#/alerts/relief/${x.id}`,
+    })),
+    ...b.services.flatMap((s) => s.active
+      .filter((t) => t.status === 'waiting' && t.level >= 4 && (now - new Date(t.since)) / 60000 >= URGENT_WAIT_MIN)
+      .map((t) => ({
+        key: `urgent-${t.id}`, rank: 2, icon: s.mode === 'support' ? 'wrench' : 'pulse',
+        title: s.mode === 'support' ? t.created_by_name : who(t.student, t.group), since: t.since,
+        what: `Urgente en fila de ${s.name}`, sub: [t.reason], link: `#/live/turn/${t.id}`,
+      }))),
+    ...b.maintenance.filter((m) => m.urgency === 3 && m.status === 'pending').map((m) => ({
+      key: `maint-${m.id}`, rank: 3, icon: (KINDS[m.kind] || KINDS.other).icon,
+      title: `${(KINDS[m.kind] || KINDS.other).label} · ${m.place}`, since: m.created_at,
+      what: 'Mantenimiento urgente', sub: ['nadie lo ha tomado'], link: `#/maintenance/${m.id}`,
+    })),
+  ];
+  return list.sort((x, y) => x.rank - y.rank || String(x.since).localeCompare(String(y.since)));
+}
+
+const attentionItem = (x) => html`<a class="item attn-item ${x.rank < 2 ? 'is-urgent' : 'is-warn'}" href="${x.link}" data-attention="${x.key}">
+    <span class="item-icon ${x.rank < 2 ? 'is-danger' : ''}">${icon(x.icon)}</span>
+    <span class="item-main">
+      <span class="attn-what">${x.what}</span>
+      <strong>${x.title}</strong>
+      ${x.sub.filter(Boolean).length ? html`<span class="item-sub">${x.sub.filter(Boolean).join(' · ')}</span>` : ''}
+    </span>
+    <span class="live-mins ${x.rank < 2 ? 'is-danger' : ''}">${since(x.since)}</span>
+  </a>`;
+
+/** The banner on top: red when something needs someone, green when all is calm. */
+function liveHero(attention, active) {
+  const n = attention.length;
+  const kinds = [...new Set(attention.map((x) => x.what.replace(/ (a|de) .+$/, '')))];
+  const [cls, ico, title, sub] = n
+    ? ['is-alert', 'alert', `${n} ${n === 1 ? 'cosa necesita' : 'cosas necesitan'} atención`, kinds.join(' · ')]
+    : active
+      ? ['is-moving', 'pulse', 'Todo en orden', `${active} ${active === 1 ? 'turno en curso' : 'turnos en curso'}, nada urgente.`]
+      : ['is-calm', 'check', 'Todo tranquilo', 'No hay movimiento en este momento.'];
+  return html`<section class="live-hero ${cls}" data-live-hero>
+    <span class="live-hero-icon" aria-hidden="true">${icon(ico, 26)}</span>
+    <div class="live-hero-text">
+      <strong>${title}</strong>
+      <span>${sub}</span>
+    </div>
+    <span class="live-hero-stamp"><span class="live-dot" aria-hidden="true"></span>${fmtTime(new Date())}</span>
+  </section>`;
+}
+
+/** A number that takes you to its part of the page. */
+const jumpTile = (value, label, iconName, target, cls = '') => html`<button type="button" class="stat live-stat ${cls}" data-jump="${target}">
+    <span class="live-stat-icon" aria-hidden="true">${icon(iconName, 18)}</span>
+    <strong>${value}</strong><span>${label}</span>
+  </button>`;
 
 function liveSection(title, items, renderItem, { danger = false, note = '' } = {}) {
   if (!items.length && !note) return '';
@@ -806,11 +899,6 @@ function liveSection(title, items, renderItem, { danger = false, note = '' } = {
   </section>`;
 }
 
-const alertItem = (a) => html`<a class="item alert-item is-urgent" href="#/alerts/missing/${a.id}">
-    <span class="item-icon is-danger">${icon('alert')}</span>
-    <span class="item-main"><strong>${who(a.student, a.group)}</strong>
-      <span class="item-sub">${[a.place ? `venía de ${a.place}` : null, `avisó ${a.created_by_name}`, timeAgo(a.created_at)].filter(Boolean).join(' · ')}</span></span>
-  </a>`;
 const pickupItem = (k) => html`<a class="item" href="#/alerts/pickup/${k.id}">
     <span class="item-icon">${icon('user')}</span>
     <span class="item-main"><strong>${who(k.student, k.group)}</strong>
@@ -998,7 +1086,7 @@ function outSection(out) {
   const count = out.reduce((n, g) => n + g.students.length, 0);
   if (!count) return '';
   const late = out.some((g) => g.students.some((x) => x.late));
-  return html`<section class="section" data-out-now>
+  return html`<section class="section" data-out-now id="live-out">
     <h3 class="section-title">Fuera del salón ahora <span class="count ${late ? 'danger' : 'warn'}">${count}</span></h3>
     <div class="out-groups">${out.map((g) => html`<div class="out-group" data-out-group="${g.group}">
       <h4 class="out-group-title">${g.group || 'Sin grupo'} <span>${g.students.length}</span></h4>
@@ -1217,29 +1305,32 @@ export async function liveView(ctx) {
     const f = liveFilter();
     const b = forFilter(board, f);
     const { active } = b;
+    const attention = attentionNow(b);
     const late = active.filter((t) => t.late).length + b.alerts.length;
-    const quiet = !active.length && !b.alerts.length && !b.pickups.length && !b.relief.length && !b.maintenance.length && !b.rooms.length;
-    el.innerHTML = String(html`<div class="stack">
-      <p class="hint live-stamp"><span class="live-dot" aria-hidden="true"></span> Se actualiza solo. Última vez: ${fmtTime(new Date())}</p>
-      <div class="stack-sm" data-live-tools>
+    const outCount = outNow(b).reduce((n, g) => n + g.students.length, 0);
+    const firstService = b.services[0] ? `live-service-${b.services[0].id}` : '';
+    el.innerHTML = String(html`<div class="stack live-board">
+      ${liveHero(attention, active.length)}
+      <div class="live-toolbar" data-live-tools>
         ${filterField(f)}
         <div class="quick">${soundButton()}<a class="chip-btn" href="#/live/tv" data-live-tv>${icon('live', 16)} Pantalla grande</a></div>
         ${soundHint()}
       </div>
       ${f ? html`<p class="hint" data-filter-note>Solo ${filterLabel(f)}: sus turnos, «No ha llegado», las salidas y quién está fuera del salón. Soporte IT, los relevos, el mantenimiento y las reservas son de toda la escuela.</p>` : ''}
-      <div class="stats">
-        ${tile(active.filter((t) => t.status === 'waiting').length, 'En fila')}
-        ${tile(active.filter((t) => t.status !== 'waiting').length, 'En atención o en camino')}
-        ${tile(late, 'No han llegado', late ? 'stat-danger' : '')}
-        ${tile(b.maintenance.length, 'Mantenimiento abierto', b.maintenance.some((m) => m.urgency === 3) ? 'stat-warn' : '')}
+      <div class="stats live-stats">
+        ${jumpTile(active.filter((t) => t.status === 'waiting').length, 'En fila', 'clock', firstService)}
+        ${jumpTile(active.filter((t) => t.status !== 'waiting').length, 'En atención o en camino', 'pulse', firstService, 'stat-ok')}
+        ${jumpTile(outCount, 'Fuera del salón', 'door', 'live-out', outCount ? 'stat-warn' : '')}
+        ${jumpTile(late, 'No han llegado', 'alert', 'live-attention', late ? 'stat-danger' : '')}
       </div>
-      ${b.services.length ? html`<div class="stack-sm"><p class="muted">Los turnos de hoy de un servicio, uno por uno:</p>${serviceChips(b.services)}</div>` : ''}
-      ${quiet ? html`<div class="card">${empty('check', 'Todo tranquilo', 'No hay movimiento en este momento.')}</div>` : ''}
-      ${liveSection('No ha llegado', b.alerts, alertItem, { danger: true })}
+      ${attention.length ? html`<section class="section live-attention" id="live-attention" data-attention-now>
+        <h3 class="section-title">Necesita atención ahora <span class="count danger">${attention.length}</span></h3>
+        <div class="list">${attention.map(attentionItem)}</div>
+      </section>` : ''}
       ${outSection(outNow(b))}
+      ${b.services.length ? html`<div class="stack-sm"><p class="muted">Los turnos de hoy de un servicio, uno por uno:</p>${serviceChips(b.services)}</div>` : ''}
       ${b.services.map((s) => liveService(s, { filtered: !!f }))}
       ${liveSection('Salidas de hoy', b.pickups, pickupItem, { note: !f && b.pickups_done ? `${b.pickups_done} ya ${b.pickups_done === 1 ? 'se entregó' : 'se entregaron'} hoy.` : '' })}
-      ${liveSection('Piden relevo', b.relief, reliefItem, { danger: true })}
       ${liveSection('Mantenimiento', b.maintenance, (m) => html`<a class="item ${m.urgency === 3 ? 'alert-item is-urgent' : ''}" href="#/maintenance/${m.id}">
           <span class="item-icon ${m.urgency === 3 ? 'is-danger' : ''}">${icon((KINDS[m.kind] || KINDS.other).icon)}</span>
           <span class="item-main"><strong>${(KINDS[m.kind] || KINDS.other).label} · ${m.place}</strong>
@@ -1251,8 +1342,11 @@ export async function liveView(ctx) {
           <span class="item-main"><strong>${r.purpose}</strong>
             <span class="item-sub">${fmtTime(r.start_time)} – ${fmtTime(r.end_time)} · ${r.created_by_name}</span></span>
         </a>`, { note: b.rooms_pending ? `${b.rooms_pending} ${b.rooms_pending === 1 ? 'reserva espera' : 'reservas esperan'} aprobación.` : '' })}
-      <p class="hint">Cada turno dice su motivo. Toca uno para ver todos sus detalles, también la nota del maestro.</p>
+      <p class="hint">Se actualiza solo. Cada turno dice su motivo; toca uno para ver todos sus detalles, también la nota del maestro.</p>
     </div>`);
+    for (const t of el.querySelectorAll('[data-jump]')) {
+      t.addEventListener('click', () => document.getElementById(t.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
     bindTools(el, render, () => alarmKeys(b));
     ringFor(alarmKeys(b));
   }
