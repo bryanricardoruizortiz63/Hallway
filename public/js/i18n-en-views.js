@@ -2195,4 +2195,6 @@ export const SERVER = {
   'No hay reservas hoy.': 'No bookings today.',
   'Toca una tarjeta para ver sus detalles; se actualiza sola y se queda abierta.': 'Tap a card to see its details; it updates by itself and stays open.',
   'Mantenimiento': 'Maintenance',
+  'Toca para ver cuáles': 'Tap to see which',
+  'Toca para cerrar': 'Tap to close',
 };

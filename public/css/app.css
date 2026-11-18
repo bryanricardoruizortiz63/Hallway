@@ -5306,7 +5306,8 @@ details.card > summary.card-title::-webkit-details-marker {
 }
 
 .live-hero.is-alert {
-  background: linear-gradient(135deg, var(--danger), color-mix(in srgb, var(--danger) 70%, #7f1d1d));
+  /* The same deep red in light and dark, so the white letters always read. */
+  background: linear-gradient(135deg, #c62828, #8e1b1b);
   color: #fff;
 }
 
@@ -6068,5 +6069,60 @@ details.card > summary.card-title::-webkit-details-marker {
     100% {
       scale: 1;
     }
+  }
+}
+
+/* The red banner is a button: it opens what needs attention right under it. */
+button.live-hero {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button.live-hero:active {
+  transform: scale(0.985);
+}
+
+button.live-hero:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.live-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.2);
+  color: #fff;
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.live-hero-cta::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-1px) rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.live-hero.is-open .live-hero-cta::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .live-attention {
+    animation: live-open 0.22s ease-out;
   }
 }
