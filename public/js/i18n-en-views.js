@@ -2146,4 +2146,5 @@ export const SERVER = {
   'Antes': 'Before',
   'Sin más detalles.': 'No more details.',
   'Atendiendo un turno': 'Attending a turn',
+  'El motivo, la nota y cómo terminó solo los ven quien atiende el servicio, quien pidió el turno, Director(a) y Admin.': 'The reason, the note and how it ended are only seen by whoever attends the service, whoever asked for the turn, the Principal and Admin.',
 };
