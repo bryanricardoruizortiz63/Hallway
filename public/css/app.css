@@ -5181,7 +5181,7 @@ details.card > summary.card-title::-webkit-details-marker {
 .format-badge.is-pdf { background: #d93025; }
 .format-badge.is-xlsx { background: #1d7a46; }
 
-/* ---- Permisos de una persona (ficha del empleado, solo Admin) ---- */
+/* ---- Permisos de una persona (ficha del empleado, solo Admin): una lista con un interruptor por permiso ---- */
 .perms-head {
   display: flex;
   align-items: center;
@@ -5190,18 +5190,13 @@ details.card > summary.card-title::-webkit-details-marker {
 }
 
 .perms-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
+  margin: 0 -4px;
   padding: 0;
   list-style: none;
 }
 
 .perm-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 0;
+  padding: 2px 4px;
   border-top: 1px solid var(--border);
 }
 
@@ -5209,67 +5204,64 @@ details.card > summary.card-title::-webkit-details-marker {
   border-top: 0;
 }
 
-.perm-text {
+.perm-switch {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 10px;
+  gap: 12px;
+  min-height: 48px;
+  cursor: pointer;
+}
+
+.perm-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .perm-text strong {
   font-size: 15px;
+  font-weight: 600;
 }
 
-.perm-hint {
-  margin: 0;
-  font-size: 13px;
+.perm-text small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
-.perm-seg .seg {
-  min-height: 34px;
-  font-size: 14px;
-}
-
-.perm-seg .seg-grant.active {
-  background: var(--ok-soft);
+.perm-row[data-mode='grant'] .perm-text small {
   color: var(--ok);
+  font-weight: 600;
 }
 
-.perm-seg .seg-deny.active {
-  background: var(--danger-soft, var(--warn-soft));
-  color: var(--danger, var(--warn));
+.perm-row[data-mode='deny'] .perm-text small {
+  color: var(--danger);
+  font-weight: 600;
 }
 
 .perm-row[data-mode='grant'],
 .perm-row[data-mode='deny'] {
-  margin: 4px -10px;
-  padding: 12px 10px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--ok-soft);
-}
-
-.perm-row[data-mode='deny'] {
-  background: var(--danger-soft);
+  border-radius: 10px;
+  background: var(--surface-2);
 }
 
 .perm-row[data-mode='grant'] + .perm-row,
 .perm-row[data-mode='deny'] + .perm-row {
-  border-top: 0;
+  border-top-color: transparent;
 }
 
-.perm-row[data-mode='grant'] .perm-seg,
-.perm-row[data-mode='deny'] .perm-seg {
-  background: var(--surface);
+.perm-switch .toggle {
+  flex-shrink: 0;
 }
 
-.perm-row[data-mode='grant'] .perm-seg .seg-grant.active,
-.perm-row[data-mode='deny'] .perm-seg .seg-deny.active {
-  background: var(--ok);
-  color: var(--surface);
-}
-
-.perm-row[data-mode='deny'] .perm-seg .seg-deny.active {
-  background: var(--danger);
+.perm-undo {
+  margin: -12px 0 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }
