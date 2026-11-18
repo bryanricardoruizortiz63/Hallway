@@ -3772,15 +3772,35 @@ body.tv-mode {
   .view-inner.enter .list > :nth-child(5) { animation-delay: 0.12s; }
   .view-inner.enter .list > :nth-child(n + 6) { animation-delay: 0.15s; }
 
-  /* The tab you open bounces a little. */
-  .tab.active .tab-icon {
-    animation: tab-pop 0.34s cubic-bezier(0.3, 1.6, 0.5, 1);
+  /* The tab you open: its icon hops up and settles while the pill glides under it. */
+  .tab.active .tab-icon svg {
+    animation: tab-hop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1);
   }
 
-  @keyframes tab-pop {
-    from {
-      transform: scale(0.8);
+  @keyframes tab-hop {
+    0% {
+      transform: translateY(2px) scale(0.82);
     }
+    45% {
+      transform: translateY(-3px) scale(1.12);
+    }
+    100% {
+      transform: none;
+    }
+  }
+
+  .tab-glider {
+    transition:
+      transform 0.45s cubic-bezier(0.34, 1.32, 0.5, 1),
+      width 0.45s cubic-bezier(0.34, 1.32, 0.5, 1),
+      height 0.3s ease,
+      background-color 0.3s ease,
+      box-shadow 0.3s ease,
+      opacity 0.2s ease;
+  }
+
+  .tab-glider.no-move {
+    transition: none;
   }
 
   .btn {
@@ -5264,4 +5284,449 @@ details.card > summary.card-title::-webkit-details-marker {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ---- En vivo: a banner on top, what needs someone first, and services that read at a glance ---- */
+.live-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  box-shadow: var(--shadow);
+}
+
+.live-hero.is-moving {
+  background: var(--tab-live-soft);
+  color: var(--tab-live);
+}
+
+.live-hero.is-alert {
+  background: linear-gradient(135deg, var(--danger), color-mix(in srgb, var(--danger) 70%, #7f1d1d));
+  color: #fff;
+}
+
+.live-hero-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.live-hero.is-alert .live-hero-icon {
+  background: rgb(255 255 255 / 0.18);
+  animation: live-hero-beat 1.6s ease-in-out infinite;
+}
+
+.live-hero-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.live-hero-text strong {
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.live-hero-text span {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.live-hero:not(.is-alert) .live-hero-text strong {
+  color: var(--text);
+}
+
+.live-hero-stamp {
+  flex: none;
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.live-hero.is-alert .live-dot {
+  background: #fff;
+}
+
+@keyframes live-hero-beat {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgb(255 255 255 / 0.35); }
+  50% { transform: scale(1.06); box-shadow: 0 0 0 8px rgb(255 255 255 / 0); }
+}
+
+/* The filter and the sound in one compact block. */
+.live-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+}
+
+.live-toolbar .field {
+  flex: 1 1 200px;
+  margin: 0;
+}
+
+.live-toolbar .quick {
+  flex: 0 1 auto;
+}
+
+.live-toolbar [data-sound-hint] {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* The numbers: an icon, and a tap takes you to their part. */
+.live-stat {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 10px;
+  padding: 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.live-stat:active {
+  transform: scale(0.97);
+}
+
+.live-stat strong {
+  font-size: 24px;
+}
+
+.live-stat > span:last-child {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  line-height: 1.25;
+}
+
+.live-stat-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.stat-ok .live-stat-icon {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.stat-warn .live-stat-icon,
+.stat-danger .live-stat-icon {
+  background: var(--surface);
+  color: inherit;
+}
+
+.stat-warn .live-stat-icon {
+  color: var(--warn);
+}
+
+.stat-danger .live-stat-icon {
+  color: var(--danger);
+}
+
+/* «Necesita atención ahora». */
+.attn-item {
+  border-left: 4px solid var(--danger);
+}
+
+.attn-item.is-warn {
+  border-left-color: var(--warn);
+}
+
+.attn-what {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+
+.attn-item.is-warn .attn-what {
+  color: var(--warn);
+}
+
+/* Minutes since, big enough to read from across the room. */
+.live-mins {
+  flex: none;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.live-mins.is-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.live-mins:empty {
+  display: none;
+}
+
+.live-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+/* A service. */
+.live-service {
+  border-top: 4px solid var(--tab-turns);
+}
+
+.live-service.is-support {
+  border-top-color: var(--primary);
+}
+
+.live-service.has-late {
+  border-top-color: var(--danger);
+}
+
+.live-service-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.live-service-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--tab-turns-soft);
+  color: var(--tab-turns);
+}
+
+.live-service.is-support .live-service-icon {
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+
+.live-service-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.live-service-name .card-title {
+  margin: 0;
+}
+
+.live-service-name .hint {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.live-queue {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  min-width: 58px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.live-queue strong {
+  font-size: 22px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-queue small {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.live-queue.is-on {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* Who attends: a dot of their color. */
+.staff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.staff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+
+.staff-chip i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+.staff-chip.st-busy i {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent);
+}
+
+.staff-chip.st-out i {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.staff-chip small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.live-group-title span {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+/* A turn: the line on the left says how serious; in line, its place. */
+.live-turn {
+  border-left: 3px solid transparent;
+}
+
+.live-turn.sev-2 {
+  border-left-color: var(--primary);
+}
+
+.live-turn.sev-3 {
+  border-left-color: var(--warn);
+}
+
+.live-turn.sev-4 {
+  border-left-color: var(--danger);
+}
+
+.live-place {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.live-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-hero.is-alert .live-hero-icon {
+    animation: none;
+  }
+}
+
+/* ---- The pill under the open tab: it glides from one tab to the next and takes its color (see moveGlider). ---- */
+.tab-glider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background: var(--glider, var(--primary-soft));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glider-line, var(--primary)) 18%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tab-glider.is-on {
+  opacity: 1;
+}
+
+.tabbar .tab {
+  position: relative;
+  z-index: 1;
+}
+
+.tab > span:last-child {
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.tabbar.has-glider .tab.active .tab-icon {
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (min-width: 900px) {
+  .tab-glider {
+    border-radius: 12px;
+    box-shadow: inset 3px 0 0 var(--glider-line, var(--primary));
+  }
+
+  .tabbar.has-glider .tab.active,
+  .tabbar.has-glider .tab.active:hover {
+    background: transparent;
+    box-shadow: none;
+  }
 }

@@ -176,6 +176,7 @@ function renderShell(route, path) {
     appRoot.innerHTML = String(html`
       <div class="shell">
         <nav class="tabbar" aria-label="Navegación principal">
+          <span class="tab-glider" aria-hidden="true"></span>
           <button type="button" class="side-brand" data-account-menu aria-haspopup="dialog" aria-label="Tu cuenta: ${user.full_name}">
             ${avatar(user.full_name)}
             <span class="side-brand-text"><strong>${user.full_name}</strong><small>${school.name}</small></span>
@@ -220,7 +221,46 @@ function renderShell(route, path) {
     if (active) tab.setAttribute('aria-current', 'page');
     else tab.removeAttribute('aria-current');
   }
+  moveGlider();
 }
+
+/**
+ * The pill behind the open tab glides to the one you open, taking its color. On the phone it sits behind the icon;
+ * on the side bar (computer) behind the whole row. Without an open tab (a screen from Más) it fades out.
+ */
+function moveGlider({ instant = false } = {}) {
+  const bar = appRoot.querySelector('.tabbar');
+  const glider = bar?.querySelector('.tab-glider');
+  if (!glider) return;
+  const tab = bar.querySelector('.tab.active');
+  if (!tab) {
+    glider.classList.remove('is-on');
+    return;
+  }
+  const side = matchMedia('(min-width: 900px)').matches;
+  const target = side ? tab : tab.querySelector('.tab-icon');
+  const box = bar.getBoundingClientRect();
+  const r = target.getBoundingClientRect();
+  if (!r.width) return;
+  const style = getComputedStyle(tab);
+  // The first time (or after a resize) it appears in place, without travelling from the corner.
+  const jump = instant || !glider.classList.contains('is-on');
+  glider.classList.toggle('no-move', jump);
+  glider.style.width = `${r.width}px`;
+  glider.style.height = `${r.height}px`;
+  glider.style.transform = `translate(${r.left - box.left - bar.clientLeft + bar.scrollLeft}px, ${r.top - box.top - bar.clientTop + bar.scrollTop}px)`;
+  glider.style.setProperty('--glider', style.getPropertyValue('--tab-soft'));
+  glider.style.setProperty('--glider-line', style.getPropertyValue('--tab'));
+  glider.classList.add('is-on');
+  bar.classList.add('has-glider');
+  if (jump) requestAnimationFrame(() => requestAnimationFrame(() => glider.classList.remove('no-move')));
+}
+
+let gliderTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(gliderTimer);
+  gliderTimer = setTimeout(() => moveGlider({ instant: true }), 120);
+});
 
 let lastPath = null;
 
