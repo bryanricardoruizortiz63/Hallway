@@ -2,7 +2,7 @@ import { getMe, markAlertsRead, sendErrorReport } from './backend.js';
 import { can, historyFull, html, isAdmin, isStaff, moduleOn, pathModule, poll, raw, reportsOwn, roomName, setErrorReporter, toast } from './lib.js';
 import { icon } from './icons.js';
 import { initPwa, reportAppVersion, syncPush } from './pwa.js';
-import { go, homePath, refreshUnread, setUnread, state } from './store.js';
+import { go, homePath, refreshUnread, setTabCounts, setUnread, state } from './store.js';
 import { navItems } from './nav.js';
 import { blinkTitle, showAlarm, unlockAudio } from './alarm.js';
 import { adoptSchoolFromUrl, changePasswordView, loginView, rememberSchool } from './views/auth.js';
@@ -184,7 +184,7 @@ function renderShell(route, path) {
           ${navItems(user).map(
             (item) => html`<a class="tab" href="#${item.path}" data-path="${item.path}"
                 data-match="${(item.match || [item.path]).join(',')}">
-                <span class="tab-icon">${icon(item.icon, 22)}${item.badge ? raw('<b class="dot" data-unread hidden></b>') : ''}</span>
+                <span class="tab-icon">${icon(item.icon, 22)}${item.badge ? raw('<b class="dot" data-unread hidden></b>') : ''}${item.path === '/more' ? '' : html`<b class="dot tab-count" data-tab-count="${item.path}" hidden></b>`}</span>
                 <span>${item.label}</span></a>`,
           )}
         </nav>
@@ -207,6 +207,7 @@ function renderShell(route, path) {
       else go(homePath());
     });
     setUnread(state.unread);
+    setTabCounts(state.tabCounts);
   }
   document.body.classList.remove('bare');
   const title = typeof route.title === 'function' ? route.title() : route.title || '';

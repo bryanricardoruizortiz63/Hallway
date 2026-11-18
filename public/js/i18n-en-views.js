@@ -2140,4 +2140,9 @@ export const SERVER = {
   'Primero escribe el código de tu app de autenticación; después podrás seguir con la passkey.': 'First type your authenticator app’s code; then you can continue with the passkey.',
   'Primero, el código de tu app': 'First, your app’s code',
   'Para añadir o quitar passkeys, escribe el código de 6 números que te sale para Hallway en tu app de autenticación.': 'To add or remove passkeys, type the 6-digit code your authenticator app shows for Hallway.',
+  'Cuándo': 'When',
+  'Lo hizo': 'Done by',
+  'Sobre': 'About',
+  'Antes': 'Before',
+  'Sin más detalles.': 'No more details.',
 };

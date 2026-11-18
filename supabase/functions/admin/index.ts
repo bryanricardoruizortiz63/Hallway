@@ -973,7 +973,39 @@ const SERVICE_ACTIONS = ['close_service_year'];
 
 // ---- The activity history (Historial del personal) ---------------------------------------------------------------
 
-type Person = { id: string; full_name: string; role: string; extra_roles: string[] | null; active: boolean };
+type Person = {
+  id: string; full_name: string; role: string; extra_roles: string[] | null; active: boolean;
+  username?: string | null; email?: string | null; phone?: string | null; employee_number?: string | null;
+  position?: string | null; room?: string | null; groups?: string[] | null;
+};
+
+/** The permissions in words, as in «Roles y permisos». */
+const PERMISSION_LABELS: Record<string, string> = {
+  absences: 'Ver y confirmar las ausencias de todos', register: 'Registrar ausencias del personal', staff: 'Administrar el personal',
+  calendar: 'Calendario escolar', rooms: 'Aprobar reservas del salón', security: 'Seguridad', visitors: 'Visitas',
+  maintenance: 'Mantenimiento', messages: 'Enviar mensajes', live: 'En vivo', reports: 'Datos y reportes',
+  settings: 'Configurar la escuela', services: 'Configurar Turnos', history: 'Historial del personal',
+  absence_search: 'Buscar ausencias', own_absence_search: 'Buscar mis ausencias', turn_search: 'Buscar turnos', summary: 'Resumen del día',
+};
+const permLabel = (k: string) => PERMISSION_LABELS[k] || k;
+
+/** «Etiqueta: «antes» → «después»» when it changed. */
+function change(label: string, before: unknown, after: unknown): string | null {
+  const a = before == null ? '' : String(before).trim();
+  const b = after == null ? '' : String(after).trim();
+  if (a === b) return null;
+  return `${label}: ${a ? `«${a}»` : '—'} → ${b ? `«${b}»` : '—'}`;
+}
+
+/** «Etiqueta: añadió a, b; quitó c» when the lists differ. */
+function listChange(label: string, before: string[] | null | undefined, after: string[] | null | undefined): string | null {
+  const was = before || [];
+  const now = after || [];
+  const added = now.filter((x) => !was.includes(x));
+  const removed = was.filter((x) => !now.includes(x));
+  if (!added.length && !removed.length) return null;
+  return `${label}: ${[added.length ? `añadió ${added.join(', ')}` : '', removed.length ? `quitó ${removed.join(', ')}` : ''].filter(Boolean).join('; ')}`;
+}
 
 const roleName = (me: Me, key: string) => me.roles.get(key)?.name || (key === 'admin' ? 'Admin' : key);
 
@@ -989,12 +1021,19 @@ function describe(me: Me, name: string, b: Record<string, unknown>, before: Pers
     case 'update_employee': {
       if (!after || !before) return null;
       const changes = [
-        before.active !== after.active ? (after.active ? 'reactivó la cuenta' : 'desactivó la cuenta') : null,
-        before.role !== after.role ? `rol: ${roleName(me, before.role)} → ${roleName(me, after.role)}` : null,
-        (before.extra_roles || []).join() !== (after.extra_roles || []).join()
-          ? `otros roles: ${(after.extra_roles || []).map((k) => roleName(me, k)).join(', ') || 'ninguno'}` : null,
+        before.active !== after.active ? (after.active ? 'Reactivó la cuenta' : 'Desactivó la cuenta') : null,
+        change('Nombre', before.full_name, after.full_name),
+        change('Usuario', before.username, after.username),
+        change('Correo', before.email, after.email),
+        change('Teléfono', before.phone, after.phone),
+        change('Número de empleado', before.employee_number, after.employee_number),
+        change('Puesto', before.position, after.position),
+        change('Salón', before.room, after.room),
+        listChange('Grupos', before.groups, after.groups),
+        before.role !== after.role ? `Rol: ${roleName(me, before.role)} → ${roleName(me, after.role)}` : null,
+        listChange('Otros roles', (before.extra_roles || []).map((k) => roleName(me, k)), (after.extra_roles || []).map((k) => roleName(me, k))),
       ].filter(Boolean);
-      return { action: `Actualizó la ficha de ${after.full_name}`, details: changes.length ? changes.join(' · ') : 'Datos de la ficha.', subject: after.id };
+      return { action: `Actualizó la ficha de ${after.full_name}`, details: changes.length ? changes.join(' · ') : 'Guardó la ficha sin cambios.', subject: after.id };
     }
     case 'reset_password':
       return { action: `Restableció la contraseña de ${who}`,
@@ -1015,8 +1054,23 @@ function describe(me: Me, name: string, b: Record<string, unknown>, before: Pers
     case 'change_school_code':
       return { action: 'Cambió el código de la escuela', details: `${me.school.code} → ${String(b.code || '').trim().toUpperCase()}`, subject: null };
     case 'save_role': {
-      const role = out.role as { name: string; permissions: string[] } | undefined;
-      return role ? { action: `${b.key ? 'Cambió' : 'Creó'} el rol ${role.name}`, details: `Permisos: ${role.permissions.join(', ') || 'ninguno'}.`, subject: null } : null;
+      const role = out.role as { name: string; permissions: string[]; coverage?: boolean; own_absences?: boolean } | undefined;
+      if (!role) return null;
+      // me was loaded before the change: it still has the role as it was.
+      const was = b.key ? me.roles.get(String(b.key)) as unknown as { name: string; permissions: string[]; coverage?: boolean; own_absences?: boolean } | undefined : undefined;
+      if (!was) {
+        return { action: `Creó el rol ${role.name}`,
+          details: `Permisos: ${role.permissions.map(permLabel).join(', ') || 'ninguno'}.`, subject: null };
+      }
+      const changes = [
+        change('Nombre', was.name, role.name),
+        listChange('Permisos', was.permissions.map(permLabel), role.permissions.map(permLabel)),
+        was.coverage !== undefined && was.coverage !== role.coverage
+          ? (role.coverage ? 'Ahora se le puede asignar cubrir clases' : 'Ya no se le asigna cubrir clases') : null,
+        was.own_absences !== undefined && was.own_absences !== role.own_absences
+          ? (role.own_absences ? 'Ahora reporta sus propias ausencias' : 'Ya no reporta sus propias ausencias') : null,
+      ].filter(Boolean);
+      return { action: `Cambió el rol ${role.name}`, details: changes.length ? changes.join(' · ') : 'Lo guardó sin cambios.', subject: null };
     }
     case 'delete_role':
       return { action: `Borró el rol ${roleName(me, String(b.key || ''))}`, details: null, subject: null };
@@ -1060,7 +1114,7 @@ serve(async (req) => {
   if (!action) throw new HttpError(400, 'Acción no válida.');
   if (!me.permissions.length && !SERVICE_ACTIONS.includes(name)) throw new HttpError(403, NO_PERMISSION);
   const before = ABOUT_SOMEONE.includes(name) && UUID_RE.test(String(body.id || ''))
-    ? ((await db.from('profiles').select('id, full_name, role, extra_roles, active').eq('id', String(body.id)).eq('school_id', me.school_id).maybeSingle()).data as Person | null)
+    ? ((await db.from('profiles').select(EMPLOYEE_FIELDS).eq('id', String(body.id)).eq('school_id', me.school_id).maybeSingle()).data as Person | null)
     : null;
   const res = await action(me, body);
   if (res.status < 300) await logAction(me, name, body, before, res).catch((err) => console.error('activity_log', err));

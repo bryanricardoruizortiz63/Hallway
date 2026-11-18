@@ -541,6 +541,22 @@ export async function unreadCount() {
   return count || 0;
 }
 
+/** Unread notices by tab of the bottom bar: { '/alerts': 2, '/turns': 1, absences: 3, '/rooms': 0 }. */
+export async function unreadByTab() {
+  const { data, error } = await sb.from('notifications').select('link').is('read_at', null).limit(500);
+  if (error) throw toApiError(error);
+  const counts = { absences: 0, '/alerts': 0, '/turns': 0, '/maintenance': 0, '/rooms': 0 };
+  for (const { link } of data || []) {
+    if (!link) continue;
+    if (link.startsWith('#/alerts')) counts['/alerts']++;
+    else if (link.startsWith('#/turns')) counts['/turns']++;
+    else if (link.startsWith('#/maintenance')) counts['/maintenance']++;
+    else if (link.startsWith('#/absence') || link.startsWith('#/cover') || link.startsWith('#/report')) counts.absences++;
+    else if (link.startsWith('#/rooms')) counts['/rooms']++;
+  }
+  return counts;
+}
+
 export const markNotificationRead = (id) => rpc('mark_notification_read', { p_id: id });
 export const markAllNotificationsRead = () => rpc('mark_all_notifications_read');
 
