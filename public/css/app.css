@@ -281,9 +281,11 @@ h3 {
 }
 .tab .tab-icon {
   color: color-mix(in srgb, var(--tab) 72%, var(--muted));
-  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.12s;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
 }
-.tab:active .tab-icon { transform: scale(0.94); }
+/* Pressing shrinks only the drawing: the count on the icon stays where it is. */
+.tab .tab-icon svg { transition: transform 0.12s; }
+.tab:active .tab-icon svg { transform: scale(0.88); }
 
 .tab.active {
   color: var(--tab);
@@ -6040,5 +6042,31 @@ details.card > summary.card-title::-webkit-details-marker {
 
   .live-hero-text span {
     font-size: 13px;
+  }
+}
+
+/* A new notice: the count pops in place (it grows a little and settles), it never travels. */
+@media (prefers-reduced-motion: no-preference) {
+  .tabbar .tab .tab-count.is-new {
+    animation: tab-count-pop 0.5s cubic-bezier(0.3, 1.8, 0.5, 1);
+  }
+
+  .tabbar .tab[data-path="/alerts"] .tab-count.is-new {
+    animation: tab-count-pop 0.5s cubic-bezier(0.3, 1.8, 0.5, 1), tab-beat 1.8s ease-out 0.5s infinite;
+  }
+
+  /* scale, not transform: on the side bar the count is already centred with a transform. */
+  @keyframes tab-count-pop {
+    0% {
+      scale: 0.4;
+      opacity: 0;
+    }
+    60% {
+      scale: 1.25;
+      opacity: 1;
+    }
+    100% {
+      scale: 1;
+    }
   }
 }

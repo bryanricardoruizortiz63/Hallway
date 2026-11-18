@@ -48,8 +48,18 @@ export function setTabCounts(counts) {
   for (const el of document.querySelectorAll('[data-tab-count]')) {
     const path = el.dataset.tabCount;
     const n = (path === '/dashboard' || path === '/home' ? counts?.absences : counts?.[path]) || 0;
+    const text = n > 99 ? '99+' : String(n);
+    // More than before (not the first count when the app opens): it pops in place so it's noticed (.tab-count.is-new).
+    const grew = el.dataset.n !== undefined && n > Number(el.dataset.n);
+    // Before the counts arrive there's nothing to compare with.
+    if (counts) el.dataset.n = String(n);
     el.hidden = !n;
-    el.textContent = n > 99 ? '99+' : String(n);
+    if (el.textContent !== text) el.textContent = text;
+    if (grew) {
+      el.classList.remove('is-new');
+      void el.offsetWidth;
+      el.classList.add('is-new');
+    }
   }
 }
 
