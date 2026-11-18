@@ -1,9 +1,9 @@
 // Historial del personal (permission «history»): what each person did in the app, the day and the time (Puerto Rico,
 // 12 hours) and the details, newest first, grouped by day. It can be printed and downloaded in Excel. The turns'
-// records (the student and the turn) only reach the Admin and Director(a). It lasts one school year: on July 1 the
+// records (the student and the turn) only reach the Admin and whoever has turn_details. It lasts one school year: on July 1 the
 // year that ended is deleted, so it is downloaded before as a backup.
 import { activityHistory, activityHistoryAll, exportPersonHistoryXlsx, exportSchoolHistoryXlsx, historyPeople } from '../backend.js';
-import { $, busy, historyFull, html, roleLabel, toast } from '../lib.js';
+import { $, busy, dialog, historyFull, html, roleLabel, toast } from '../lib.js';
 import { historyBlock, savePdf, seal } from '../docs.js';
 import { state } from '../store.js';
 import { locale } from '../i18n.js';
@@ -34,6 +34,56 @@ const dayTitle = (iso) => {
 /** «1:05 PM» in Puerto Rico's time, whatever the phone's zone. */
 const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit', hour12: true });
 
+// «Puesto: «Maestra» → «Maestra de inglés»»: one change, with how it was and how it is now.
+const CHANGE = /^(.+?): («.*?»|—) → («.*?»|—)$/;
+const LIST_CHANGE = /^(.+?): (añadió .+|quitó .+)$/;
+const unquote = (v) => (v === '—' ? '—' : v.replace(/^«|»$/g, ''));
+
+/** The details of a line, as changes (field, before, now) when they are; else the text as it is. */
+function detailParts(details) {
+  if (!details) return [];
+  const parts = details.split(' · ');
+  if (!parts.some((p) => CHANGE.test(p) || LIST_CHANGE.test(p))) return [{ text: details }];
+  return parts.map((p) => {
+    const m = p.match(CHANGE);
+    if (m) return { label: m[1], before: unquote(m[2]), after: unquote(m[3]) };
+    const l = p.match(LIST_CHANGE);
+    if (l) return { label: l[1], text: l[2] };
+    return { text: p };
+  });
+}
+
+/** A line of the history opened: what was done, who, when, and each change with how it was and how it is now. */
+function openRow(r, person) {
+  const parts = detailParts(r.details);
+  const changes = parts.filter((p) => p.label).length;
+  return dialog({
+    title: r.action,
+    body: html`<div class="history-detail">
+      <dl class="history-facts">
+        <div><dt>Cuándo</dt><dd>${dayTitle(r.at)}, ${timeOf(r.at)}</dd></div>
+        <div><dt>Lo hizo</dt><dd>${r.actor_name || 'Hallway'}</dd></div>
+        ${r.about ? html`<div><dt>Sobre</dt><dd>${person.full_name}</dd></div>` : ''}
+      </dl>
+      ${parts.length
+        ? html`<h3 class="history-detail-title">${changes ? `${changes} ${changes === 1 ? 'cambio' : 'cambios'}` : 'Detalles'}</h3>
+          <ul class="history-changes">${parts.map((p) => html`<li>
+            ${p.label ? html`<strong>${p.label}</strong>` : ''}
+            ${p.before !== undefined
+              ? html`<span class="history-was ${p.before === '—' ? 'is-empty' : ''}"><span class="muted">Antes</span> ${p.before}</span>
+                <span class="history-now"><span class="muted">Ahora</span> ${p.after}</span>`
+              : html`<span>${p.text}</span>`}
+          </li>`)}</ul>`
+        : html`<p class="muted">Sin más detalles.</p>`}
+      ${r.record ? html`<p class="history-record">${r.record}</p>` : ''}
+      ${r.link ? html`<a class="btn btn-secondary btn-block" href="${r.link}" data-open-link>${icon('chevron', 18)} Abrir</a>` : ''}
+    </div>`,
+    confirmText: 'Cerrar',
+    cancelText: null,
+    onOpen: (dlg) => dlg.querySelector('[data-open-link]')?.addEventListener('click', () => dlg.close()),
+  });
+}
+
 /** #/history: everyone, to open one's history. */
 export async function historyPeopleView({ el }) {
   const people = await historyPeople();
@@ -60,7 +110,7 @@ export async function historyPeopleView({ el }) {
       <button type="button" class="btn btn-secondary btn-block" data-download-all>${icon('download', 18)} Descargar todo el historial del año (Excel o PDF)</button>
       <p class="hint">${full
         ? 'Incluye una hoja con el récord de cada turno: el estudiante, su grupo, el motivo y cómo terminó.'
-        : 'El récord de los turnos con los estudiantes solo lo descargan Admin y Director(a).'}</p>
+        : 'El récord de los turnos con los estudiantes solo lo descarga quien tiene «Ver el detalle de los turnos».'}</p>
     </section>
     <label class="field"><span>Buscar</span><input type="search" data-search placeholder="Buscar por nombre o puesto…" autocomplete="off"></label>
     <div data-people></div>
@@ -103,19 +153,22 @@ export async function historyView({ el, params, setTitle }) {
     $('[data-rows]', el).innerHTML = String(days.length
       ? html`${days.map((d) => html`<section class="section history-day">
           <h3 class="section-title">${d.title} <span class="count">${d.rows.length}</span></h3>
-          <div class="list">${d.rows.map((r) => html`<div class="item history-row">
+          <div class="list">${d.rows.map((r) => html`<button type="button" class="item history-row" data-open="${r.id}">
             <span class="history-time">${timeOf(r.at)}</span>
             <span class="item-main">
               <strong>${r.about ? `${r.actor_name}: ${r.action}` : r.action}</strong>
-              ${r.details ? html`<span class="item-sub">${r.details}</span>` : ''}
+              ${r.details ? html`<span class="item-sub history-summary">${r.details}</span>` : ''}
               ${r.record ? html`<span class="item-sub history-record">${r.record}</span>` : ''}
               ${r.about ? html`<span class="item-sub">Lo hizo ${r.actor_name}, sobre ${person.full_name}</span>` : ''}
             </span>
-            ${r.link ? html`<a class="icon-btn no-print" href="${r.link}" aria-label="Abrir">${icon('chevron', 18)}</a>` : ''}
-          </div>`)}</div>
+            <span class="history-open no-print" aria-hidden="true">${icon('chevron', 18)}</span>
+          </button>`)}</div>
         </section>`)}`
       : empty('list', 'Sin actividad en este período', 'Prueba con un período más largo.'));
     $('[data-count]', el).textContent = `${list.length} ${list.length === 1 ? 'acción' : 'acciones'}`;
+    for (const b of el.querySelectorAll('[data-open]')) {
+      b.addEventListener('click', () => openRow(rows.find((r) => String(r.id) === b.dataset.open), person));
+    }
   };
 
   const load = async () => {
@@ -145,8 +198,8 @@ export async function historyView({ el, params, setTitle }) {
     </div>
     <div data-rows></div>
     <p class="hint">Las horas son de Puerto Rico. ${historyFull(state.me.user)
-      ? 'El récord de los turnos (estudiante, motivo y resultado) solo lo ven Admin y Director(a).'
-      : 'El récord de los turnos con los estudiantes solo lo ven Admin y Director(a).'}</p>
+      ? 'El récord de los turnos (estudiante, motivo y resultado) solo lo ve quien tiene «Ver el detalle de los turnos».'
+      : 'El récord de los turnos con los estudiantes solo lo ve quien tiene «Ver el detalle de los turnos».'}</p>
     <p class="hint no-print">${KEEP_HINT}</p>
   </div>`);
   $('[data-period]', el).addEventListener('change', (e) => {

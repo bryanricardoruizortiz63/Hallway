@@ -541,6 +541,22 @@ export async function unreadCount() {
   return count || 0;
 }
 
+/** Unread notices by tab of the bottom bar: { '/alerts': 2, '/turns': 1, absences: 3, '/rooms': 0 }. */
+export async function unreadByTab() {
+  const { data, error } = await sb.from('notifications').select('link').is('read_at', null).limit(500);
+  if (error) throw toApiError(error);
+  const counts = { absences: 0, '/alerts': 0, '/turns': 0, '/maintenance': 0, '/rooms': 0 };
+  for (const { link } of data || []) {
+    if (!link) continue;
+    if (link.startsWith('#/alerts')) counts['/alerts']++;
+    else if (link.startsWith('#/turns')) counts['/turns']++;
+    else if (link.startsWith('#/maintenance')) counts['/maintenance']++;
+    else if (link.startsWith('#/absence') || link.startsWith('#/cover') || link.startsWith('#/report')) counts.absences++;
+    else if (link.startsWith('#/rooms')) counts['/rooms']++;
+  }
+  return counts;
+}
+
 export const markNotificationRead = (id) => rpc('mark_notification_read', { p_id: id });
 export const markAllNotificationsRead = () => rpc('mark_all_notifications_read');
 
@@ -575,6 +591,10 @@ export async function getEmployee(id) {
   if (!row) throw new ApiError('Empleado no encontrado.', 404);
   return withRoleLabel(row);
 }
+
+/** The Admin gives (grants) or takes (denials) permissions to one person, besides those of their roles. */
+export const setUserPermissions = (id, grants, denials) =>
+  run(sb.rpc('set_user_permissions', { p_user: id, p_grants: grants, p_denials: denials }));
 
 export const createEmployee = (v) => callFunction('admin', { action: 'create_employee', ...v });
 export const updateEmployee = (id, v) => callFunction('admin', { action: 'update_employee', id, ...v });
@@ -760,7 +780,18 @@ export const markAlertsRead = (link = null) => rpc('mark_alerts_read', { p_link:
 // ---- Turnos (Enfermería, Trabajo Social…) -----------------------------------------------
 
 /** [{ id, name, mode, arrive_minutes, roles, reasons, active, serves, waiting, staff: [{ id, name, status, until }] }] */
-export const servicesOverview = () => rpc('services_overview');
+/** Who of the staff is attending a turn now ([] if it can't tell): they show «Atendiendo un turno», not «Disponible». */
+const staffBusy = () => rpc('staff_busy').then((r) => r || []).catch(() => []);
+/** Marks p.busy (since when) on every staff list inside: services[].staff. */
+function markBusy(services, busy) {
+  const by = new Map(busy.map((b) => [b.user_id, b.since]));
+  for (const s of services || []) for (const p of s.staff || []) p.busy = by.get(p.id) || null;
+  return services;
+}
+export const servicesOverview = async () => {
+  const [services, busy] = await Promise.all([rpc('services_overview'), staffBusy()]);
+  return markBusy(services, busy);
+};
 
 /** status: 'available' | 'meeting' | 'lunch' | 'away'; until: ISO time (required for 'away'). */
 export const setMyServiceStatus = (status, until) => rpc('set_my_service_status', { p_status: status, p_until: until || null });
@@ -932,7 +963,11 @@ export const noteTurnResolution = (id, text) => rpc('note_turn_resolution', { p_
 // ---- Visitas (llega un padre y busca a alguien) ------------------------------------------
 
 /** For the form: { services: [{ id, name, staff: [{ name, status, until }] }], people: [{ id, name, position, room, role }] }. */
-export const visitTargets = () => rpc('visit_targets');
+export const visitTargets = async () => {
+  const [targets, busy] = await Promise.all([rpc('visit_targets'), staffBusy()]);
+  markBusy(targets?.services, busy);
+  return targets;
+};
 
 /** Today's visits (each person only gets the ones they may see). */
 export const listVisits = () => run(sb.from('visits').select('*').gte('created_at', startOfToday()).order('created_at').limit(200));
@@ -1104,7 +1139,11 @@ export const bookingsBetween = (from, to) =>
   fetchAll(() => sb.from('room_bookings').select('*').gte('day', from).lte('day', to).order('id'));
 
 /** What is happening now in the school (the dirección's live board). */
-export const liveBoard = () => rpc('live_board', { p_since: startOfToday(), p_today: todayStr() });
+export const liveBoard = async () => {
+  const [board, busy] = await Promise.all([rpc('live_board', { p_since: startOfToday(), p_today: todayStr() }), staffBusy()]);
+  markBusy(board?.services, busy);
+  return board;
+};
 /** One service's turns of today (and any still open), with every step and how it ended; never the note. */
 export const liveTurns = async (serviceId) => (await rpc('live_turns', { p_service_id: serviceId, p_since: startOfToday() })) || [];
 /**

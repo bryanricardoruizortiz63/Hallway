@@ -51,10 +51,14 @@ function absenceSearch({ el }, own) {
   const box = $('[data-rows]', el);
   const bar = $('[data-bar]', el);
 
+  // On the document: the full names of the people whose absences were chosen (not what was typed in the search).
   const filtersText = () => {
     const v = Object.fromEntries(new FormData(form));
+    const names = [...new Set(chosen().map((a) => a.employee_name).filter(Boolean))];
     return [
-      v.name ? `${t('Nombre')}: ${v.name}` : null,
+      own || !names.length ? null
+        : names.length === 1 ? `${t('Nombre')}: ${names[0]}`
+          : `${t('Personal')}: ${names.slice(0, 6).join(', ')}${names.length > 6 ? ` ${t('y')} ${names.length - 6} ${t('más')}` : ''}`,
       v.from || v.to ? `${v.from ? fmtLongDate(v.from) : '…'} – ${v.to ? fmtLongDate(v.to) : '…'}` : null,
       v.group ? `${t('Grupo')}: ${v.group}` : null,
     ].filter(Boolean).join(' · ');

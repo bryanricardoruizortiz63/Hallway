@@ -757,6 +757,7 @@ const staffTags = (s) => html`<div class="chips">${s.staff.length
     // An absence reported for now wins over the status the person set.
     const out = absentNow(p);
     if (out) return html`<span class="tag tag-danger">${p.name} · Ausente ${out.until}</span>`;
+    if (p.busy && p.status === 'available') return html`<span class="tag tag-warn">${p.name} · Atendiendo un turno</span>`;
     return html`<span class="tag ${p.status === 'available' ? 'tag-ok' : 'tag-warn'}">${p.name} · ${STAFF_STATUS[p.status] || p.status}${p.until ? ` hasta ${fmtTime(new Date(p.until))}` : ''}</span>`;
   })
   : html`<span class="muted">Nadie tiene un rol que atienda este servicio.</span>`}</div>`;
@@ -1326,8 +1327,10 @@ function liveFacts(t) {
   const open = isLiveOpen(t);
   const level = t.level > t.severity ? ` · subió a ${SEVERITY[t.level].label} por la espera` : '';
   return html`<div class="facts" data-facts>
-    ${support ? '' : fact('Motivo', t.reason)}
-    ${support ? fact('Detalle', t.note) : fact('Nota del maestro', t.note || 'No dejó nota')}
+    ${t.details_hidden
+      ? html`<p class="status-note info">${icon('shield', 16)} <span>El motivo, la nota y cómo terminó solo los ven quien atiende el servicio, quien pidió el turno y quien tiene «Ver el detalle de los turnos».</span></p>`
+      : html`${support ? '' : fact('Motivo', t.reason)}
+        ${support ? fact('Detalle', t.note) : fact('Nota del maestro', t.note || 'No dejó nota')}`}
     ${fact('Gravedad', `${(SEVERITY[t.severity] || SEVERITY[1]).label}${level}`)}
     ${support ? fact('Dónde', placeText(t.room)) : fact('Salón', t.room)}
     ${fact('Pidió', `${t.created_by_name} · ${fmtDateTime(t.created_at)}`)}
