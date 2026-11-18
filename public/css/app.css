@@ -281,9 +281,11 @@ h3 {
 }
 .tab .tab-icon {
   color: color-mix(in srgb, var(--tab) 72%, var(--muted));
-  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.12s;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
 }
-.tab:active .tab-icon { transform: scale(0.94); }
+/* Pressing shrinks only the drawing: the count on the icon stays where it is. */
+.tab .tab-icon svg { transition: transform 0.12s; }
+.tab:active .tab-icon svg { transform: scale(0.88); }
 
 .tab.active {
   color: var(--tab);
@@ -5728,5 +5730,343 @@ details.card > summary.card-title::-webkit-details-marker {
   .tabbar.has-glider .tab.active:hover {
     background: transparent;
     box-shadow: none;
+  }
+}
+
+/* ---- En vivo › cards that open: a grid that uses the whole screen; closed, the most important ---- */
+/* En vivo takes the whole width of the screen (the other screens keep a column that reads well). */
+.view:has(.live-board) {
+  max-width: 1680px;
+}
+
+.live-board {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* On a wide screen: what needs someone on the left, the cards on the right. */
+@media (min-width: 1100px) {
+  .live-board {
+    display: grid;
+    grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+    align-items: start;
+    gap: 20px;
+  }
+
+  .live-col-side {
+    position: sticky;
+    top: 12px;
+  }
+
+  .live-col-side .live-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+/* An open card takes the whole row, so its list reads well. */
+.live-grid .live-card[open] {
+  grid-column: 1 / -1;
+}
+
+.live-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.live-card.live-service {
+  border-top-width: 4px;
+}
+
+.live-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "icon title chev" "icon nums nums";
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px;
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.live-card-head::-webkit-details-marker {
+  display: none;
+}
+
+.live-card-head:active {
+  background: var(--surface-2);
+}
+
+.live-card-head > :first-child {
+  grid-area: icon;
+  align-self: start;
+}
+
+.live-card-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+
+.live-card-icon.is-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.live-card-icon.is-rooms {
+  background: var(--tab-rooms-soft);
+  color: var(--tab-rooms);
+}
+
+.live-card-title {
+  grid-area: title;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.live-card-title strong {
+  font-size: 16.5px;
+}
+
+.live-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-card-nums {
+  grid-area: nums;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.live-card-nums:empty {
+  display: none;
+}
+
+.live-num {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.live-num strong {
+  font-size: 17px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-num small {
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.live-num.is-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.live-num.is-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.live-num.is-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.live-card-chevron {
+  grid-area: chev;
+  display: grid;
+  flex: none;
+  color: var(--muted);
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.live-card[open] .live-card-chevron {
+  transform: rotate(-90deg);
+}
+
+.live-card-body {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.live-card.has-late {
+  border-top: 4px solid var(--danger);
+}
+
+.staff-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.staff-dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.staff-dots i.st-busy {
+  background: var(--warn);
+}
+
+.staff-dots i.st-out {
+  background: var(--danger);
+}
+
+/* «Ver 2 más» under the first three that need attention. */
+.live-more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 4px 0;
+  color: var(--primary-text);
+  font-size: 14px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.live-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.live-more > summary svg {
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.live-more[open] > summary svg {
+  transform: rotate(-90deg);
+}
+
+.live-more .list {
+  margin-top: 8px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .live-card[open] .live-card-body {
+    animation: live-open 0.22s ease-out;
+  }
+
+  @keyframes live-open {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+}
+
+
+/* En vivo on a phone: the top fits in a glance — the four numbers in one row, the filter without its label. */
+@media (max-width: 600px) {
+  .live-board .live-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .live-board .live-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 4px;
+    text-align: center;
+  }
+
+  .live-board .live-stat-icon {
+    display: none;
+  }
+
+  .live-board .live-stat strong {
+    font-size: 22px;
+  }
+
+  .live-board .live-stat > span:last-child {
+    margin-top: 2px;
+    font-size: 11px;
+  }
+
+  .live-toolbar .field > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .live-hero {
+    padding: 12px 14px;
+  }
+
+  .live-hero-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .live-hero-text strong {
+    font-size: 17px;
+  }
+
+  .live-hero-text span {
+    font-size: 13px;
+  }
+}
+
+/* A new notice: the count pops in place (it grows a little and settles), it never travels. */
+@media (prefers-reduced-motion: no-preference) {
+  .tabbar .tab .tab-count.is-new {
+    animation: tab-count-pop 0.5s cubic-bezier(0.3, 1.8, 0.5, 1);
+  }
+
+  .tabbar .tab[data-path="/alerts"] .tab-count.is-new {
+    animation: tab-count-pop 0.5s cubic-bezier(0.3, 1.8, 0.5, 1), tab-beat 1.8s ease-out 0.5s infinite;
+  }
+
+  /* scale, not transform: on the side bar the count is already centred with a transform. */
+  @keyframes tab-count-pop {
+    0% {
+      scale: 0.4;
+      opacity: 0;
+    }
+    60% {
+      scale: 1.25;
+      opacity: 1;
+    }
+    100% {
+      scale: 1;
+    }
   }
 }

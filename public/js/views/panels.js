@@ -779,7 +779,7 @@ const serviceChips = (services, current = null) => html`<div class="quick live-s
 )}</div>`;
 
 /** filtered: only a grade's or group's turns show (the day's numbers are the whole service's); link: to its day. */
-function liveService(s, { filtered = false, link = true } = {}) {
+function liveService(s, { filtered = false, link = true, card = false } = {}) {
   const support = s.mode === 'support';
   // With them now (whoever didn't arrive first), then the line: most serious first, then who asked first.
   const withThem = s.active.filter((t) => t.status !== 'waiting').sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0));
@@ -797,17 +797,7 @@ function liveService(s, { filtered = false, link = true } = {}) {
     d.expired ? `${d.expired} sin tomar (${d.expired === 1 ? 'lo cerró' : 'los cerró'} el sistema al terminar el horario escolar)` : null,
   ].filter(Boolean).join(' · ');
   const late = s.active.some((t) => t.late);
-  return html`<section class="card stack live-service ${support ? 'is-support' : ''} ${late ? 'has-late' : ''}" data-live-service="${s.id}" id="live-service-${s.id}">
-    <div class="live-service-head">
-      <span class="live-service-icon" aria-hidden="true">${icon(support ? 'wrench' : 'pulse', 22)}</span>
-      <div class="live-service-name">
-        <h2 class="card-title">${s.name}</h2>
-        <span class="hint">${filtered && !support ? 'Hoy, en todo el servicio' : 'Hoy'}: ${summary}.</span>
-      </div>
-      <span class="live-queue ${line.length ? 'is-on' : ''}"><strong>${line.length}</strong><small>en fila</small></span>
-    </div>
-    ${staffTags(s)}
-    ${!s.active.length ? html`<p class="live-empty">${icon('check', 18)} Nadie en fila ni en atención.</p>` : ''}
+  const body = html`${!s.active.length ? html`<p class="live-empty">${icon('check', 18)} Nadie en fila ni en atención.</p>` : ''}
     ${withThem.length ? html`<div class="live-group">
       <h3 class="live-group-title">${support ? 'Atendiendo ahora' : 'Con ellos ahora'} <span>${withThem.length}</span></h3>
       <div class="list flat">${withThem.map((t) => liveTurn(t, s))}</div>
@@ -816,9 +806,70 @@ function liveService(s, { filtered = false, link = true } = {}) {
       <h3 class="live-group-title">En fila <span>${line.length}</span></h3>
       <div class="list flat">${line.map((t, i) => liveTurn(t, s, i + 1))}</div>
     </div>` : ''}
-    ${link ? html`<a class="btn btn-secondary btn-sm btn-block" href="#/live/service/${s.id}">${icon('list', 16)} Ver todos los turnos de hoy</a>` : ''}
+    ${link ? html`<a class="btn btn-secondary btn-sm btn-block" href="#/live/service/${s.id}">${icon('list', 16)} Ver todos los turnos de hoy</a>` : ''}`;
+  const today = html`<span class="hint">${filtered && !support ? 'Hoy, en todo el servicio' : 'Hoy'}: ${summary}.</span>`;
+  if (card) {
+    // En vivo: closed it says the most important (how many in line, with them, who attends); open, everything.
+    return liveCard({
+      key: `service-${s.id}`,
+      cls: `live-service ${support ? 'is-support' : ''} ${late ? 'has-late' : ''}`,
+      id: `live-service-${s.id}`,
+      icon: html`<span class="live-service-icon" aria-hidden="true">${icon(support ? 'wrench' : 'pulse', 22)}</span>`,
+      title: s.name,
+      meta: staffDots(s),
+      nums: [
+        late ? liveNum(s.active.filter((t) => t.late).length, 'no llegó', 'is-danger') : '',
+        liveNum(line.length, 'en fila', line.length ? 'is-warn' : ''),
+        liveNum(withThem.length, support ? 'atendiendo' : 'con ellos', withThem.length ? 'is-ok' : ''),
+      ],
+      body: html`${today}${staffTags(s)}${body}`,
+    });
+  }
+  return html`<section class="card stack live-service ${support ? 'is-support' : ''} ${late ? 'has-late' : ''}" data-live-service="${s.id}" id="live-service-${s.id}">
+    <div class="live-service-head">
+      <span class="live-service-icon" aria-hidden="true">${icon(support ? 'wrench' : 'pulse', 22)}</span>
+      <div class="live-service-name">
+        <h2 class="card-title">${s.name}</h2>
+        ${today}
+      </div>
+      <span class="live-queue ${line.length ? 'is-on' : ''}"><strong>${line.length}</strong><small>en fila</small></span>
+    </div>
+    ${staffTags(s)}
+    ${body}
   </section>`;
 }
+
+// ---- En vivo › cards that open: closed, the most important; open, the details ------------------------------------
+
+/** Which cards are open on this screen, so the update every few seconds doesn't close them. */
+const openCards = new Set();
+
+/** A big number with its word, for a closed card. */
+const liveNum = (value, label, cls = '') => html`<span class="live-num ${cls}"><strong>${value}</strong><small>${label}</small></span>`;
+
+/** Who attends, in a line of dots of their color (the names show when the card opens). */
+function staffDots(s) {
+  if (!s.staff.length) return html`<span class="muted">Nadie lo atiende</span>`;
+  const state = (p) => (absentNow(p) ? 'st-out' : p.busy || p.status !== 'available' ? 'st-busy' : 'st-ok');
+  const free = s.staff.filter((p) => state(p) === 'st-ok').length;
+  return html`<span class="staff-dots">${s.staff.map((p) => html`<i class="${state(p)}" title="${p.name}"></i>`)}</span>
+    <span>${free === s.staff.length ? (free === 1 ? 'Disponible' : 'Todos disponibles') : free ? `${free} de ${s.staff.length} ${free === 1 ? 'disponible' : 'disponibles'}` : 'Nadie disponible'}</span>`;
+}
+
+/** A card of En vivo: a header that says the most important, and the details when it's tapped. */
+function liveCard({ key, cls = '', id = '', icon: iconHtml, title, meta = '', nums = [], body }) {
+  return html`<details class="card live-card ${cls}" data-card="${key}" id="${id || `live-${key}`}" ${openCards.has(key) ? 'open' : ''}>
+    <summary class="live-card-head">
+      ${iconHtml}
+      <span class="live-card-title"><strong>${title}</strong>${meta ? html`<span class="live-card-meta">${meta}</span>` : ''}</span>
+      <span class="live-card-nums">${nums}</span>
+      <span class="live-card-chevron" aria-hidden="true">${icon('chevron', 18)}</span>
+    </summary>
+    <div class="live-card-body stack">${body}</div>
+  </details>`;
+}
+
+const cardIcon = (name, cls = '') => html`<span class="live-card-icon ${cls}" aria-hidden="true">${icon(name, 22)}</span>`;
 
 /**
  * «Necesita atención ahora»: what someone has to look at, most serious first — a student who didn't arrive, a
@@ -1297,6 +1348,37 @@ export async function liveServiceView(ctx) {
   keepFresh(ctx, load);
 }
 
+/** «Necesita atención ahora»: the first three always in sight; the rest when it's opened. */
+function attentionBlock(attention) {
+  if (!attention.length) return '';
+  const first = attention.slice(0, 3);
+  const rest = attention.slice(3);
+  return html`<section class="section live-attention" id="live-attention" data-attention-now>
+    <h3 class="section-title">Necesita atención ahora <span class="count danger">${attention.length}</span></h3>
+    <div class="list">${first.map(attentionItem)}</div>
+    ${rest.length ? html`<details class="live-more" data-card="attention-more" ${openCards.has('attention-more') ? 'open' : ''}>
+      <summary>${icon('chevron', 16)} <span>Ver ${rest.length} más</span></summary>
+      <div class="list">${rest.map(attentionItem)}</div>
+    </details>` : ''}
+  </section>`;
+}
+
+/** «Fuera del salón ahora» as a card: closed, how many and from which groups; open, each student. */
+function outCard(out) {
+  const count = out.reduce((n, g) => n + g.students.length, 0);
+  if (!count) return '';
+  const late = out.reduce((n, g) => n + g.students.filter((x) => x.late).length, 0);
+  return liveCard({
+    key: 'out', id: 'live-out', cls: late ? 'has-late' : '', icon: cardIcon('door', 'is-warn'), title: 'Fuera del salón',
+    meta: out.map((g) => `${g.group || 'Sin grupo'} (${g.students.length})`).join(' · '),
+    nums: [late ? liveNum(late, 'no llegó', 'is-danger') : '', liveNum(count, count === 1 ? 'estudiante' : 'estudiantes', 'is-warn')],
+    body: html`<div class="out-groups">${out.map((g) => html`<div class="out-group" data-out-group="${g.group}">
+      <h4 class="out-group-title">${g.group || 'Sin grupo'} <span>${g.students.length}</span></h4>
+      <div class="list flat">${g.students.map(outItem)}</div>
+    </div>`)}</div>`,
+  });
+}
+
 export async function liveView(ctx) {
   const { el, isCurrent } = ctx;
   let board = null;
@@ -1308,8 +1390,11 @@ export async function liveView(ctx) {
     const attention = attentionNow(b);
     const late = active.filter((t) => t.late).length + b.alerts.length;
     const outCount = outNow(b).reduce((n, g) => n + g.students.length, 0);
-    const firstService = b.services[0] ? `live-service-${b.services[0].id}` : '';
-    el.innerHTML = String(html`<div class="stack live-board">
+    // «En fila» and «En atención» take you to the first service with someone in it.
+    const busyService = b.services.find((s) => s.active.length) || b.services[0];
+    const firstService = busyService ? `live-service-${busyService.id}` : '';
+    el.innerHTML = String(html`<div class="live-board">
+      <div class="live-col-side stack">
       ${liveHero(attention, active.length)}
       <div class="live-toolbar" data-live-tools>
         ${filterField(f)}
@@ -1319,33 +1404,63 @@ export async function liveView(ctx) {
       ${f ? html`<p class="hint" data-filter-note>Solo ${filterLabel(f)}: sus turnos, «No ha llegado», las salidas y quién está fuera del salón. Soporte IT, los relevos, el mantenimiento y las reservas son de toda la escuela.</p>` : ''}
       <div class="stats live-stats">
         ${jumpTile(active.filter((t) => t.status === 'waiting').length, 'En fila', 'clock', firstService)}
-        ${jumpTile(active.filter((t) => t.status !== 'waiting').length, 'En atención o en camino', 'pulse', firstService, 'stat-ok')}
+        ${jumpTile(active.filter((t) => t.status !== 'waiting').length, 'En atención', 'pulse', firstService, 'stat-ok')}
         ${jumpTile(outCount, 'Fuera del salón', 'door', 'live-out', outCount ? 'stat-warn' : '')}
         ${jumpTile(late, 'No han llegado', 'alert', 'live-attention', late ? 'stat-danger' : '')}
       </div>
-      ${attention.length ? html`<section class="section live-attention" id="live-attention" data-attention-now>
-        <h3 class="section-title">Necesita atención ahora <span class="count danger">${attention.length}</span></h3>
-        <div class="list">${attention.map(attentionItem)}</div>
-      </section>` : ''}
-      ${outSection(outNow(b))}
-      ${b.services.length ? html`<div class="stack-sm"><p class="muted">Los turnos de hoy de un servicio, uno por uno:</p>${serviceChips(b.services)}</div>` : ''}
-      ${b.services.map((s) => liveService(s, { filtered: !!f }))}
-      ${liveSection('Salidas de hoy', b.pickups, pickupItem, { note: !f && b.pickups_done ? `${b.pickups_done} ya ${b.pickups_done === 1 ? 'se entregó' : 'se entregaron'} hoy.` : '' })}
-      ${liveSection('Mantenimiento', b.maintenance, (m) => html`<a class="item ${m.urgency === 3 ? 'alert-item is-urgent' : ''}" href="#/maintenance/${m.id}">
-          <span class="item-icon ${m.urgency === 3 ? 'is-danger' : ''}">${icon((KINDS[m.kind] || KINDS.other).icon)}</span>
-          <span class="item-main"><strong>${(KINDS[m.kind] || KINDS.other).label} · ${m.place}</strong>
-            <span class="item-sub">${[m.status === 'on_the_way' ? `Va ${m.taken_by_name}` : 'Pendiente', timeAgo(m.created_at)].join(' · ')}</span></span>
-          <span class="tag ${URGENCY[m.urgency]?.cls || ''}">${URGENCY[m.urgency]?.label}</span>
-        </a>`, { note: b.maintenance_done ? `${b.maintenance_done} ${b.maintenance_done === 1 ? 'resuelta' : 'resueltas'} hoy.` : '' })}
-      ${liveSection('Reservas de hoy', b.rooms, (r) => html`<a class="item" href="#/rooms/${r.id}">
-          <span class="item-icon">${icon('room')}</span>
-          <span class="item-main"><strong>${r.purpose}</strong>
-            <span class="item-sub">${fmtTime(r.start_time)} – ${fmtTime(r.end_time)} · ${r.created_by_name}</span></span>
-        </a>`, { note: b.rooms_pending ? `${b.rooms_pending} ${b.rooms_pending === 1 ? 'reserva espera' : 'reservas esperan'} aprobación.` : '' })}
-      <p class="hint">Se actualiza solo. Cada turno dice su motivo; toca uno para ver todos sus detalles, también la nota del maestro.</p>
+      ${attentionBlock(attention)}
+      </div>
+      <div class="live-col-main stack">
+      <div class="live-grid">
+        ${b.services.map((s) => liveService(s, { filtered: !!f, card: true }))}
+        ${outCard(outNow(b))}
+        ${b.pickups.length || (!f && b.pickups_done) ? liveCard({
+          key: 'pickups', icon: cardIcon('user'), title: 'Salidas de hoy',
+          meta: !f && b.pickups_done ? `${b.pickups_done} ya ${b.pickups_done === 1 ? 'se entregó' : 'se entregaron'}` : '',
+          nums: [liveNum(b.pickups.length, b.pickups.length === 1 ? 'pendiente' : 'pendientes', b.pickups.length ? 'is-warn' : '')],
+          body: b.pickups.length ? html`<div class="list flat">${b.pickups.map(pickupItem)}</div>` : html`<p class="muted">No queda ninguna por entregar.</p>`,
+        }) : ''}
+        ${b.maintenance.length || b.maintenance_done ? liveCard({
+          key: 'maintenance', cls: b.maintenance.some((m) => m.urgency === 3) ? 'has-late' : '', icon: cardIcon('wrench', 'is-warn'), title: 'Mantenimiento',
+          meta: b.maintenance_done ? `${b.maintenance_done} ${b.maintenance_done === 1 ? 'resuelta' : 'resueltas'} hoy` : '',
+          nums: [
+            b.maintenance.some((m) => m.urgency === 3) ? liveNum(b.maintenance.filter((m) => m.urgency === 3).length, b.maintenance.filter((m) => m.urgency === 3).length === 1 ? 'urgente' : 'urgentes', 'is-danger') : '',
+            liveNum(b.maintenance.length, b.maintenance.length === 1 ? 'abierta' : 'abiertas', b.maintenance.length ? 'is-warn' : ''),
+          ],
+          body: b.maintenance.length ? html`<div class="list flat">${b.maintenance.map((m) => html`<a class="item ${m.urgency === 3 ? 'alert-item is-urgent' : ''}" href="#/maintenance/${m.id}">
+            <span class="item-icon ${m.urgency === 3 ? 'is-danger' : ''}">${icon((KINDS[m.kind] || KINDS.other).icon)}</span>
+            <span class="item-main"><strong>${(KINDS[m.kind] || KINDS.other).label} · ${m.place}</strong>
+              <span class="item-sub">${[m.status === 'on_the_way' ? `Va ${m.taken_by_name}` : 'Pendiente', timeAgo(m.created_at)].join(' · ')}</span></span>
+            <span class="tag ${URGENCY[m.urgency]?.cls || ''}">${URGENCY[m.urgency]?.label}</span>
+          </a>`)}</div>` : html`<p class="muted">No hay solicitudes abiertas.</p>`,
+        }) : ''}
+        ${b.rooms.length || b.rooms_pending ? liveCard({
+          key: 'rooms', icon: cardIcon('room', 'is-rooms'), title: 'Reservas de hoy',
+          meta: b.rooms_pending ? `${b.rooms_pending} ${b.rooms_pending === 1 ? 'espera' : 'esperan'} aprobación` : '',
+          nums: [liveNum(b.rooms.length, 'hoy')],
+          body: b.rooms.length ? html`<div class="list flat">${b.rooms.map((r) => html`<a class="item" href="#/rooms/${r.id}">
+            <span class="item-icon">${icon('room')}</span>
+            <span class="item-main"><strong>${r.purpose}</strong>
+              <span class="item-sub">${fmtTime(r.start_time)} – ${fmtTime(r.end_time)} · ${r.created_by_name}</span></span>
+          </a>`)}</div>` : html`<p class="muted">No hay reservas hoy.</p>`,
+        }) : ''}
+      </div>
+      <p class="hint">Toca una tarjeta para ver sus detalles; se actualiza sola y se queda abierta.</p>
+      </div>
     </div>`);
+    el.querySelector('.live-board').addEventListener('toggle', (e) => {
+      const key = e.target.dataset?.card;
+      if (!key) return;
+      if (e.target.open) openCards.add(key);
+      else openCards.delete(key);
+    }, true);
     for (const t of el.querySelectorAll('[data-jump]')) {
-      t.addEventListener('click', () => document.getElementById(t.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      t.addEventListener('click', () => {
+        const target = document.getElementById(t.dataset.jump);
+        if (!target) return;
+        if (target.tagName === 'DETAILS') target.open = true;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     }
     bindTools(el, render, () => alarmKeys(b));
     ringFor(alarmKeys(b));
