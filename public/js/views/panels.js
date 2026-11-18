@@ -757,6 +757,7 @@ const staffTags = (s) => html`<div class="chips">${s.staff.length
     // An absence reported for now wins over the status the person set.
     const out = absentNow(p);
     if (out) return html`<span class="tag tag-danger">${p.name} · Ausente ${out.until}</span>`;
+    if (p.busy && p.status === 'available') return html`<span class="tag tag-warn">${p.name} · Atendiendo un turno</span>`;
     return html`<span class="tag ${p.status === 'available' ? 'tag-ok' : 'tag-warn'}">${p.name} · ${STAFF_STATUS[p.status] || p.status}${p.until ? ` hasta ${fmtTime(new Date(p.until))}` : ''}</span>`;
   })
   : html`<span class="muted">Nadie tiene un rol que atienda este servicio.</span>`}</div>`;

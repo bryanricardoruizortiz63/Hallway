@@ -187,7 +187,8 @@ export function bindVisits(root, visits, reload) {
 function availability(service) {
   const staff = service.staff || [];
   if (!staff.length) return { text: 'Nadie lo atiende', ok: false };
-  if (staff.some((p) => p.status === 'available')) return { text: 'Disponible', ok: true };
+  if (staff.some((p) => p.status === 'available' && !p.busy)) return { text: 'Disponible', ok: true };
+  if (staff.some((p) => p.status === 'available' && p.busy)) return { text: 'Atendiendo un turno', ok: false };
   const next = [...staff].sort((a, b) => String(a.until || '~').localeCompare(String(b.until || '~')))[0];
   return { text: `${AWAY[next.status] || 'No disponible'}${next.until ? ` hasta ${fmtTime(new Date(next.until))}` : ''}`, ok: false };
 }

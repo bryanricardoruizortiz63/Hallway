@@ -181,7 +181,9 @@ function availability(service) {
   const absent = out.filter((p) => p.absent);
   const present = out.filter((p) => !p.absent);
   if (!present.length) return { text: 'No disponible en este momento', ok: false, closed: true, absent };
-  if (present.some((p) => p.status === 'available')) return { text: 'Disponible', ok: true, absent };
+  // Attending a turn (the student in their office, or on their way to a classroom) isn't «Disponible».
+  if (present.some((p) => p.status === 'available' && !p.busy)) return { text: 'Disponible', ok: true, absent };
+  if (present.some((p) => p.status === 'available' && p.busy)) return { text: 'Atendiendo un turno', ok: false, busy: true, absent };
   const next = [...present].sort((a, b) => String(a.until || '~').localeCompare(String(b.until || '~')))[0];
   return { text: `${STAFF_STATUS[next.status] || 'No disponible'}${next.until ? ` hasta ${timeOf(next.until)}` : ''}`, ok: false, absent };
 }

@@ -2145,4 +2145,5 @@ export const SERVER = {
   'Sobre': 'About',
   'Antes': 'Before',
   'Sin más detalles.': 'No more details.',
+  'Atendiendo un turno': 'Attending a turn',
 };
