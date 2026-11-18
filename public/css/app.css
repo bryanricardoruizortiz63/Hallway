@@ -6126,3 +6126,131 @@ button.live-hero:focus-visible {
     animation: live-open 0.22s ease-out;
   }
 }
+
+/* ---- Ficha › Rol y permisos: closed, one line; open, the role, the other roles and every permission ---- */
+.role-perms {
+  padding: 0;
+  overflow: hidden;
+}
+
+.role-perms-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.role-perms-head::-webkit-details-marker {
+  display: none;
+}
+
+.role-perms-head:active {
+  background: var(--surface-2);
+}
+
+.role-perms-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+
+.role-perms-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.role-perms-title strong {
+  font-size: 16.5px;
+}
+
+.role-perms-title small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.role-perms-chevron {
+  display: grid;
+  color: var(--muted);
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.role-perms[open] .role-perms-chevron {
+  transform: rotate(-90deg);
+}
+
+.role-perms-body {
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.perms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.perms-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.perms-group-title span {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.perms-group-hint {
+  margin: 0 0 2px;
+  font-size: 12.5px;
+}
+
+.perms-list:empty {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .role-perms[open] .role-perms-body {
+    animation: live-open 0.22s ease-out;
+  }
+}
+
+.perms-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.perms-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.perms-more > summary svg {
+  color: var(--muted);
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.perms-more[open] > summary svg {
+  transform: rotate(-90deg);
+}
