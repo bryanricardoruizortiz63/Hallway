@@ -925,14 +925,18 @@ function liveHero(attention, active) {
     : active
       ? ['is-moving', 'pulse', 'Todo en orden', `${active} ${active === 1 ? 'turno en curso' : 'turnos en curso'}, nada urgente.`]
       : ['is-calm', 'check', 'Todo tranquilo', 'No hay movimiento en este momento.'];
-  return html`<section class="live-hero ${cls}" data-live-hero>
-    <span class="live-hero-icon" aria-hidden="true">${icon(ico, 26)}</span>
-    <div class="live-hero-text">
+  const inner = html`<span class="live-hero-icon" aria-hidden="true">${icon(ico, 26)}</span>
+    <span class="live-hero-text">
       <strong>${title}</strong>
       <span>${sub}</span>
-    </div>
-    <span class="live-hero-stamp"><span class="live-dot" aria-hidden="true"></span>${fmtTime(new Date())}</span>
-  </section>`;
+      ${n ? html`<em class="live-hero-cta">${openCards.has('attention') ? 'Toca para cerrar' : 'Toca para ver cuáles'}</em>` : ''}
+    </span>
+    <span class="live-hero-stamp"><span class="live-dot" aria-hidden="true"></span>${fmtTime(new Date())}</span>`;
+  // With something to look at, the banner opens the list of what needs attention right under it.
+  return n
+    ? html`<button type="button" class="live-hero ${cls} ${openCards.has('attention') ? 'is-open' : ''}" data-live-hero
+        aria-expanded="${openCards.has('attention')}" aria-controls="live-attention">${inner}</button>`
+    : html`<section class="live-hero ${cls}" data-live-hero>${inner}</section>`;
 }
 
 /** A number that takes you to its part of the page. */
@@ -1348,18 +1352,12 @@ export async function liveServiceView(ctx) {
   keepFresh(ctx, load);
 }
 
-/** «Necesita atención ahora»: the first three always in sight; the rest when it's opened. */
+/** «Necesita atención ahora»: opened from the red banner (or the «No han llegado» number), everything in it. */
 function attentionBlock(attention) {
-  if (!attention.length) return '';
-  const first = attention.slice(0, 3);
-  const rest = attention.slice(3);
+  if (!attention.length || !openCards.has('attention')) return '';
   return html`<section class="section live-attention" id="live-attention" data-attention-now>
     <h3 class="section-title">Necesita atención ahora <span class="count danger">${attention.length}</span></h3>
-    <div class="list">${first.map(attentionItem)}</div>
-    ${rest.length ? html`<details class="live-more" data-card="attention-more" ${openCards.has('attention-more') ? 'open' : ''}>
-      <summary>${icon('chevron', 16)} <span>Ver ${rest.length} más</span></summary>
-      <div class="list">${rest.map(attentionItem)}</div>
-    </details>` : ''}
+    <div class="list">${attention.map(attentionItem)}</div>
   </section>`;
 }
 
@@ -1454,8 +1452,20 @@ export async function liveView(ctx) {
       if (e.target.open) openCards.add(key);
       else openCards.delete(key);
     }, true);
+    // The banner opens or closes what needs attention.
+    const showAttention = (open) => {
+      if (open) openCards.add('attention');
+      else openCards.delete('attention');
+      render();
+      if (open) document.getElementById('live-attention')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+    $('[data-live-hero]', el)?.addEventListener('click', () => showAttention(!openCards.has('attention')));
     for (const t of el.querySelectorAll('[data-jump]')) {
       t.addEventListener('click', () => {
+        if (t.dataset.jump === 'live-attention') {
+          if (attention.length) showAttention(true);
+          return;
+        }
         const target = document.getElementById(t.dataset.jump);
         if (!target) return;
         if (target.tagName === 'DETAILS') target.open = true;
