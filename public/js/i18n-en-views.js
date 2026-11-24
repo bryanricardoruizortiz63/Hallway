@@ -2279,4 +2279,11 @@ export const SERVER = {
   'Asma o falta de aire': 'Asthma or shortness of breath',
   'Dolor de muela': 'Toothache',
   'Otro': 'Other',
+  'Lo normal': 'Normal',
+  'a': 'to',
+  'Desde': 'From',
+  'Diastólica desde': 'Diastolic from',
+  'Diastólica hasta': 'Diastolic to',
+  'Si un valor sale de aquí, al anotarlo sale un aviso de «alta» o «baja». Se acepta igual.': 'If a value falls outside this, a “high” or “low” notice shows when it’s noted. It’s still accepted.',
+  'Ej. °F, °C, mg/dL': 'E.g. °F, °C, mg/dL',
 };

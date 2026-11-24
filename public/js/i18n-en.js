@@ -411,6 +411,8 @@ export const EN_PATTERNS = [
   [/^Formulario de (.+)$/, '$1 form'],
   [/^Formulario · (.+)$/, 'Form · $1'],
   [/^Se tomó: (.+)$/, 'Taken: $1'],
+  [/^⚠ (.+) (alta|baja): lo normal es (.+)\.$/, (what, w, range) => `⚠ ${what} ${w === 'alta' ? 'high' : 'low'}: normal is ${range.replace(/^desde /, 'from ').replace(/^hasta /, 'up to ')}.`],
+  [/^(.+) · ⚠ (Alta|Baja)$/, (v, w) => `${v} · ⚠ ${w === 'Alta' ? 'High' : 'Low'}`],
   [/^Quedaron sin llenar: (.+)\. ¿Deseas guardar así\?$/, 'Left empty: $1. Save anyway?'],
   [/^No llenaste ningún campo\. ¿Deseas guardar así\?$/, 'You didn’t fill in any field. Save anyway?'],
   [/^Lo llenó (.+); lo corrigió (.+) · (.+)$/, 'Filled in by $1; corrected by $2 · $3'],

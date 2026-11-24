@@ -6,6 +6,9 @@
 --   them) adds, changes, orders or removes them at any time. Enfermería starts with a set of usual fields.
 -- · Field types: text · long (several lines) · number (with its unit) · check_number («Se tomó el azúcar» and then only
 --   the number) · pressure («Se tomó la presión» and then the two numbers) · choices (tap the ones that apply) · yesno.
+-- · A measure may have its normal range (low–high; for the pressure, also low2–high2 for the diastolic) and its unit
+--   (°F or °C, mg/dL or mmol/L…), both changed by the Admin. A value outside it is accepted: the app only tells «alta»
+--   or «baja».
 -- · What is written for a turn (service_request_forms) is only for whoever attends the service and whoever sees every
 --   turn's detail (Admin, «Ver el detalle de los turnos»): not for the teacher. It keeps the fields as they were when
 --   it was written, so changing the form later doesn't change old records, and it stays if the turn is deleted.
@@ -20,11 +23,11 @@ as $$
   select '[
     {"key": "sintomas", "label": "Síntomas", "type": "choices", "options": ["Dolor de cabeza", "Fiebre", "Dolor de estómago", "Náuseas o vómito", "Mareo", "Herida o golpe", "Alergia", "Asma o falta de aire", "Dolor de muela", "Otro"]},
     {"key": "relato", "label": "Lo que contó el estudiante", "type": "long"},
-    {"key": "temperatura", "label": "Temperatura", "type": "check_number", "unit": "°F"},
-    {"key": "presion", "label": "Presión arterial", "type": "pressure", "unit": "mmHg"},
-    {"key": "azucar", "label": "Azúcar (glucosa)", "type": "check_number", "unit": "mg/dL"},
-    {"key": "pulso", "label": "Pulso", "type": "check_number", "unit": "lpm"},
-    {"key": "oxigeno", "label": "Oxígeno (SpO₂)", "type": "check_number", "unit": "%"},
+    {"key": "temperatura", "label": "Temperatura", "type": "check_number", "unit": "°F", "low": 97, "high": 100.3},
+    {"key": "presion", "label": "Presión arterial", "type": "pressure", "unit": "mmHg", "low": 90, "high": 120, "low2": 60, "high2": 80},
+    {"key": "azucar", "label": "Azúcar (glucosa)", "type": "check_number", "unit": "mg/dL", "low": 70, "high": 140},
+    {"key": "pulso", "label": "Pulso", "type": "check_number", "unit": "lpm", "low": 60, "high": 120},
+    {"key": "oxigeno", "label": "Oxígeno (SpO₂)", "type": "check_number", "unit": "%", "low": 95, "high": 100},
     {"key": "tratamiento", "label": "Qué se hizo", "type": "long"},
     {"key": "medicamento", "label": "Medicamento dado (nombre y dosis)", "type": "text"},
     {"key": "encargado", "label": "Se llamó al encargado", "type": "yesno"}
@@ -33,6 +36,14 @@ $$;
 
 update public.school_services set form_fields = private.nursing_form_fields()
 where form_fields = '[]'::jsonb and name ilike 'enfermer%';
+-- If this migration already ran once without the normal ranges: Enfermería's measures get them (only where missing).
+update public.school_services s
+set form_fields = (
+  select jsonb_agg(case when f ? 'low' then f
+    else f || coalesce((select d - 'key' - 'label' - 'type' - 'unit' from jsonb_array_elements(private.nursing_form_fields()) d
+                        where d->>'key' = f->>'key' and d ? 'low' and (d->>'unit') = (f->>'unit')), '{}'::jsonb) end order by ord)
+  from jsonb_array_elements(s.form_fields) with ordinality as t(f, ord))
+where s.name ilike 'enfermer%' and jsonb_array_length(s.form_fields) > 0;
 
 -- A new Enfermería (a new school, or one added later) starts with them too.
 create or replace function private.service_default_form()
@@ -63,6 +74,8 @@ declare
   v_label text;
   v_type text;
   v_options jsonb;
+  v_range jsonb;
+  v_part text;
 begin
   if p_fields is null or jsonb_typeof(p_fields) <> 'array' then raise exception 'La lista de campos no es válida.'; end if;
   if jsonb_array_length(p_fields) > 30 then raise exception 'El formulario puede tener hasta 30 campos.'; end if;
@@ -96,10 +109,25 @@ begin
         raise exception 'Una opción de «%» es muy larga (máx. 40).', v_label;
       end if;
     end if;
+    -- The normal range of a measure (optional): numbers, low below high.
+    v_range := '{}'::jsonb;
+    if v_type in ('number', 'check_number', 'pressure') then
+      foreach v_part in array case when v_type = 'pressure' then array['low', 'high', 'low2', 'high2'] else array['low', 'high'] end loop
+        if nullif(btrim(coalesce(f->>v_part, '')), '') is not null then
+          begin
+            v_range := v_range || jsonb_build_object(v_part, round((f->>v_part)::numeric, 2));
+          exception when others then raise exception 'El rango normal de «%» debe tener números.', v_label;
+          end;
+        end if;
+      end loop;
+      if (v_range->>'low')::numeric >= (v_range->>'high')::numeric or (v_range->>'low2')::numeric >= (v_range->>'high2')::numeric then
+        raise exception 'En «%», el «desde» del rango normal debe ser menor que el «hasta».', v_label;
+      end if;
+    end if;
     v_out := v_out || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
       'key', v_key, 'label', v_label, 'type', v_type,
       'unit', case when v_type in ('number', 'check_number', 'pressure') then nullif(left(btrim(coalesce(f->>'unit', '')), 12), '') end,
-      'options', case when v_type = 'choices' then v_options end)));
+      'options', case when v_type = 'choices' then v_options end)) || v_range);
   end loop;
   return v_out;
 end;
@@ -198,7 +226,8 @@ begin
       a := nullif(btrim(coalesce(v->>'sys', '')), '')::numeric;
       b := nullif(btrim(coalesce(v->>'dia', '')), '')::numeric;
     exception when others then raise exception '«%» debe tener números.', f->>'label'; end;
-    if a is not null and (a < 30 or a > 300) or b is not null and (b < 20 or b > 200) then
+    -- Only an impossible number in mmHg is refused (another unit has other numbers).
+    if coalesce(f->>'unit', 'mmHg') ilike 'mmhg' and (a is not null and (a < 30 or a > 300) or b is not null and (b < 20 or b > 200)) then
       raise exception '«%» no tiene números válidos.', f->>'label';
     end if;
     return jsonb_strip_nulls(jsonb_build_object('taken', true, 'sys', a, 'dia', b));

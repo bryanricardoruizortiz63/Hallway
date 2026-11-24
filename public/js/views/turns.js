@@ -944,6 +944,41 @@ export function formValueText(f, v) {
   }
 }
 
+const num = (x) => (x === undefined || x === null || x === '' ? null : Number(x));
+/** «97–100.3 °F» */
+const rangeText = (low, high, unit) =>
+  low !== undefined && high !== undefined ? `${low}–${high}${unit ? ` ${unit}` : ''}`
+    : low !== undefined ? `desde ${low}${unit ? ` ${unit}` : ''}` : `hasta ${high}${unit ? ` ${unit}` : ''}`;
+
+/**
+ * Whether a measure is outside its normal range (set by the Admin): 'alta', 'baja' or null. The value is always
+ * accepted; this only tells. For the pressure, either number out counts.
+ */
+export function outOfRange(f, v) {
+  if (!v) return null;
+  const check = (x, low, high) => {
+    const n = num(x);
+    if (n === null || Number.isNaN(n)) return null;
+    if (high !== undefined && n > high) return 'alta';
+    if (low !== undefined && n < low) return 'baja';
+    return null;
+  };
+  if (f.type === 'number') return check(v, f.low, f.high);
+  if (f.type === 'check_number') return check(v.value, f.low, f.high);
+  if (f.type === 'pressure') return check(v.sys, f.low, f.high) || check(v.dia, f.low2, f.high2);
+  return null;
+}
+
+/** «Alta: lo normal es 97–100.3 °F» (for the pressure, both ranges). */
+function rangeHint(f, which) {
+  if (!which) return '';
+  const normal = f.type === 'pressure'
+    ? [f.low !== undefined || f.high !== undefined ? rangeText(f.low, f.high) : null,
+      f.low2 !== undefined || f.high2 !== undefined ? rangeText(f.low2, f.high2) : null].filter(Boolean).join(' / ') + (f.unit ? ` ${f.unit}` : '')
+    : rangeText(f.low, f.high, f.unit);
+  return `${f.label} ${which}: lo normal es ${normal}.`;
+}
+
 /** On the turn: the form's summary, and filling or correcting it (only whoever attends the service). */
 function formSection(t, service, form) {
   const fields = form?.fields || service.form_fields || [];
@@ -952,7 +987,10 @@ function formSection(t, service, form) {
   return html`<section class="card stack turn-form-card" data-form-card>
     <h2 class="card-title">${icon('file')} Formulario de ${t.service_name}</h2>
     ${form
-      ? html`<div class="facts">${filled.map((f) => fact(f.label, formValueText(f, form.data[f.key])))}</div>
+      ? html`<div class="facts">${filled.map((f) => {
+          const off = outOfRange(f, form.data[f.key]);
+          return fact(f.label, `${formValueText(f, form.data[f.key])}${off ? ` · ${off === 'alta' ? '⚠ Alta' : '⚠ Baja'}` : ''}`);
+        })}</div>
         <p class="hint">${form.updated_at
           ? `Lo llenó ${form.filled_by_name}; lo corrigió ${form.updated_by_name} · ${fmtDateTime(form.updated_at)}`
           : `Lo llenó ${form.filled_by_name} · ${fmtDateTime(form.created_at)}`}</p>
@@ -974,14 +1012,16 @@ function formInput(f, v) {
     case 'text':
       return html`<label class="field"><span>${f.label}</span><input name="${name}" maxlength="200" value="${v || ''}" autocomplete="off"></label>`;
     case 'number':
-      return html`<label class="field"><span>${f.label}${f.unit ? html` <em class="optional">${f.unit}</em>` : ''}</span>
-        <input name="${name}" type="number" step="any" inputmode="decimal" value="${v ?? ''}"></label>`;
+      return html`<div class="form-measure" data-measure="${f.key}"><label class="field"><span>${f.label}${f.unit ? html` <em class="optional">${f.unit}</em>` : ''}</span>
+        <input name="${name}" type="number" step="any" inputmode="decimal" value="${v ?? ''}"></label>
+        <p class="range-hint" data-range-hint hidden></p></div>`;
     case 'check_number':
       return html`<div class="form-check" data-check="${f.key}">
         <label class="toggle"><input type="checkbox" name="${name}-taken" ${v ? 'checked' : ''}><span class="toggle-ui"></span>
           <span>Se tomó: ${f.label}</span></label>
         <label class="form-check-value" ${v ? '' : 'hidden'}><input name="${name}-value" type="number" step="any" inputmode="decimal"
           value="${v?.value ?? ''}" aria-label="${f.label}" placeholder="Número">${f.unit ? html`<span>${f.unit}</span>` : ''}</label>
+        <p class="range-hint" data-range-hint hidden></p>
       </div>`;
     case 'pressure':
       return html`<div class="form-check" data-check="${f.key}">
@@ -993,6 +1033,7 @@ function formInput(f, v) {
           <input name="${name}-dia" type="number" inputmode="numeric" value="${v?.dia ?? ''}" aria-label="Diastólica" placeholder="80">
           ${f.unit ? html`<span>${f.unit}</span>` : ''}
         </div>
+        <p class="range-hint" data-range-hint hidden></p>
       </div>`;
     case 'choices':
       return html`<div class="field"><span>${f.label}</span>
@@ -1067,6 +1108,23 @@ export async function turnFormView(ctx) {
       if (check.checked) value.querySelector('input')?.focus();
     });
   }
+  // A value outside the normal range: accepted, with a small notice under it.
+  const showRange = (key) => {
+    const f = fields.find((x) => x.key === key);
+    const box = form.querySelector(`[data-check="${key}"], [data-measure="${key}"]`);
+    const hint = box && $('[data-range-hint]', box);
+    if (!f || !hint) return;
+    const { data } = readForm(form, [f]);
+    const text = rangeHint(f, outOfRange(f, data[f.key]));
+    hint.textContent = text ? `⚠ ${text}` : '';
+    hint.hidden = !text;
+  };
+  for (const box of form.querySelectorAll('[data-check], [data-measure]')) {
+    const key = box.dataset.check || box.dataset.measure;
+    box.addEventListener('input', () => showRange(key));
+    box.addEventListener('change', () => showRange(key));
+    showRange(key);
+  }
   for (const seg of form.querySelectorAll('.segmented')) {
     seg.addEventListener('change', () => {
       for (const l of seg.querySelectorAll('.seg')) l.classList.toggle('active', l.querySelector('input').checked);
@@ -1105,6 +1163,23 @@ const FIELD_TYPES = [
   ['yesno', 'Sí o no'],
 ];
 
+const UNITS = ['°F', '°C', 'mmHg', 'mg/dL', 'mmol/L', 'lpm', '%', 'lb', 'kg', 'in', 'cm', 'rpm'];
+const round1 = (n) => Math.round(n * 10) / 10;
+/** How to turn a number from one unit into the other (null when they aren't a known pair). */
+function convertUnit(from, to) {
+  const k = `${from.toLowerCase()}>${to.toLowerCase()}`;
+  return {
+    '°f>°c': (n) => round1(((n - 32) * 5) / 9),
+    '°c>°f': (n) => round1((n * 9) / 5 + 32),
+    'mg/dl>mmol/l': (n) => round1(n / 18),
+    'mmol/l>mg/dl': (n) => Math.round(n * 18),
+    'lb>kg': (n) => round1(n / 2.2046),
+    'kg>lb': (n) => round1(n * 2.2046),
+    'in>cm': (n) => round1(n * 2.54),
+    'cm>in': (n) => round1(n / 2.54),
+  }[k] || null;
+}
+
 function fieldEditor(f, i, total) {
   const numeric = ['number', 'check_number', 'pressure'].includes(f.type);
   return html`<li class="card stack field-edit" data-field="${i}" data-key="${f.key || ''}">
@@ -1119,7 +1194,17 @@ function fieldEditor(f, i, total) {
     <label class="field"><span>Nombre del campo</span><input data-label maxlength="60" value="${f.label || ''}" placeholder="Ej. Peso"></label>
     <label class="field"><span>Tipo</span><select data-type>${FIELD_TYPES.map(([v, l]) => html`<option value="${v}" ${f.type === v ? 'selected' : ''}>${l}</option>`)}</select></label>
     <label class="field" ${numeric ? '' : 'hidden'} data-unit-field><span>Unidad <em class="optional">opcional</em></span>
-      <input data-unit maxlength="12" value="${f.unit || ''}" placeholder="Ej. lb, °F, mg/dL"></label>
+      <input data-unit maxlength="12" value="${f.unit || ''}" placeholder="Ej. °F, °C, mg/dL" list="units" autocomplete="off"></label>
+    <div class="field" ${numeric ? '' : 'hidden'} data-range-field>
+      <span>Lo normal <em class="optional">opcional</em></span>
+      <div class="range-row"><span data-range-label>${f.type === 'pressure' ? 'Sistólica' : 'De'}</span>
+        <input data-low type="number" step="any" value="${f.low ?? ''}" aria-label="Desde"><span>a</span>
+        <input data-high type="number" step="any" value="${f.high ?? ''}" aria-label="Hasta"></div>
+      <div class="range-row" ${f.type === 'pressure' ? '' : 'hidden'} data-range2><span>Diastólica</span>
+        <input data-low2 type="number" step="any" value="${f.low2 ?? ''}" aria-label="Diastólica desde"><span>a</span>
+        <input data-high2 type="number" step="any" value="${f.high2 ?? ''}" aria-label="Diastólica hasta"></div>
+      <p class="hint">Si un valor sale de aquí, al anotarlo sale un aviso de «alta» o «baja». Se acepta igual.</p>
+    </div>
     <label class="field" ${f.type === 'choices' ? '' : 'hidden'} data-options-field><span>Opciones <em class="optional">una por línea</em></span>
       <textarea data-options rows="4" maxlength="900">${(f.options || []).join('\n')}</textarea></label>
   </li>`;
@@ -1143,6 +1228,10 @@ export async function serviceFormFieldsView(ctx) {
         label: $('[data-label]', li).value.trim(),
         type,
         unit: $('[data-unit]', li).value.trim() || undefined,
+        ...Object.fromEntries(['low', 'high', 'low2', 'high2']
+          .map((k) => [k, $(`[data-${k}]`, li).value.trim()])
+          .filter(([k, x]) => x !== '' && (type === 'pressure' || !k.endsWith('2')))
+          .map(([k, x]) => [k, Number(x)])),
         options: type === 'choices' ? $('[data-options]', li).value.split('\n').map((x) => x.trim()).filter(Boolean) : undefined,
       };
     });
@@ -1154,6 +1243,7 @@ export async function serviceFormFieldsView(ctx) {
       ${fields.length
         ? html`<ol class="stack field-list">${fields.map((f, i) => fieldEditor(f, i, fields.length))}</ol>`
         : html`<div class="card">${empty('file', 'Sin formulario', `${s.name} no anota nada aparte del turno. Añade un campo para empezar.`)}</div>`}
+      <datalist id="units">${UNITS.map((u) => html`<option value="${u}"></option>`)}</datalist>
       <button type="button" class="btn btn-secondary btn-block" data-add>${icon('plus', 18)} Añadir un campo</button>
       <button type="button" class="btn btn-primary btn-block btn-lg" data-save>${icon('check')} Guardar formulario</button>
       <a class="btn btn-ghost btn-block" href="#/services/${id}">${icon('back', 18)} Volver al servicio</a>
@@ -1162,8 +1252,25 @@ export async function serviceFormFieldsView(ctx) {
       const i = Number(li.dataset.field);
       $('[data-type]', li).addEventListener('change', (e) => {
         const type = e.target.value;
-        $('[data-unit-field]', li).hidden = !['number', 'check_number', 'pressure'].includes(type);
+        const numeric = ['number', 'check_number', 'pressure'].includes(type);
+        $('[data-unit-field]', li).hidden = !numeric;
+        $('[data-range-field]', li).hidden = !numeric;
+        $('[data-range2]', li).hidden = type !== 'pressure';
+        $('[data-range-label]', li).textContent = type === 'pressure' ? 'Sistólica' : 'De';
         $('[data-options-field]', li).hidden = type !== 'choices';
+      });
+      // °F ⇄ °C and mg/dL ⇄ mmol/L: the normal range follows the unit.
+      const unit = $('[data-unit]', li);
+      let unitBefore = unit.value.trim();
+      unit.addEventListener('change', () => {
+        const conv = convertUnit(unitBefore, unit.value.trim());
+        if (conv) {
+          for (const k of ['low', 'high', 'low2', 'high2']) {
+            const input = $(`[data-${k}]`, li);
+            if (input.value !== '') input.value = conv(Number(input.value));
+          }
+        }
+        unitBefore = unit.value.trim();
       });
       for (const b of li.querySelectorAll('[data-move]')) {
         b.addEventListener('click', () => {
