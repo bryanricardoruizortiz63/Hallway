@@ -282,6 +282,7 @@ export async function servicePanelView(ctx) {
       <p class="hint" data-filter-sum hidden></p>
     </section>
     ${support ? '' : html`<a class="btn btn-secondary btn-block" href="#/turns/panel/${id}/students">${icon('search', 18)} Buscar estudiantes atendidos</a>`}
+    ${service.medication ? html`<a class="btn btn-secondary btn-block" href="#/medication/${id}">${icon('pill', 18)} Medicamentos diarios</a>` : ''}
     <div class="stack" data-body></div>
     <div data-people></div>
     <p class="hint">${people.all

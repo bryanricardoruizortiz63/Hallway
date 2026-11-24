@@ -16,7 +16,7 @@ export function navItems(user) {
   const fixes = fixesOnly(user);
   const alerts = { path: '/alerts', icon: 'alert', label: 'Alertas', match: ['/alerts'] };
   // The rest ask for maintenance from Turnos, like the other services.
-  const turns = { path: '/turns', icon: 'pulse', label: 'Turnos', match: ['/turns', '/maintenance'] };
+  const turns = { path: '/turns', icon: 'pulse', label: 'Turnos', match: ['/turns', '/maintenance', '/medication'] };
   // "Mantenimiento" doesn't fit in the bar.
   const maintenance = { path: '/maintenance', icon: 'wrench', label: 'Pedidos', match: ['/maintenance'] };
   // The conference room ("Salón" alone reads as the classroom).
@@ -39,7 +39,7 @@ export function navItems(user) {
   ];
   const moreMatch = [
     '/more', '/guide', '/notifications', '/message/', '/profile', '/calendar', '/employees', '/settings', '/roles',
-    '/services', '/data', '/messages', '/home', '/turns', '/maintenance', '/live', '/history',
+    '/services', '/data', '/messages', '/home', '/turns', '/maintenance', '/medication', '/live', '/history',
   ].filter((p) => !items.some((i) => i.match.includes(p)));
   items.push({ path: '/more', icon: 'menu', label: 'Más', match: moreMatch });
   return items;

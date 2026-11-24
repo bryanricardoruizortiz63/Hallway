@@ -37,6 +37,7 @@ import {
   servicePanelView,
   serviceStudentsView,
 } from './views/panels.js';
+import { medicationPlanView, medicationView } from './views/medication.js';
 import { addAccountView, moreView, notificationsView, notifySettingsView, openAccountMenu, profileView, verifyCodeView } from './views/account.js';
 import { avatar } from './views/common.js';
 import { adoptAccountFromUrl, needsDailyCode, otherAccount, switchAccount } from './accounts.js';
@@ -100,6 +101,8 @@ const ROUTES = [
   // Only whoever attends the service (checked in the view and by the database).
   { re: /^\/turns\/panel\/(\d+)$/, view: servicePanelView, title: 'Panel del servicio', back: true },
   { re: /^\/turns\/panel\/(\d+)\/students$/, view: serviceStudentsView, title: 'Buscar estudiantes', back: true },
+  { re: /^\/medication\/(\d+)$/, view: medicationView, title: 'Medicamentos', back: true },
+  { re: /^\/medication\/(\d+)\/plan\/(new|\d+)$/, view: medicationPlanView, title: 'Medicamentos', back: true },
   { re: /^\/services$/, view: servicesView, title: 'Servicios', allow: may('services'), back: true },
   { re: /^\/services\/(new|\d+)$/, view: serviceFormView, title: 'Servicio', allow: may('services'), back: true },
   { re: /^\/services\/(\d+)\/form$/, view: serviceFormFieldsView, title: 'Formulario', allow: may('services'), back: true },

@@ -11,6 +11,7 @@ import {
   sendTurnMessage,
   saveTurnForm,
   setServiceForm,
+  setServiceMedication,
   turnForm,
   turnMessages,
   receiveSupportRequest,
@@ -650,6 +651,7 @@ export async function turnsView(ctx) {
               ${['visit', 'either'].includes(service.mode)
                 ? html`<a class="btn btn-ghost btn-sm" href="#/turns/new?service=${service.id}&here=1">${icon('plus', 18)} Llegó sin turno</a>`
                 : ''}
+              ${service.medication ? html`<a class="btn btn-ghost btn-sm" href="#/medication/${service.id}">${icon('pill', 18)} Medicamentos</a>` : ''}
               <a class="btn btn-ghost btn-sm" href="#/turns/panel/${service.id}">${icon('chart', 18)} Panel y Excel</a>
             </div>
           </section>`;
@@ -1589,6 +1591,11 @@ export async function serviceFormView(ctx) {
             <label class="toggle"><input type="checkbox" name="active" ${s.active ? 'checked' : ''}>
               <span class="toggle-ui"></span><span>Activo: los maestros pueden pedir turnos</span></label>
           </section>`}
+      ${html`<section class="card stack" data-med-box ${s.mode === 'support' ? 'hidden' : ''}>
+        <label class="toggle notify-row"><input type="checkbox" name="medication" ${s.medication || (isNew && /^enfermer/i.test(s.name)) ? 'checked' : ''}>
+          <span class="toggle-ui"></span><span class="notify-text"><span>Medicamentos diarios</span>
+          <small>Una lista de los estudiantes que se medican en la escuela, con su hora: la app los llama (o te lo recuerda) y queda el registro de cada día.</small></span></label>
+      </section>`}
       ${isNew
         ? ''
         : html`<a class="card link-card room-link" href="#/services/${s.id}/form">${icon('file')}<span>
@@ -1603,6 +1610,7 @@ export async function serviceFormView(ctx) {
       // Soporte IT usually carries its requests to the next day.
       if (isNew) form.querySelector(`[name=life][value=${form.mode.value === 'support' ? 'open' : 'day'}]`).checked = true;
       for (const node of el.querySelectorAll('[data-minutes]')) node.hidden = !['visit', 'either'].includes(form.mode.value);
+      $('[data-med-box]', el).hidden = form.mode.value === 'support';
     });
   }
   for (const input of el.querySelectorAll('[name=hours]')) {
@@ -1628,6 +1636,8 @@ export async function serviceFormView(ctx) {
       const keep = form.querySelector('[name=life]:checked')?.value === 'open';
       if (keep !== !!s.keep_open || isNew) await setServiceKeepOpen(saved?.id || s.id, keep);
       if (from !== (s.open_from || null) || until !== (s.open_until || null)) await setServiceHours(saved?.id || s.id, from, until);
+      const med = form.medication.checked && form.mode.value !== 'support';
+      if (med !== !!s.medication) await setServiceMedication(saved?.id || s.id, med);
       toast('Servicio guardado', 'ok');
       go('/services', { replace: true });
     });

@@ -1136,6 +1136,26 @@ export const cancelBooking = (id, note) => rpc('cancel_room_booking', { p_id: id
 export const dayBounds = (from, to) => [new Date(`${from}T00:00:00`).toISOString(), new Date(`${addDays(to, 1)}T00:00:00`).toISOString()];
 
 /** A service's turns in a period, with the reason and never the note (the service and the dirección). */
+// ---- Medicamentos (see migration 094) ----
+/** The day's doses of a service: { day, school_day, now, doses: [...] }. */
+export const medicationDay = (serviceId, day) => rpc('medication_day', { p_service: serviceId, p_day: day || null });
+/** The list of students who take medication (current first). */
+export const medicationPlans = (serviceId) => rpc('medication_plans', { p_service: serviceId });
+export const saveMedicationPlan = (p) => rpc('save_medication_plan', {
+  p_id: p.id || null, p_service: p.serviceId, p_name: p.name, p_group: p.group, p_medication: p.medication,
+  p_times: p.times, p_weekdays: p.weekdays, p_auto: p.auto, p_start: p.start || null, p_end: p.end || null, p_note: p.note || null,
+});
+export const endMedicationPlan = (id) => rpc('end_medication_plan', { p_id: id });
+/** «Llamar»: the student, now, as a turn already called. */
+export const callMedication = (planId, time) => rpc('call_medication', { p_plan: planId, p_time: time });
+/** status: 'given', 'absent', 'not_given' (with reason) or 'pending' (undo). */
+export const markMedication = (planId, day, time, status, reason) =>
+  rpc('mark_medication', { p_plan: planId, p_day: day, p_time: time, p_status: status, p_reason: reason || null });
+/** Every dose of a period (the record). */
+export const medicationLog = (serviceId, from, to) =>
+  fetchAll(() => sb.rpc('medication_log', { p_service: serviceId, p_from: from, p_to: to }).order('id'));
+export const setServiceMedication = (id, on) => rpc('set_service_medication', { p_id: id, p_on: !!on });
+
 /** For a service's panel: { all, serves, colleagues: [{ id, name, mine, theirs }] } (see migration 092). */
 export const serviceDataPeople = (serviceId) => rpc('service_data_people', { p_service: serviceId });
 /** Asks a colleague of the service to see the turns they attended. */
