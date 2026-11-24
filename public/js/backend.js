@@ -957,6 +957,12 @@ export const advanceTurn = (id, step, value) => rpc('advance_turn', { p_id: id, 
 export const receiveSupportRequest = (id) => rpc('receive_support_request', { p_id: id });
 /** The students on their way back to class (any teacher may have them): name, group and since when only. */
 export const returningStudents = () => rpc('returning_students');
+/** A turn's private chat, oldest first (whoever may see it; nobody can change or delete a message). */
+export const turnMessages = (id) =>
+  run(sb.from('service_request_messages').select('id, author_id, author_name, author_side, kind, body, created_at')
+    .eq('request_id', id).order('id'));
+/** kind: 'message', 'call' (the note when the service calls the student) or 'cancel' (why it was cancelled). */
+export const sendTurnMessage = (id, body, kind = 'message') => rpc('send_turn_message', { p_id: id, p_body: body, p_kind: kind });
 /** What the service did (Soporte IT), for the panel and the Excel. */
 export const noteTurnResolution = (id, text) => rpc('note_turn_resolution', { p_id: id, p_text: text || null });
 
