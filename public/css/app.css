@@ -6629,3 +6629,149 @@ a.btn.is-disabled {
   flex-direction: column;
   min-width: 0;
 }
+
+/* ---- Medicamentos diarios ---- */
+.med-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.med-tabs a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.med-tabs a.is-on {
+  background: var(--surface);
+  color: var(--primary-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+.med-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.med-dose {
+  gap: 6px;
+  border-left: 4px solid var(--border);
+}
+
+.med-dose.st-called,
+.med-dose.is-late {
+  border-left-color: var(--warn);
+}
+
+.med-dose.st-given {
+  border-left-color: var(--ok);
+}
+
+.med-dose.st-absent,
+.med-dose.st-not_given {
+  border-left-color: var(--danger);
+}
+
+.med-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.med-who {
+  display: flex;
+  flex-direction: column;
+}
+
+.med-who small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.med-status {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.st-called .med-status,
+.is-late .med-status {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.st-given .med-status {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.st-absent .med-status,
+.st-not_given .med-status {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.med-drug {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.med-reason {
+  margin: 0;
+  font-style: italic;
+}
+
+.med-dose .hint {
+  margin: 0;
+}
+
+.med-time {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.med-time .field {
+  flex: 1;
+}
+
+.med-time .icon-btn {
+  margin-bottom: 6px;
+}
+
+.med-log .med-tag {
+  flex-shrink: 0;
+}
+
+.med-log.st-given .med-tag {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.med-log.st-absent .med-tag,
+.med-log.st-not_given .med-tag {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
