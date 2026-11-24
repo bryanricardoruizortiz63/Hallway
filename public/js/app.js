@@ -22,7 +22,7 @@ import {
   pickupDetailView,
   reliefDetailView,
 } from './views/alerts.js';
-import { newTurnView, returningDetailView, serviceFormView, servicesView, turnDetailView, turnsView } from './views/turns.js';
+import { newTurnView, returningDetailView, serviceFormFieldsView, serviceFormView, servicesView, turnDetailView, turnFormView, turnsView } from './views/turns.js';
 import { newVisitView, visitDetailView } from './views/visits.js';
 import { maintenanceDetailView, maintenanceView, newMaintenanceView } from './views/maintenance.js';
 import { bookingDetailView, bookingHistoryView, newBookingView, roomsView } from './views/rooms.js';
@@ -90,6 +90,7 @@ const ROUTES = [
   { re: /^\/turns$/, view: turnsView, title: 'Turnos' },
   { re: /^\/turns\/new$/, view: newTurnView, title: 'Pedir turno', back: true },
   { re: /^\/turns\/(\d+)$/, view: turnDetailView, title: 'Turno', back: true },
+  { re: /^\/turns\/(\d+)\/form$/, view: turnFormView, title: 'Formulario', back: true },
   { re: /^\/turns\/back\/(\d+)$/, view: returningDetailView, title: 'Regresando a clase', back: true },
   { re: /^\/alerts\/visit\/new$/, view: newVisitView, title: 'Llegó una visita', allow: may('visitors'), back: true },
   { re: /^\/alerts\/visit\/(\d+)$/, view: visitDetailView, title: 'Visita', back: true },
@@ -99,6 +100,7 @@ const ROUTES = [
   { re: /^\/turns\/panel\/(\d+)$/, view: servicePanelView, title: 'Panel del servicio', back: true },
   { re: /^\/services$/, view: servicesView, title: 'Servicios', allow: may('services'), back: true },
   { re: /^\/services\/(new|\d+)$/, view: serviceFormView, title: 'Servicio', allow: may('services'), back: true },
+  { re: /^\/services\/(\d+)\/form$/, view: serviceFormFieldsView, title: 'Formulario', allow: may('services'), back: true },
   { re: /^\/maintenance$/, view: maintenanceView, title: 'Mantenimiento' },
   { re: /^\/maintenance\/new$/, view: newMaintenanceView, title: 'Pedir mantenimiento', back: true },
   { re: /^\/maintenance\/(\d+)$/, view: maintenanceDetailView, title: 'Mantenimiento', back: true },

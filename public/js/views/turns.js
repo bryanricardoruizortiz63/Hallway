@@ -9,6 +9,9 @@ import {
   myOpenMaintenance,
   noteTurnResolution,
   sendTurnMessage,
+  saveTurnForm,
+  setServiceForm,
+  turnForm,
   turnMessages,
   receiveSupportRequest,
   requestService,
@@ -925,6 +928,388 @@ function serviceHint(t) {
   return '';
 }
 
+// ---- The turn's form (Enfermería: symptoms, vital signs…): never required -------------------------------------------
+
+/** A value of the form in words: «118/76 mmHg», «100.4 °F», «Fiebre, Mareo», «Sí». '' when it's empty. */
+export function formValueText(f, v) {
+  if (v === undefined || v === null) return '';
+  const unit = f.unit ? ` ${f.unit}` : '';
+  switch (f.type) {
+    case 'check_number': return v.value !== undefined && v.value !== null && v.value !== '' ? `${v.value}${unit}` : 'Se tomó (sin número)';
+    case 'pressure': return v.sys || v.dia ? `${v.sys || '—'}/${v.dia || '—'}${unit}` : 'Se tomó (sin número)';
+    case 'choices': return v.join(', ');
+    case 'yesno': return v ? 'Sí' : 'No';
+    case 'number': return `${v}${unit}`;
+    default: return String(v);
+  }
+}
+
+const num = (x) => (x === undefined || x === null || x === '' ? null : Number(x));
+/** «97–100.3 °F» */
+const rangeText = (low, high, unit) =>
+  low !== undefined && high !== undefined ? `${low}–${high}${unit ? ` ${unit}` : ''}`
+    : low !== undefined ? `desde ${low}${unit ? ` ${unit}` : ''}` : `hasta ${high}${unit ? ` ${unit}` : ''}`;
+
+/**
+ * Whether a measure is outside its normal range (set by the Admin): 'alta', 'baja' or null. The value is always
+ * accepted; this only tells. For the pressure, either number out counts.
+ */
+export function outOfRange(f, v) {
+  if (!v) return null;
+  const check = (x, low, high) => {
+    const n = num(x);
+    if (n === null || Number.isNaN(n)) return null;
+    if (high !== undefined && n > high) return 'alta';
+    if (low !== undefined && n < low) return 'baja';
+    return null;
+  };
+  if (f.type === 'number') return check(v, f.low, f.high);
+  if (f.type === 'check_number') return check(v.value, f.low, f.high);
+  if (f.type === 'pressure') return check(v.sys, f.low, f.high) || check(v.dia, f.low2, f.high2);
+  return null;
+}
+
+/** «Alta: lo normal es 97–100.3 °F» (for the pressure, both ranges). */
+function rangeHint(f, which) {
+  if (!which) return '';
+  const normal = f.type === 'pressure'
+    ? [f.low !== undefined || f.high !== undefined ? rangeText(f.low, f.high) : null,
+      f.low2 !== undefined || f.high2 !== undefined ? rangeText(f.low2, f.high2) : null].filter(Boolean).join(' / ') + (f.unit ? ` ${f.unit}` : '')
+    : rangeText(f.low, f.high, f.unit);
+  return `${f.label} ${which}: lo normal es ${normal}.`;
+}
+
+/** On the turn: the form's summary, and filling or correcting it (only whoever attends the service). */
+function formSection(t, service, form) {
+  const fields = form?.fields || service.form_fields || [];
+  if (!fields.length || (!service.serves && !form)) return '';
+  const filled = fields.filter((f) => formValueText(f, form?.data?.[f.key]));
+  return html`<section class="card stack turn-form-card" data-form-card>
+    <h2 class="card-title">${icon('file')} Formulario de ${t.service_name}</h2>
+    ${form
+      ? html`<div class="facts">${filled.map((f) => {
+          const off = outOfRange(f, form.data[f.key]);
+          return fact(f.label, `${formValueText(f, form.data[f.key])}${off ? ` · ${off === 'alta' ? '⚠ Alta' : '⚠ Baja'}` : ''}`);
+        })}</div>
+        <p class="hint">${form.updated_at
+          ? `Lo llenó ${form.filled_by_name}; lo corrigió ${form.updated_by_name} · ${fmtDateTime(form.updated_at)}`
+          : `Lo llenó ${form.filled_by_name} · ${fmtDateTime(form.created_at)}`}</p>
+        ${filled.length < fields.length ? html`<p class="hint">${plural(fields.length - filled.length, 'campo quedó', 'campos quedaron')} sin llenar.</p>` : ''}`
+      : html`<p class="hint">Síntomas, signos vitales y lo que se hizo. Es opcional: llena lo que haga falta.</p>`}
+    ${service.serves
+      ? html`<a class="btn btn-secondary btn-block" href="#/turns/${t.id}/form">${icon('edit', 18)} ${form ? 'Corregir el formulario' : 'Llenar el formulario'}</a>`
+      : ''}
+    <p class="hint">Solo lo ven ${t.service_name} y quien tiene «Ver el detalle de los turnos»; el maestro no.</p>
+  </section>`;
+}
+
+/** One field of the form, with what it has now. */
+function formInput(f, v) {
+  const name = `f-${f.key}`;
+  switch (f.type) {
+    case 'long':
+      return html`<label class="field"><span>${f.label}</span><textarea name="${name}" rows="3" maxlength="2000">${v || ''}</textarea></label>`;
+    case 'text':
+      return html`<label class="field"><span>${f.label}</span><input name="${name}" maxlength="200" value="${v || ''}" autocomplete="off"></label>`;
+    case 'number':
+      return html`<div class="form-measure" data-measure="${f.key}"><label class="field"><span>${f.label}${f.unit ? html` <em class="optional">${f.unit}</em>` : ''}</span>
+        <input name="${name}" type="number" step="any" inputmode="decimal" value="${v ?? ''}"></label>
+        <p class="range-hint" data-range-hint hidden></p></div>`;
+    case 'check_number':
+      return html`<div class="form-check" data-check="${f.key}">
+        <label class="toggle"><input type="checkbox" name="${name}-taken" ${v ? 'checked' : ''}><span class="toggle-ui"></span>
+          <span>Se tomó: ${f.label}</span></label>
+        <label class="form-check-value" ${v ? '' : 'hidden'}><input name="${name}-value" type="number" step="any" inputmode="decimal"
+          value="${v?.value ?? ''}" aria-label="${f.label}" placeholder="Número">${f.unit ? html`<span>${f.unit}</span>` : ''}</label>
+        <p class="range-hint" data-range-hint hidden></p>
+      </div>`;
+    case 'pressure':
+      return html`<div class="form-check" data-check="${f.key}">
+        <label class="toggle"><input type="checkbox" name="${name}-taken" ${v ? 'checked' : ''}><span class="toggle-ui"></span>
+          <span>Se tomó: ${f.label}</span></label>
+        <div class="form-check-value" ${v ? '' : 'hidden'}>
+          <input name="${name}-sys" type="number" inputmode="numeric" value="${v?.sys ?? ''}" aria-label="Sistólica" placeholder="120">
+          <span class="form-slash">/</span>
+          <input name="${name}-dia" type="number" inputmode="numeric" value="${v?.dia ?? ''}" aria-label="Diastólica" placeholder="80">
+          ${f.unit ? html`<span>${f.unit}</span>` : ''}
+        </div>
+        <p class="range-hint" data-range-hint hidden></p>
+      </div>`;
+    case 'choices':
+      return html`<div class="field"><span>${f.label}</span>
+        <div class="chips">${f.options.map((o) => html`<label class="chip"><input type="checkbox" name="${name}" value="${o}"
+          ${v?.includes(o) ? 'checked' : ''}><span>${o}</span></label>`)}</div></div>`;
+    case 'yesno':
+      return html`<div class="field"><span>${f.label}</span>
+        <div class="segmented">
+          ${[['yes', 'Sí', v === true], ['no', 'No', v === false], ['', 'Sin anotar', v !== true && v !== false]].map(
+            ([val, label, on]) => html`<label class="seg ${on ? 'active' : ''}"><input type="radio" name="${name}" value="${val}" ${on ? 'checked' : ''}><span>${label}</span></label>`,
+          )}
+        </div></div>`;
+    default:
+      return '';
+  }
+}
+
+/** What the form says now: { key: value } (empty fields left out) and the labels of the empty ones. */
+function readForm(form, fields) {
+  const data = {};
+  const empty = [];
+  const val = (n) => form.elements[n]?.value?.trim() ?? '';
+  for (const f of fields) {
+    const name = `f-${f.key}`;
+    let v = null;
+    if (f.type === 'text' || f.type === 'long' || f.type === 'number') v = val(name) || null;
+    else if (f.type === 'check_number') v = form.elements[`${name}-taken`].checked ? { taken: true, value: val(`${name}-value`) } : null;
+    else if (f.type === 'pressure') v = form.elements[`${name}-taken`].checked ? { taken: true, sys: val(`${name}-sys`), dia: val(`${name}-dia`) } : null;
+    else if (f.type === 'choices') {
+      const list = [...form.querySelectorAll(`[name="${name}"]:checked`)].map((c) => c.value);
+      v = list.length ? list : null;
+    } else if (f.type === 'yesno') {
+      const pick = form.querySelector(`[name="${name}"]:checked`)?.value;
+      v = pick === 'yes' ? true : pick === 'no' ? false : null;
+    }
+    // A measure marked as taken without its number is still empty.
+    const missing = v === null || (f.type === 'check_number' && !v.value) || (f.type === 'pressure' && (!v.sys || !v.dia));
+    if (missing) empty.push(f.label);
+    if (v !== null) data[f.key] = v;
+  }
+  return { data, empty };
+}
+
+/** #/turns/:id/form — the service fills (or corrects) the turn's form. Nothing is required. */
+export async function turnFormView(ctx) {
+  const { el, params, setTitle } = ctx;
+  const id = Number(params[0]);
+  const [t, services, saved] = await Promise.all([getTurn(id), servicesOverview(), turnForm(id).catch(() => null)]);
+  const service = services.find((x) => x.id === t.service_id) || {};
+  if (!service.serves) throw new Error(`Solo ${t.service_name} llena este formulario.`);
+  const fields = service.form_fields || [];
+  if (!fields.length) throw new Error(`${t.service_name} no tiene formulario. Se configura en Servicios.`);
+  setTitle(`Formulario · ${t.student_name || t.service_name}`);
+  el.innerHTML = String(html`<form class="stack turn-form" data-turn-form novalidate>
+    <section class="card stack">
+      <p class="alert-kind">${icon('pulse', 18)} ${t.service_name}</p>
+      <h2>${t.student_name} <span class="muted">· ${t.group_name}</span></h2>
+      ${t.reason ? html`<p class="hint">Motivo: ${t.reason}${t.note ? ` · ${t.note}` : ''}</p>` : ''}
+      <p class="hint">Todo es opcional: llena lo que haga falta. Al guardar te decimos qué quedó vacío.</p>
+    </section>
+    <section class="card stack">${fields.map((f) => formInput(f, saved?.data?.[f.key]))}</section>
+    <button class="btn btn-primary btn-block btn-lg" type="submit">${icon('check')} Guardar formulario</button>
+    <a class="btn btn-ghost btn-block" href="#/turns/${id}">${icon('back', 18)} Volver al turno</a>
+  </form>`);
+  const form = $('[data-turn-form]', el);
+  // «Se tomó»: the number appears when it's marked.
+  for (const box of form.querySelectorAll('[data-check]')) {
+    const check = box.querySelector('[type=checkbox]');
+    check.addEventListener('change', () => {
+      const value = box.querySelector('.form-check-value');
+      value.hidden = !check.checked;
+      if (check.checked) value.querySelector('input')?.focus();
+    });
+  }
+  // A value outside the normal range: accepted, with a small notice under it.
+  const showRange = (key) => {
+    const f = fields.find((x) => x.key === key);
+    const box = form.querySelector(`[data-check="${key}"], [data-measure="${key}"]`);
+    const hint = box && $('[data-range-hint]', box);
+    if (!f || !hint) return;
+    const { data } = readForm(form, [f]);
+    const text = rangeHint(f, outOfRange(f, data[f.key]));
+    hint.textContent = text ? `⚠ ${text}` : '';
+    hint.hidden = !text;
+  };
+  for (const box of form.querySelectorAll('[data-check], [data-measure]')) {
+    const key = box.dataset.check || box.dataset.measure;
+    box.addEventListener('input', () => showRange(key));
+    box.addEventListener('change', () => showRange(key));
+    showRange(key);
+  }
+  for (const seg of form.querySelectorAll('.segmented')) {
+    seg.addEventListener('change', () => {
+      for (const l of seg.querySelectorAll('.seg')) l.classList.toggle('active', l.querySelector('input').checked);
+    });
+  }
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const { data, empty } = readForm(form, fields);
+    busy(form.querySelector('[type=submit]'), async () => {
+      // Never required: it only tells what is empty and asks.
+      if (empty.length) {
+        const ok = await dialog({
+          title: empty.length === fields.length ? '¿Guardar el formulario vacío?' : '¿Guardar con campos vacíos?',
+          message: `${empty.length === fields.length ? 'No llenaste ningún campo.' : `Quedaron sin llenar: ${empty.join(', ')}.`} ¿Deseas guardar así?`,
+          confirmText: 'Guardar así',
+          cancelText: 'Seguir llenando',
+        });
+        if (!ok) return;
+      }
+      await saveTurnForm(id, data);
+      toast('Formulario guardado', 'ok');
+      go(`/turns/${id}`, { replace: true });
+    });
+  });
+}
+
+// ---- A service's form fields (whoever has «Configurar Turnos») ----------------------------------------------------
+
+const FIELD_TYPES = [
+  ['text', 'Texto corto'],
+  ['long', 'Texto largo'],
+  ['number', 'Número'],
+  ['check_number', '«Se tomó» y un número'],
+  ['pressure', '«Se tomó» y presión (dos números)'],
+  ['choices', 'Opciones para marcar'],
+  ['yesno', 'Sí o no'],
+];
+
+const UNITS = ['°F', '°C', 'mmHg', 'mg/dL', 'mmol/L', 'lpm', '%', 'lb', 'kg', 'in', 'cm', 'rpm'];
+const round1 = (n) => Math.round(n * 10) / 10;
+/** How to turn a number from one unit into the other (null when they aren't a known pair). */
+function convertUnit(from, to) {
+  const k = `${from.toLowerCase()}>${to.toLowerCase()}`;
+  return {
+    '°f>°c': (n) => round1(((n - 32) * 5) / 9),
+    '°c>°f': (n) => round1((n * 9) / 5 + 32),
+    'mg/dl>mmol/l': (n) => round1(n / 18),
+    'mmol/l>mg/dl': (n) => Math.round(n * 18),
+    'lb>kg': (n) => round1(n / 2.2046),
+    'kg>lb': (n) => round1(n * 2.2046),
+    'in>cm': (n) => round1(n * 2.54),
+    'cm>in': (n) => round1(n / 2.54),
+  }[k] || null;
+}
+
+function fieldEditor(f, i, total) {
+  const numeric = ['number', 'check_number', 'pressure'].includes(f.type);
+  return html`<li class="card stack field-edit" data-field="${i}" data-key="${f.key || ''}">
+    <div class="field-edit-head">
+      <strong>${i + 1}.</strong>
+      <span class="field-edit-moves">
+        <button type="button" class="icon-btn" data-move="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">${icon('chevron', 18)}</button>
+        <button type="button" class="icon-btn" data-move="1" ${i === total - 1 ? 'disabled' : ''} aria-label="Bajar">${icon('chevron', 18)}</button>
+        <button type="button" class="icon-btn" data-remove aria-label="Quitar">${icon('trash', 18)}</button>
+      </span>
+    </div>
+    <label class="field"><span>Nombre del campo</span><input data-label maxlength="60" value="${f.label || ''}" placeholder="Ej. Peso"></label>
+    <label class="field"><span>Tipo</span><select data-type>${FIELD_TYPES.map(([v, l]) => html`<option value="${v}" ${f.type === v ? 'selected' : ''}>${l}</option>`)}</select></label>
+    <label class="field" ${numeric ? '' : 'hidden'} data-unit-field><span>Unidad <em class="optional">opcional</em></span>
+      <input data-unit maxlength="12" value="${f.unit || ''}" placeholder="Ej. °F, °C, mg/dL" list="units" autocomplete="off"></label>
+    <div class="field" ${numeric ? '' : 'hidden'} data-range-field>
+      <span>Lo normal <em class="optional">opcional</em></span>
+      <div class="range-row"><span data-range-label>${f.type === 'pressure' ? 'Sistólica' : 'De'}</span>
+        <input data-low type="number" step="any" value="${f.low ?? ''}" aria-label="Desde"><span>a</span>
+        <input data-high type="number" step="any" value="${f.high ?? ''}" aria-label="Hasta"></div>
+      <div class="range-row" ${f.type === 'pressure' ? '' : 'hidden'} data-range2><span>Diastólica</span>
+        <input data-low2 type="number" step="any" value="${f.low2 ?? ''}" aria-label="Diastólica desde"><span>a</span>
+        <input data-high2 type="number" step="any" value="${f.high2 ?? ''}" aria-label="Diastólica hasta"></div>
+      <p class="hint">Si un valor sale de aquí, al anotarlo sale un aviso de «alta» o «baja». Se acepta igual.</p>
+    </div>
+    <label class="field" ${f.type === 'choices' ? '' : 'hidden'} data-options-field><span>Opciones <em class="optional">una por línea</em></span>
+      <textarea data-options rows="4" maxlength="900">${(f.options || []).join('\n')}</textarea></label>
+  </li>`;
+}
+
+/** #/services/:id/form — the fields of a service's form: add, change, order or remove them at any time. */
+export async function serviceFormFieldsView(ctx) {
+  const { el, params, setTitle } = ctx;
+  const id = Number(params[0]);
+  const s = (await servicesOverview()).find((x) => x.id === id);
+  if (!s) throw new Error('No se encontró el servicio.');
+  setTitle(`Formulario · ${s.name}`);
+  let fields = (s.form_fields || []).map((f) => ({ ...f }));
+
+  // What the screen says now, before redrawing it.
+  const collect = () => {
+    fields = [...el.querySelectorAll('[data-field]')].map((li) => {
+      const type = $('[data-type]', li).value;
+      return {
+        key: li.dataset.key || undefined,
+        label: $('[data-label]', li).value.trim(),
+        type,
+        unit: $('[data-unit]', li).value.trim() || undefined,
+        ...Object.fromEntries(['low', 'high', 'low2', 'high2']
+          .map((k) => [k, $(`[data-${k}]`, li).value.trim()])
+          .filter(([k, x]) => x !== '' && (type === 'pressure' || !k.endsWith('2')))
+          .map(([k, x]) => [k, Number(x)])),
+        options: type === 'choices' ? $('[data-options]', li).value.split('\n').map((x) => x.trim()).filter(Boolean) : undefined,
+      };
+    });
+  };
+  const render = () => {
+    el.innerHTML = String(html`<div class="stack">
+      <p class="hint">Lo que ${s.name} anota en cada turno. Nunca es obligatorio: al guardar se le dice qué quedó vacío. Los
+        cambios valen para los turnos nuevos; lo que ya se anotó se queda como estaba.</p>
+      ${fields.length
+        ? html`<ol class="stack field-list">${fields.map((f, i) => fieldEditor(f, i, fields.length))}</ol>`
+        : html`<div class="card">${empty('file', 'Sin formulario', `${s.name} no anota nada aparte del turno. Añade un campo para empezar.`)}</div>`}
+      <datalist id="units">${UNITS.map((u) => html`<option value="${u}"></option>`)}</datalist>
+      <button type="button" class="btn btn-secondary btn-block" data-add>${icon('plus', 18)} Añadir un campo</button>
+      <button type="button" class="btn btn-primary btn-block btn-lg" data-save>${icon('check')} Guardar formulario</button>
+      <a class="btn btn-ghost btn-block" href="#/services/${id}">${icon('back', 18)} Volver al servicio</a>
+    </div>`);
+    for (const li of el.querySelectorAll('[data-field]')) {
+      const i = Number(li.dataset.field);
+      $('[data-type]', li).addEventListener('change', (e) => {
+        const type = e.target.value;
+        const numeric = ['number', 'check_number', 'pressure'].includes(type);
+        $('[data-unit-field]', li).hidden = !numeric;
+        $('[data-range-field]', li).hidden = !numeric;
+        $('[data-range2]', li).hidden = type !== 'pressure';
+        $('[data-range-label]', li).textContent = type === 'pressure' ? 'Sistólica' : 'De';
+        $('[data-options-field]', li).hidden = type !== 'choices';
+      });
+      // °F ⇄ °C and mg/dL ⇄ mmol/L: the normal range follows the unit.
+      const unit = $('[data-unit]', li);
+      let unitBefore = unit.value.trim();
+      unit.addEventListener('change', () => {
+        const conv = convertUnit(unitBefore, unit.value.trim());
+        if (conv) {
+          for (const k of ['low', 'high', 'low2', 'high2']) {
+            const input = $(`[data-${k}]`, li);
+            if (input.value !== '') input.value = conv(Number(input.value));
+          }
+        }
+        unitBefore = unit.value.trim();
+      });
+      for (const b of li.querySelectorAll('[data-move]')) {
+        b.addEventListener('click', () => {
+          collect();
+          const j = i + Number(b.dataset.move);
+          [fields[i], fields[j]] = [fields[j], fields[i]];
+          render();
+        });
+      }
+      $('[data-remove]', li).addEventListener('click', async () => {
+        collect();
+        const ok = await dialog({
+          title: `¿Quitar «${fields[i].label || 'este campo'}»?`,
+          message: 'Deja de salir en los turnos nuevos. Lo que ya se anotó en turnos anteriores se queda.',
+          confirmText: 'Quitar',
+          danger: true,
+        });
+        if (!ok) return;
+        fields.splice(i, 1);
+        render();
+      });
+    }
+    $('[data-add]', el).addEventListener('click', () => {
+      collect();
+      fields.push({ label: '', type: 'text' });
+      render();
+      el.querySelector(`[data-field="${fields.length - 1}"] [data-label]`)?.focus();
+    });
+    $('[data-save]', el).addEventListener('click', (e) =>
+      busy(e.currentTarget, async () => {
+        collect();
+        fields = await setServiceForm(id, fields);
+        toast('Formulario guardado', 'ok');
+        render();
+      }));
+  };
+  render();
+}
+
 // ---- The turn's chat: private to the service and whoever asked; nothing in it can be changed or deleted ----------------
 
 /** What is being written, so the screen updating every few seconds doesn't wipe it. */
@@ -989,8 +1374,9 @@ export async function turnDetailView(ctx) {
   let history = null;
 
   async function load() {
-    const [t, services, events, messages] = await Promise.all([
+    const [t, services, events, messages, form] = await Promise.all([
       getTurn(id), servicesOverview(), turnEvents(id).catch(() => []), turnMessages(id).catch(() => null),
+      turnForm(id).catch(() => null),
     ]);
     if (!isCurrent()) return;
     const service = services.find((s) => s.id === t.service_id) || { serves: false };
@@ -1027,6 +1413,7 @@ export async function turnDetailView(ctx) {
           ${steps(t)}
         </section>
         ${actions.map((a) => actionButton(a))}
+        ${formSection(t, service, form)}
         ${chatSection(t, service, messages)}
         ${changesSection(events)}
         ${service.serves && isSupport(t) && t.status === 'done'
@@ -1176,6 +1563,11 @@ export async function serviceFormView(ctx) {
             <label class="toggle"><input type="checkbox" name="active" ${s.active ? 'checked' : ''}>
               <span class="toggle-ui"></span><span>Activo: los maestros pueden pedir turnos</span></label>
           </section>`}
+      ${isNew
+        ? ''
+        : html`<a class="card link-card room-link" href="#/services/${s.id}/form">${icon('file')}<span>
+            <strong>Formulario del turno</strong>
+            <small>${s.form_fields?.length ? `${plural(s.form_fields.length, 'campo', 'campos')}: lo que ${s.name} anota en cada turno` : 'Sin formulario. Añade lo que se anota en cada turno (síntomas, signos vitales…)'}</small></span>${icon('chevron', 18)}</a>`}
       <button class="btn btn-primary btn-block btn-lg" type="submit">${icon('check')} Guardar</button>
     </form>`);
 
