@@ -957,6 +957,13 @@ export const advanceTurn = (id, step, value) => rpc('advance_turn', { p_id: id, 
 export const receiveSupportRequest = (id) => rpc('receive_support_request', { p_id: id });
 /** The students on their way back to class (any teacher may have them): name, group and since when only. */
 export const returningStudents = () => rpc('returning_students');
+/** The service's form of a turn (only the service and whoever sees every turn's detail), or null if not filled. */
+export const turnForm = (id) =>
+  run(sb.from('service_request_forms').select('*').eq('request_id', id).maybeSingle());
+/** Saves the form of a turn: { key: value }. Nothing is required. */
+export const saveTurnForm = (id, data) => rpc('save_turn_form', { p_id: id, p_data: data });
+/** The fields of a service's form (whoever has «Configurar Turnos»). */
+export const setServiceForm = (serviceId, fields) => rpc('set_service_form', { p_service: serviceId, p_fields: fields });
 /** A turn's private chat, oldest first (whoever may see it; nobody can change or delete a message). */
 export const turnMessages = (id) =>
   run(sb.from('service_request_messages').select('id, author_id, author_name, author_side, kind, body, created_at')
