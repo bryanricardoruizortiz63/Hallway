@@ -217,8 +217,13 @@ function renderShell(route, path) {
   document.getElementById('page-title').textContent = title;
   document.title = `${title ? `${title} · ` : ''}Hallway`;
   appRoot.querySelector('.topbar').classList.toggle('has-back', !!route.back);
-  for (const tab of appRoot.querySelectorAll('.tab')) {
-    const active = tab.dataset.match.split(',').some((m) => path === m || path.startsWith(m.endsWith('/') ? m : `${m}/`));
+  // The tab whose path matches best (/turns/panel/… is Datos, not Turnos).
+  const fit = (tab) => Math.max(0, ...tab.dataset.match.split(',')
+    .filter((m) => path === m || path.startsWith(m.endsWith('/') ? m : `${m}/`)).map((m) => m.length));
+  const tabs = [...appRoot.querySelectorAll('.tab')];
+  const best = Math.max(0, ...tabs.map(fit));
+  for (const tab of tabs) {
+    const active = best > 0 && fit(tab) === best;
     tab.classList.toggle('active', active);
     if (active) tab.setAttribute('aria-current', 'page');
     else tab.removeAttribute('aria-current');

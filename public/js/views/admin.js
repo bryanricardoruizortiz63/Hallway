@@ -1030,6 +1030,11 @@ const servicePanelLinks = (services) =>
 export async function dataView({ el, isCurrent }) {
   const user = state.me.user;
   if (!can(user, 'reports')) {
+    // One service: straight to its panel.
+    if (user.serves?.length === 1) {
+      go(`/turns/panel/${user.serves[0].id}`, { replace: true });
+      return;
+    }
     el.innerHTML = String(html`<div class="stack">
       <section class="card stack">
         <h2 class="card-title">${icon('chart')} Tu panel</h2>

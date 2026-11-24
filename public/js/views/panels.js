@@ -22,6 +22,10 @@ import {
   maintenanceBetween,
   servicesOverview,
   serviceTurns,
+  serviceDataPeople,
+  requestServiceData,
+  answerServiceData,
+  endServiceData,
 } from '../backend.js';
 import {
   $,
@@ -118,12 +122,14 @@ function byWeekday(list, dayOf, valueOf = () => 1) {
 }
 
 const localDay = (iso) => todayStr(new Date(iso));
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 function presets(today) {
   const thisMonth = `${today.slice(0, 8)}01`;
   const lastMonthEnd = addDays(thisMonth, -1);
   const year = schoolYearStart(today);
   return {
+    today: { label: 'Hoy', from: today, to: today },
     month: { label: 'Este mes', from: thisMonth, to: today },
     last: { label: 'Mes pasado', from: `${lastMonthEnd.slice(0, 8)}01`, to: lastMonthEnd },
     year: { label: 'Año escolar', from: year, to: today },
@@ -134,7 +140,8 @@ function presets(today) {
 /** The period picker of every panel; returns a function that gives the current period. */
 function rangePicker(slot, initial, onChange) {
   const list = presets(todayStr());
-  let range = { ...list[initial] };
+  // A preset's key, or a period of its own ({ from, to }, e.g. the day a notice opens).
+  let range = typeof initial === 'string' ? { ...list[initial] } : { ...initial };
   slot.innerHTML = String(html`<section class="card stack">
     <div class="quick">${Object.entries(list).map(
       ([key, p]) => html`<button type="button" class="chip-btn ${key === initial ? 'active' : ''}" data-preset="${key}">${p.label}</button>`,
@@ -249,16 +256,93 @@ export async function servicePanelView(ctx) {
   // Soporte IT and other help for the staff: no students; who asked, where, and what was done.
   const support = service.mode === 'support';
   const today = todayStr();
+  let all = [];
   let rows = [];
   let downloaded = false;
+  // From «📊 Tu día en …»: that day.
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(ctx.query?.get('day') || '') ? ctx.query.get('day') : null;
+  const people = await serviceDataPeople(id).catch(() => ({ all: true, colleagues: [] }));
+  const filters = { from: '', to: '', grade: '', who: '' };
+  const groups = schoolCalendar(state.me.school).groups;
 
   el.innerHTML = String(html`<div class="stack">
     <div data-range></div>
+    <section class="card stack panel-filters" data-filters>
+      <div class="grid2">
+        <label class="field"><span>Desde la hora <em class="optional">opcional</em></span><input type="time" data-hour-from></label>
+        <label class="field"><span>Hasta la hora <em class="optional">opcional</em></span><input type="time" data-hour-to></label>
+      </div>
+      ${support || !groups.length ? '' : html`<label class="field"><span>Grado o grupo</span><select data-grade>
+        <option value="">Todos</option>
+        ${[...new Set(groups.map(gradeOf))].map((g) => {
+          const list = groups.filter((x) => gradeOf(x) === g);
+          return list.length === 1
+            ? html`<option value="group:${list[0]}">${list[0]}</option>`
+            : html`<optgroup label="${gradeName(g)}"><option value="grade:${g}">Todo ${gradeName(g)}</option>${list.map((x) => html`<option value="group:${x}">${x}</option>`)}</optgroup>`;
+        })}
+      </select></label>`}
+      <label class="field" data-who-field hidden><span>Quién atendió</span><select data-who></select></label>
+      <p class="hint" data-filter-sum hidden></p>
+    </section>
     <div class="stack" data-body></div>
-    <p class="hint">Ven este panel quien atiende ${service.name} y la dirección. Ni el panel ni el Excel incluyen las notas de los maestros.</p>
+    <div data-people></div>
+    <p class="hint">${people.all
+      ? `Ves todos los turnos de ${service.name}. Ni el panel ni el Excel incluyen las notas de los maestros.`
+      : `Ves los turnos que atendiste tú${people.colleagues.some((c) => c.mine?.status === 'approved') ? ' y los de quien te dio permiso' : ''}. Ni el panel ni el Excel incluyen las notas de los maestros.`}</p>
   </div>`);
   const body = $('[data-body]', el);
-  const range = rangePicker($('[data-range]', el), 'month', () => load());
+  const range = rangePicker($('[data-range]', el), day ? { from: day, to: day } : 'month', () => load());
+
+  /** The period's turns, with the hours, the grade or group and who attended chosen here. */
+  // The school's clock (Puerto Rico), like the rest of the panel, whatever the device's time zone.
+  const minutesOfDay = (iso) => {
+    const [h, m] = new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'America/Puerto_Rico', hour: '2-digit', minute: '2-digit', hour12: false }).split(':');
+    return (Number(h) % 24) * 60 + Number(m);
+  };
+  const hhmm = (v) => (v ? Number(v.slice(0, 2)) * 60 + Number(v.slice(3, 5)) : null);
+  const applyFilters = () => {
+    const a = hhmm(filters.from);
+    const b = hhmm(filters.to);
+    rows = all.filter((t) => {
+      const m = minutesOfDay(t.created_at);
+      if (a !== null && m < a) return false;
+      if (b !== null && m > b) return false;
+      if (filters.grade && !inFilter(filters.grade, t.group_name)) return false;
+      if (filters.who && (t.handled_by || '') !== filters.who) return false;
+      return true;
+    });
+    const sum = $('[data-filter-sum]', el);
+    const on = filters.from || filters.to || filters.grade || filters.who;
+    sum.hidden = !on;
+    if (on) {
+      const done = rows.filter((t) => t.status !== 'cancelled');
+      const students = new Set(done.map((t) => t.student_key)).size;
+      sum.textContent = [
+        filters.from || filters.to ? `${filters.from ? `De ${fmtTime(filters.from)}` : 'Hasta'}${filters.from && filters.to ? ' a ' : ' '}${filters.to ? fmtTime(filters.to) : ''}`.trim() : null,
+        filters.grade ? filterLabel(filters.grade) : null,
+        filters.who ? all.find((t) => t.handled_by === filters.who)?.handled_by_name : null,
+      ].filter(Boolean).join(' · ') + `: ${support ? plural(done.length, 'pedido', 'pedidos') : `${plural(students, 'estudiante atendido', 'estudiantes atendidos')} (${plural(done.length, 'turno', 'turnos')})`}.`;
+    }
+  };
+  const fillWho = () => {
+    const names = new Map(all.filter((t) => t.handled_by).map((t) => [t.handled_by, t.handled_by_name]));
+    $('[data-who-field]', el).hidden = names.size < 2;
+    const select = $('[data-who]', el);
+    if (!names.has(filters.who)) filters.who = '';
+    select.innerHTML = String(html`<option value="">Todos</option>${[...names].sort((x, y) => x[1].localeCompare(y[1], 'es'))
+      .map(([uid, name]) => html`<option value="${uid}" ${uid === filters.who ? 'selected' : ''}>${uid === state.me.user.id ? `${name} (yo)` : name}</option>`)}`);
+  };
+  const refilter = () => {
+    applyFilters();
+    downloaded = false;
+    body.innerHTML = String(render());
+    sizeBars(body);
+    bind();
+  };
+  $('[data-hour-from]', el).addEventListener('change', (e) => { filters.from = e.target.value; refilter(); });
+  $('[data-hour-to]', el).addEventListener('change', (e) => { filters.to = e.target.value; refilter(); });
+  $('[data-grade]', el)?.addEventListener('change', (e) => { filters.grade = e.target.value; refilter(); });
+  $('[data-who]', el).addEventListener('change', (e) => { filters.who = e.target.value; refilter(); });
 
   const walkIn = (t) => visit && !t.called_at && !t.sent_at && !!t.arrived_at;
   const waitOf = (t) => (walkIn(t) ? null : minutesBetween(t.created_at, t.called_at || t.on_the_way_at || t.arrived_at));
@@ -476,7 +560,9 @@ export async function servicePanelView(ctx) {
       ${bars('Estudiantes con más turnos', 'users', topStudents)}
       ${bars('Por día de la semana', 'calendar', byWeekday(turns, (t) => localDay(t.created_at)))}
       ${bars('Por hora', 'clock', hours, { note: 'Hora en que se pidió el turno.' })}
+      ${bars('Por grado', 'school', countBy(turns, (t) => (t.group_name ? gradeName(gradeOf(t.group_name)) : 'Sin grupo')))}
       ${bars('Por grupo', 'grid', countBy(turns, (t) => t.group_name).slice(0, 12))}
+      ${new Set(turns.map((t) => t.handled_by).filter(Boolean)).size > 1 ? bars('Quién atendió', 'user', countBy(turns, (t) => t.handled_by_name || 'Nadie')) : ''}
       ${bars('Gravedad', 'alert', [1, 2, 3, 4].map((n) => ({ label: SEVERITY[n].label, value: count((t) => t.severity === n) })))}
       ${closeCard}`;
   }
@@ -516,13 +602,95 @@ export async function servicePanelView(ctx) {
     const r = range();
     downloaded = false;
     await fill(body, isCurrent, async () => {
-      rows = await serviceTurns(id, r.from, r.to);
+      all = await serviceTurns(id, r.from, r.to);
+      fillWho();
+      applyFilters();
       return render();
     });
     bind();
   }
 
   await load();
+  peopleCard($('[data-people]', el), service, people, async () => {
+    Object.assign(people, await serviceDataPeople(id));
+    await load();
+  });
+}
+
+// ---- Compañeros: who sees whose data in a service ---------------------------------------------------------------
+
+/** Ask a colleague to see the turns they attended, answer them, or end a permission. */
+function peopleCard(slot, service, people, reload) {
+  if (people.all || !people.serves || !people.colleagues.length) {
+    slot.innerHTML = '';
+    return;
+  }
+  const row = (c) => {
+    const asked = c.theirs?.status === 'pending';
+    const theySee = c.theirs?.status === 'approved';
+    const mine = c.mine?.status;
+    return html`<li class="colleague-row" data-person="${c.id}">
+      <div class="colleague-main">
+        <strong>${c.name}</strong>
+        <small>${mine === 'approved' ? 'Ves sus datos' : mine === 'pending' ? 'Le pediste ver sus datos' : 'No ves sus datos'}${theySee ? ' · Ve tus datos' : ''}</small>
+      </div>
+      ${asked
+        ? html`<div class="colleague-ask">
+            <p><strong>${c.name}</strong> pide ver tus datos${c.theirs.reason ? html`: «${c.theirs.reason}»` : ''}.</p>
+            <div class="quick"><button type="button" class="btn btn-primary btn-sm" data-allow="${c.theirs.id}">Permitir</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-deny="${c.theirs.id}">No permitir</button></div>
+          </div>`
+        : ''}
+      <div class="quick">
+        ${mine === 'approved' ? html`<button type="button" class="btn btn-ghost btn-sm" data-end="${c.mine.id}">Dejar de ver</button>` : ''}
+        ${mine === 'pending' ? html`<button type="button" class="btn btn-ghost btn-sm" data-end="${c.mine.id}">Retirar la solicitud</button>` : ''}
+        ${!mine ? html`<button type="button" class="btn btn-secondary btn-sm" data-ask="${c.id}">${icon('shield', 16)} Pedir ver sus datos</button>` : ''}
+        ${theySee ? html`<button type="button" class="btn btn-ghost-danger btn-sm" data-end="${c.theirs.id}">Quitarle el permiso</button>` : ''}
+      </div>
+    </li>`;
+  };
+  slot.innerHTML = String(html`<section class="card stack colleague-card">
+    <h2 class="card-title">${icon('users')} Compañeros de ${service.name}</h2>
+    <p class="hint">Cada quien ve los turnos que atendió. Si necesitas los de un compañero, pídeselo: le llega un aviso y él decide.
+      Cualquiera de los dos puede terminarlo cuando quiera.</p>
+    <ul class="colleague-list">${people.colleagues.map(row)}</ul>
+  </section>`);
+  const act = (sel, fn) => {
+    for (const b of slot.querySelectorAll(sel)) b.addEventListener('click', (e) => busy(e.currentTarget, () => fn(b)));
+  };
+  act('[data-ask]', async (b) => {
+    const c = people.colleagues.find((x) => x.id === b.dataset.ask);
+    const v = await dialog({
+      title: `¿Pedirle a ${c.name} ver sus datos?`,
+      message: `Verías los turnos de ${service.name} que atendió ${c.name}. Le llega un aviso y decide.`,
+      body: html`<label class="field"><span>¿Para qué lo necesitas?</span>
+        <textarea name="reason" rows="2" maxlength="300" placeholder="Ej. Darle seguimiento a un estudiante que atendió ayer"></textarea></label>`,
+      confirmText: 'Pedir',
+      collect: true,
+      onSubmit: (x) => {
+        if (!x.reason.trim()) throw new Error('Escribe para qué lo necesitas.');
+        return requestServiceData(service.id, c.id, x.reason.trim());
+      },
+    });
+    if (!v) return;
+    toast(`Le avisamos a ${c.name}.`, 'ok');
+    await reload();
+  });
+  act('[data-allow]', async (b) => {
+    await answerServiceData(Number(b.dataset.allow), true);
+    toast('Permitido. Puedes quitarlo cuando quieras.', 'ok');
+    await reload();
+  });
+  act('[data-deny]', async (b) => {
+    await answerServiceData(Number(b.dataset.deny), false);
+    toast('No permitido.', 'ok');
+    await reload();
+  });
+  act('[data-end]', async (b) => {
+    await endServiceData(Number(b.dataset.end));
+    toast('Listo.', 'ok');
+    await reload();
+  });
 }
 
 // ---- Mantenimiento ---------------------------------------------------------------------------

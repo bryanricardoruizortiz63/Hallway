@@ -6429,3 +6429,55 @@ button.live-hero:focus-visible {
 .range-row + .range-row {
   margin-top: 8px;
 }
+
+/* ---- A service's panel: filters and colleagues ---- */
+.colleague-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.colleague-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.colleague-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.colleague-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.colleague-main small {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.colleague-ask {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+}
+
+.colleague-ask p {
+  margin: 0 0 8px;
+}
+
+[data-filter-sum] {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  font-weight: 700;
+}

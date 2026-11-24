@@ -23,6 +23,9 @@ export function navItems(user) {
   const rooms = { path: '/rooms', icon: 'room', label: 'Reservas', match: ['/rooms'] };
   // The live board (dirección and Secretaría), one tap away.
   const live = { path: '/live', icon: 'live', label: 'En vivo', match: ['/live'] };
+  // Enfermería, Trabajo Social…: their data one tap away (the dirección has it in Más).
+  const data = { path: '/data', icon: 'chart', label: 'Datos', match: ['/data', '/turns/panel'] };
+  const serviceData = !!user.serves?.length && !can(user, 'reports');
   // What the platform turned off for this school doesn't get a tab.
   const on = (key) => moduleOn(state.me?.school, key);
   const turnsOn = on('turns') || on('support') || on('maintenance');
@@ -32,6 +35,7 @@ export function navItems(user) {
     ...(can(user, 'live') && on('live') ? [live] : []),
     ...(fixes ? [on('maintenance') && maintenance, on('alerts') && alerts] : [on('alerts') && alerts, turnsOn && turns]).filter(Boolean),
     ...(on('rooms') ? [rooms] : []),
+    ...(serviceData && turnsOn ? [data] : []),
   ];
   const moreMatch = [
     '/more', '/guide', '/notifications', '/message/', '/profile', '/calendar', '/employees', '/settings', '/roles',
