@@ -1241,7 +1241,13 @@ export async function downloadXlsx(filename, sheets, seal = {}) {
   } catch (err) {
     console.warn('No se pudo sellar el Excel', err);
   }
-  download(filename, buildXlsx(all));
+  // Like the PDF: «Tu documento está listo», with the PIN to open it, optional (off to begin with).
+  const xlsx = buildXlsx(all);
+  xlsx.protect = async (pin) => {
+    const { lockXlsx } = await import('./xlsxcrypt.js');
+    return new Blob([await lockXlsx(new Uint8Array(await xlsx.arrayBuffer()), pin)], { type: xlsx.type });
+  };
+  await docs.offerFile(xlsx, filename);
 }
 
 // ---- Datos y reportes ------------------------------------------------------------
