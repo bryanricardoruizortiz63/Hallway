@@ -487,7 +487,7 @@ export async function docPdf(doc, s) {
  * «Tu documento está listo»: buttons to share it (WhatsApp, email, Archivos, Imprimir…) or download it. The tap on the
  * button is what lets the phone open «Compartir»; doing it after waiting for the server doesn't always work.
  *
- * A PDF can go locked with a PIN: always optional (unchecked to begin with). The locked file is made while the PIN is
+ * A PDF or an Excel can go locked with a PIN: always optional (unchecked to begin with). The locked file is made while the PIN is
  * typed, so the buttons still share or download it on the same tap. The PIN goes nowhere: not to Hallway, not stored.
  */
 export async function offerFile(blob, name) {
