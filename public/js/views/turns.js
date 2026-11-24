@@ -24,6 +24,7 @@ import {
   setMyServiceStatus,
   turnEvents,
   turnHistory,
+  myCoveredGroups,
 } from '../backend.js';
 import { $, busy, can, dialog, moduleOn, schoolIcon, serviceOn, fmtDate, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
@@ -119,7 +120,8 @@ export const isLate = (t) =>
 export const askedBack = (t) => t.status === 'returning' && !t.return_late_at && (!!t.return_check_at || pastDue(t));
 
 /** The teacher who asked, has the student now, or teaches the group. */
-const teacherSide = (t, me) => t.created_by === me.id || t.teacher_id === me.id || (me.groups || []).includes(t.group_name);
+const teacherSide = (t, me) =>
+  t.created_by === me.id || t.teacher_id === me.id || [...(me.groups || []), ...(me.covering || [])].includes(t.group_name);
 
 export function statusTag(t) {
   if (askedBack(t)) return { label: '¿Ya llegó?', cls: 'tag-warn' };
@@ -740,9 +742,11 @@ export async function turnsView(ctx) {
   };
 
   async function load() {
-    const [services, turns, maintenance, returning] = await Promise.all([
+    const [services, turns, maintenance, returning, covering] = await Promise.all([
       servicesOverview(), listTurns(), myOpenMaintenance(me.id), returningStudents().then((x) => x || [], () => []),
+      myCoveredGroups(),
     ]);
+    me.covering = covering;
     if (!isCurrent()) return;
     // Services whose module the platform turned off (Soporte IT, Enfermería…) don't show.
     data = { services: services.filter((s) => serviceOn(state.me.school, s)), turns, maintenance, returning };
@@ -1402,10 +1406,11 @@ export async function turnDetailView(ctx) {
   let history = null;
 
   async function load() {
-    const [t, services, events, messages, form] = await Promise.all([
+    const [t, services, events, messages, form, covering] = await Promise.all([
       getTurn(id), servicesOverview(), turnEvents(id).catch(() => []), turnMessages(id).catch(() => null),
-      turnForm(id).catch(() => null),
+      turnForm(id).catch(() => null), myCoveredGroups(),
     ]);
+    me.covering = covering;
     if (!isCurrent()) return;
     const service = services.find((s) => s.id === t.service_id) || { serves: false };
     if (service.serves && !isSupport(t) && !history) history = await turnHistory(t).catch(() => []);
@@ -1664,7 +1669,7 @@ export async function returningDetailView(ctx) {
       </div>`);
       return;
     }
-    const mine = (me.groups || []).includes(x.group_name);
+    const mine = [...(me.groups || []), ...((await myCoveredGroups()) || [])].includes(x.group_name);
     el.innerHTML = String(html`
       <div class="stack">
         <section class="card stack alert-head ${x.late || x.asked ? 'is-urgent' : ''}">
