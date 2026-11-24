@@ -1443,6 +1443,13 @@ export const VIEWS = {
   'Llamado por': 'Called by',
   'Marcado por': 'Marked by',
   'Hora marcado': 'Time marked',
+  'Reponer el turno': 'Restore the turn',
+  '¿Reponer el turno?': 'Restore the turn?',
+  'Ej. Se canceló por error': 'E.g. It was cancelled by mistake',
+  'Turno repuesto: volvió a la fila': 'Turn restored: back in line',
+  'Repuso el turno cancelado': 'Restored the cancelled turn',
+  'Solo se reponen los turnos del mismo día.': 'Only turns from the same day can be restored.',
+  'Este turno no está cancelado.': 'This turn isn’t cancelled.',
 };
 
 /** Messages that come from the server (database and functions), word for word. */

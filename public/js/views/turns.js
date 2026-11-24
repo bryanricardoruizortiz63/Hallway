@@ -25,6 +25,7 @@ import {
   turnEvents,
   turnHistory,
   myCoveredGroups,
+  restoreTurn,
 } from '../backend.js';
 import { $, busy, can, dialog, moduleOn, schoolIcon, serviceOn, fmtDate, fmtDateTime, fmtTime, getSchoolRoles, html, timeAgo, toast, todayStr } from '../lib.js';
 import { icon } from '../icons.js';
@@ -118,6 +119,17 @@ export const isLate = (t) =>
 
 /** Time's up on the way back and nobody confirmed yet: «¿Ya llegó?». */
 export const askedBack = (t) => t.status === 'returning' && !t.return_late_at && (!!t.return_check_at || pastDue(t));
+
+/**
+ * «Reponer el turno»: a cancelled turn, the same day (or up to 7 days when the service's turns stay open), by whoever
+ * attends the service, asked for it or has the student. The server checks it again.
+ */
+function canRestore(t, service, me) {
+  if (t.status !== 'cancelled' || service.active === false) return false;
+  if (!(service.serves || t.created_by === me.id || t.teacher_id === me.id)) return false;
+  const sameDay = todayStr(new Date(t.created_at)) === todayStr();
+  return sameDay || (!!service.keep_open && Date.now() - new Date(t.closed_at || t.created_at) < 7 * 86400000);
+}
 
 /** The teacher who asked, has the student now, or teaches the group. */
 const teacherSide = (t, me) =>
@@ -1446,6 +1458,7 @@ export async function turnDetailView(ctx) {
           ${steps(t)}
         </section>
         ${actions.map((a) => actionButton(a))}
+        ${canRestore(t, service, me) ? html`<button type="button" class="btn btn-secondary btn-block" data-restore>${icon('refresh', 18)} Reponer el turno</button>` : ''}
         ${formSection(t, service, form)}
         ${chatSection(t, service, messages)}
         ${changesSection(events)}
@@ -1472,6 +1485,20 @@ export async function turnDetailView(ctx) {
       </div>`);
     bindSteps(el, [t], load);
     bindChat(el, t, load);
+    $('[data-restore]', el)?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      const v = await dialog({
+        title: '¿Reponer el turno?',
+        message: `${who(t)} vuelve a la fila de ${t.service_name} en su lugar. Queda en el historial del turno.`,
+        body: html`<label class="field"><span>¿Por qué? <em class="optional">opcional</em></span>
+          <textarea name="reason" rows="2" maxlength="300" placeholder="Ej. Se canceló por error"></textarea></label>`,
+        confirmText: 'Reponer el turno',
+        collect: true,
+      });
+      if (!v) return;
+      await restoreTurn(t.id, v.reason?.trim());
+      toast('Turno repuesto: volvió a la fila', 'ok');
+      await load();
+    }));
     $('[data-resolution]', el)?.addEventListener('click', (e) =>
       busy(e.currentTarget, async () => {
         const v = await askResolution(t, t.resolution || '');

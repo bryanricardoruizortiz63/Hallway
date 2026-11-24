@@ -1158,6 +1158,8 @@ export const setServiceMedication = (id, on) => rpc('set_service_medication', { 
 
 /** The groups this person covers right now (a substitute gets those groups' turns, as their teachers do). */
 export const myCoveredGroups = () => rpc('my_covered_groups').then((x) => x || [], () => []);
+/** «Reponer el turno»: a cancelled turn back in the line, in its place (see migration 096). */
+export const restoreTurn = (id, reason) => rpc('restore_turn', { p_id: id, p_reason: reason || null });
 
 /** For a service's panel: { all, serves, colleagues: [{ id, name, mine, theirs }] } (see migration 092). */
 export const serviceDataPeople = (serviceId) => rpc('service_data_people', { p_service: serviceId });
