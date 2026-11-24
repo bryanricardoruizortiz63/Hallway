@@ -34,6 +34,7 @@ import {
   busy,
   can,
   dialog,
+  fmtDate,
   fmtDateTime,
   fmtLongDate,
   fmtTime,
@@ -275,17 +276,12 @@ export async function servicePanelView(ctx) {
         <label class="field"><span>Hasta la hora <em class="optional">opcional</em></span><input type="time" data-hour-to></label>
       </div>
       ${support || !groups.length ? '' : html`<label class="field"><span>Grado o grupo</span><select data-grade>
-        <option value="">Todos</option>
-        ${[...new Set(groups.map(gradeOf))].map((g) => {
-          const list = groups.filter((x) => gradeOf(x) === g);
-          return list.length === 1
-            ? html`<option value="group:${list[0]}">${list[0]}</option>`
-            : html`<optgroup label="${gradeName(g)}"><option value="grade:${g}">Todo ${gradeName(g)}</option>${list.map((x) => html`<option value="group:${x}">${x}</option>`)}</optgroup>`;
-        })}
+        <option value="">Todos</option>${gradeOptions(groups)}
       </select></label>`}
       <label class="field" data-who-field hidden><span>Quién atendió</span><select data-who></select></label>
       <p class="hint" data-filter-sum hidden></p>
     </section>
+    ${support ? '' : html`<a class="btn btn-secondary btn-block" href="#/turns/panel/${id}/students">${icon('search', 18)} Buscar estudiantes atendidos</a>`}
     <div class="stack" data-body></div>
     <div data-people></div>
     <p class="hint">${people.all
@@ -696,6 +692,185 @@ function peopleCard(slot, service, people, reload) {
     await reload();
   });
 }
+
+// ---- Buscar estudiantes atendidos: who came, when and how many times ------------------------------------------
+
+/** Accents and letter case don't matter when searching a name. */
+const fold = (x) => String(x || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/**
+ * #/turns/panel/:id/students: the students a service attended in a period, found by name, grade or group and how
+ * many times they came; each one with every visit (day, time, reason, how it ended, who attended). The same turns as
+ * the panel: each person sees what they attended (and what a colleague let them see), the dirección sees everything.
+ */
+export async function serviceStudentsView(ctx) {
+  const { el, params, setTitle } = ctx;
+  const id = Number(params[0]);
+  const service = (await servicesOverview()).find((s) => s.id === id);
+  if (!service) throw new Error('No se encontró el servicio.');
+  if (!service.serves && !can(state.me.user, 'reports')) throw new Error('Solo quien atiende este servicio y la dirección ven su panel.');
+  if (service.mode === 'support') throw new Error(`${service.name} no atiende estudiantes.`);
+  setTitle(`Buscar en ${service.name}`);
+  const people = await serviceDataPeople(id).catch(() => ({ all: true, colleagues: [] }));
+  const groups = schoolCalendar(state.me.school).groups;
+  let all = [];
+  let students = [];
+  let shown = 50;
+  const open = new Set();
+
+  el.innerHTML = String(html`<div class="stack">
+    <div data-range></div>
+    <section class="card stack">
+      <label class="field"><span>Nombre del estudiante</span>
+        <input type="search" data-q placeholder="Ej. Carlos" autocomplete="off" spellcheck="false"></label>
+      <div class="grid2">
+        ${groups.length ? html`<label class="field"><span>Grado o grupo</span><select data-grade>
+          <option value="">Todos</option>${gradeOptions(groups)}</select></label>` : ''}
+        <label class="field"><span>Veces atendido</span><select data-min>
+          <option value="1">Todas</option><option value="2">2 o más</option><option value="3">3 o más</option>
+          <option value="5">5 o más</option><option value="10">10 o más</option></select></label>
+      </div>
+      <label class="field"><span>Ordenar por</span><select data-sort>
+        <option value="visits">Más veces atendido</option><option value="recent">Visita más reciente</option>
+        <option value="name">Nombre</option></select></label>
+    </section>
+    <div class="stack" data-results></div>
+    <p class="hint">${people.all
+      ? `Ves todos los estudiantes que atendió ${service.name}.`
+      : `Ves los estudiantes que atendiste tú${people.colleagues.some((c) => c.mine?.status === 'approved') ? ' y los de quien te dio permiso' : ''}.`}
+      Los turnos cancelados no cuentan como visitas.</p>
+  </div>`);
+  const results = $('[data-results]', el);
+  const range = rangePicker($('[data-range]', el), 'year', () => load());
+  const q = $('[data-q]', el);
+  const grade = $('[data-grade]', el);
+  const min = $('[data-min]', el);
+  const sort = $('[data-sort]', el);
+
+  /** The period's students: their visits (not cancelled), newest first. */
+  const group = () => {
+    const by = new Map();
+    for (const t of all) {
+      if (t.status === 'cancelled') continue;
+      const key = `${t.student_key}|${t.group_name}`;
+      const x = by.get(key) || { key, name: t.student_name, group: t.group_name, visits: [] };
+      x.visits.push(t);
+      by.set(key, x);
+    }
+    for (const x of by.values()) {
+      x.visits.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+      x.last = x.visits[0].created_at;
+      x.first = x.visits[x.visits.length - 1].created_at;
+      x.reasons = countBy(x.visits, (t) => t.reason || null);
+    }
+    return [...by.values()];
+  };
+
+  const visitRow = (t) => html`<li><a class="visit-row" href="#/turns/${t.id}">
+    <span class="visit-when"><strong>${fmtDate(localDay(t.created_at))}</strong><small>${clock(t.created_at)}</small></span>
+    <span class="visit-what">${reasonText(t) || 'Sin motivo'}<small>${[resultLabel(service, t), t.handled_by_name].filter(Boolean).join(' · ')}</small></span>
+    ${icon('chevron', 16)}</a></li>`;
+
+  const render = () => {
+    const words = fold(q.value).split(/\s+/).filter(Boolean);
+    const least = Number(min.value) || 1;
+    const list = students
+      .filter((x) => words.every((w) => fold(x.name).includes(w)))
+      .filter((x) => !grade?.value || inFilter(grade.value, x.group))
+      .filter((x) => x.visits.length >= least)
+      .sort(sort.value === 'name'
+        ? (a, b) => a.name.localeCompare(b.name, 'es')
+        : sort.value === 'recent'
+          ? (a, b) => (a.last < b.last ? 1 : -1)
+          : (a, b) => b.visits.length - a.visits.length || a.name.localeCompare(b.name, 'es'));
+    const visits = list.reduce((n, x) => n + x.visits.length, 0);
+    results.innerHTML = String(list.length
+      ? html`<div class="stats">
+          ${tile(list.length, list.length === 1 ? 'Estudiante' : 'Estudiantes')}
+          ${tile(visits, visits === 1 ? 'Visita' : 'Visitas')}
+          ${tile(round1(visits / list.length).toLocaleString('es'), 'Visitas por estudiante')}
+          ${tile(list.filter((x) => x.visits.length >= 3).length, 'Vinieron 3 veces o más')}
+        </div>
+        <button type="button" class="btn btn-secondary btn-block" data-export>${icon('download', 18)} Descargar (Excel o PDF)</button>
+        <ul class="student-hits">${list.slice(0, shown).map((x) => html`<li class="card student-hit ${open.has(x.key) ? 'is-open' : ''}">
+          <button type="button" class="student-hit-head" data-open="${x.key}" aria-expanded="${open.has(x.key)}">
+            <span class="student-hit-main"><strong>${x.name}</strong>
+              <small>${x.group} · ${x.visits.length === 1 ? 'Vino 1 vez' : `Vino ${x.visits.length} veces`} · última: ${fmtDate(localDay(x.last))}</small>
+              <span class="student-hit-tags">${x.reasons.slice(0, 3).map((r) => html`<span class="tag">${r.label}${r.value > 1 ? ` ×${r.value}` : ''}</span>`)}</span>
+            </span>
+            <span class="student-hit-count">${x.visits.length}</span>
+          </button>
+          ${open.has(x.key) ? html`<ol class="visit-list">${x.visits.map(visitRow)}</ol>` : ''}
+        </li>`)}</ul>
+        ${list.length > shown ? html`<button type="button" class="btn btn-ghost btn-block" data-more>Ver ${Math.min(50, list.length - shown)} más</button>` : ''}`
+      : empty('search', all.length ? 'Nadie con esa búsqueda' : 'Sin visitas en este período',
+        all.length ? 'Prueba con otro nombre, otro grupo o menos visitas.' : 'Elige otro período arriba.'));
+    for (const b of results.querySelectorAll('[data-open]')) {
+      b.addEventListener('click', () => {
+        if (open.has(b.dataset.open)) open.delete(b.dataset.open);
+        else open.add(b.dataset.open);
+        render();
+      });
+    }
+    $('[data-more]', results)?.addEventListener('click', () => {
+      shown += 50;
+      render();
+    });
+    $('[data-export]', results)?.addEventListener('click', (e) => busy(e.currentTarget, () => exportList(list)));
+  };
+
+  function exportList(list) {
+    const r = range();
+    const filters = [q.value.trim() ? `Nombre: ${q.value.trim()}` : null, grade?.value ? filterLabel(grade.value) : null,
+      Number(min.value) > 1 ? `${min.value} visitas o más` : null].filter(Boolean).join(' · ');
+    return downloadXlsx(`${slug(service.name)}_estudiantes_${r.from}_${r.to}.xlsx`, [
+      {
+        name: 'Estudiantes',
+        columns: [
+          { header: 'Estudiante', width: 26 }, { header: 'Grupo', width: 8 }, { header: 'Visitas', width: 8 },
+          { header: 'Primera visita', width: 13 }, { header: 'Última visita', width: 13 }, { header: 'Motivos', width: 44, wrap: true },
+        ],
+        rows: list.map((x) => [x.name, x.group, x.visits.length, xDate(localDay(x.first)), xDate(localDay(x.last)),
+          x.reasons.map((m) => (m.value > 1 ? `${m.label} (${m.value})` : m.label)).join(', ')]),
+      },
+      {
+        name: 'Visitas',
+        columns: [
+          { header: 'Estudiante', width: 26 }, { header: 'Grupo', width: 8 }, { header: 'Fecha', width: 11 },
+          { header: 'Hora', width: 11 }, { header: 'Motivo', width: 30, wrap: true }, { header: 'Resultado', width: 20 },
+          { header: 'Atendió', width: 22 },
+        ],
+        rows: list.flatMap((x) => x.visits.map((t) => [x.name, x.group, xDate(localDay(t.created_at)), clock(t.created_at),
+          reasonText(t), resultLabel(service, t), t.handled_by_name])),
+      },
+    ], { title: `Estudiantes atendidos en ${service.name}`, details: [`${fmtLongDate(r.from)} – ${fmtLongDate(r.to)}`, filters].filter(Boolean).join(' · ') });
+  }
+
+  async function load() {
+    const r = range();
+    results.innerHTML = String(html`<div class="loading">${icon('search', 28)}</div>`);
+    all = await serviceTurns(id, r.from, r.to);
+    students = group();
+    shown = 50;
+    render();
+  }
+  let typing;
+  q.addEventListener('input', () => {
+    clearTimeout(typing);
+    typing = setTimeout(() => {
+      shown = 50;
+      render();
+    }, 150);
+  });
+  for (const x of [grade, min, sort]) x?.addEventListener('change', () => {
+    shown = 50;
+    render();
+  });
+  await load();
+}
+
+/** How a turn ended, short: «Regresó al salón», «Referido»… */
+const resultLabel = (_service, t) => (t.status === 'cancelled' ? closedText(t) : OUTCOMES[t.outcome] || (t.status === 'done' ? 'Terminado' : 'En curso'));
 
 // ---- Mantenimiento ---------------------------------------------------------------------------
 
@@ -1170,6 +1345,14 @@ function store(key, value) {
 const gradeOf = (g) => (g.includes('-') ? g.slice(0, g.lastIndexOf('-')) : g);
 /** "9.º grado", "Kínder", "Pre-kínder". */
 const gradeName = (g) => (/^\d+$/.test(g) ? `${g}.º grado` : { K: 'Kínder', 'Pre-K': 'Pre-kínder' }[g] || g);
+
+/** Each grade («Todo 9.º grado») with its groups, as <option>s; a grade of one group is just the group. */
+const gradeOptions = (groups) => html`${[...new Set(groups.map(gradeOf))].map((g) => {
+  const list = groups.filter((x) => gradeOf(x) === g);
+  return list.length === 1
+    ? html`<option value="group:${list[0]}">${list[0]}</option>`
+    : html`<optgroup label="${gradeName(g)}"><option value="grade:${g}">Todo ${gradeName(g)}</option>${list.map((x) => html`<option value="group:${x}">${x}</option>`)}</optgroup>`;
+})}`;
 
 /** The grade ("grade:9") or group ("group:9-B") chosen on this device, if the school still has it; '' is everyone. */
 function liveFilter() {
