@@ -106,6 +106,7 @@ export const NOTICE_PATTERNS = [
   [/^Ausencia modificada: (.+)$/, 'Absence changed: $1'],
   [/^(.+) registró tu ausencia para (.+)\.$/, '$1 recorded your absence for $2.'],
   [/^(.+) la cambió: (.+)$/, (who, what) => `${who} changed it: ${what}`],
+  [/^Confirmada por (.+) al asignar quién te cubre\.$/, 'Confirmed by $1 when assigning who covers you.'],
   [/^Confirmada por (.+)\.$/, 'Confirmed by $1.'],
   [/^por (.+)$/, 'by $1'],
   [/^(.+) \(por (.+)\)$/, (what, who) => `${what} (by ${who})`],

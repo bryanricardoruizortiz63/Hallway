@@ -2209,4 +2209,5 @@ export const SERVER = {
   'según su rol': 'by their role',
   'Si además tiene otro puesto (por ejemplo, Directora y Admin).': 'If they also have another post (for example, Principal and Admin).',
   'puede hacer todo.': 'can do everything.',
+  'La ausencia quedó como recibida.': 'The absence is now marked as received.',
 };
