@@ -788,7 +788,7 @@ function bindCoverage(form, a, employees, reload) {
       },
     });
     if (!reason) return;
-    toast(`Guardado: nadie cubrirá (${NO_COVER[reason].label.toLowerCase()}).`, 'ok');
+    toast(`Guardado: nadie cubrirá (${NO_COVER[reason].label.toLowerCase()}).${a.status === 'pending' && a.user_id !== state.me.user.id && can(state.me.user, 'absences') ? ' La ausencia quedó como recibida.' : ''}`, 'ok');
     await reload();
   });
   form.closest('[data-coverage-card]')?.querySelector('[data-no-cover-undo]')?.addEventListener('click', (e) =>
@@ -843,12 +843,15 @@ function bindCoverage(form, a, employees, reload) {
     const told = [...new Set(covers.filter((c) => c.substituteId).map((c) => c.label))];
     busy(form.querySelector('[type=submit]'), async () => {
       await setCovers(a.id, covers);
+      // Whoever confirms absences and puts someone to cover it also receives it (migration 088).
+      const received = covers.length && a.status === 'pending' && a.user_id !== state.me.user.id && can(state.me.user, 'absences')
+        ? ' La ausencia quedó como recibida.' : '';
       toast(
-        !covers.length
+        (!covers.length
           ? 'Cobertura quitada'
           : told.length
             ? `Cobertura guardada. ${told.length === 1 ? 'Le avisamos' : 'Les avisamos'} a ${told.join(' y ')}.`
-            : 'Cobertura guardada',
+            : 'Cobertura guardada') + received,
         'ok',
       );
       await reload();
