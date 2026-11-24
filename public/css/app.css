@@ -6481,3 +6481,40 @@ button.live-hero:focus-visible {
   color: var(--primary-text);
   font-weight: 700;
 }
+
+/* ---- «Tu documento está listo»: the optional PIN ---- */
+.pin-lock {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.pin-lock-box {
+  margin-top: 10px;
+}
+
+.pin-lock-box[hidden] {
+  display: none;
+}
+
+.pin-lock-box input[data-pin] {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pin-lock-box .hint {
+  margin: 0;
+}
+
+[data-pin-state].is-ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+a.btn.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

@@ -2310,4 +2310,13 @@ export const SERVER = {
   'Listo.': 'Done.',
   'Escribe para qué lo necesitas.': 'Write what you need it for.',
   'Cada quien ve los turnos que atendió. Si necesitas los de un compañero, pídeselo: le llega un aviso y él decide. Cualquiera de los dos puede terminarlo cuando quiera.': 'Each person sees the turns they attended. If you need a colleague’s, ask them: they get a notice and decide. Either of you can end it whenever you want.',
+  'Protegerlo con un PIN': 'Protect it with a PIN',
+  'Para abrirlo pedirá el PIN, en cualquier lugar: correo, WhatsApp, la computadora o el teléfono.': 'It will ask for the PIN to open it, anywhere: email, WhatsApp, the computer or the phone.',
+  'PIN para abrirlo': 'PIN to open it',
+  'De 4 a 12 números': '4 to 12 digits',
+  'Escribe de 4 a 12 números.': 'Type 4 to 12 digits.',
+  'Hallway no guarda el PIN. Si se olvida, nadie puede abrir ese archivo: descárgalo otra vez.': 'Hallway doesn’t keep the PIN. If it’s forgotten, nobody can open that file: download it again.',
+  'Protegiendo…': 'Protecting…',
+  'Listo: pedirá este PIN para abrirlo.': 'Done: it will ask for this PIN to open it.',
+  'No se pudo proteger en este navegador. Puedes descargarlo sin PIN.': 'It couldn’t be protected in this browser. You can download it without a PIN.',
 };

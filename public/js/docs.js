@@ -12,6 +12,7 @@ import { sealDocument } from './backend.js';
 import { CATEGORIES, dialog, fmtDate, fmtDateTime, fmtLongDate, fmtTime, html } from './lib.js';
 import { t } from './i18n.js';
 import { appIcon } from './branding.js';
+import { pdfLock } from './pdfcrypt.js';
 import { state } from './store.js';
 
 /** The page that checks a code (it works without an account). */
@@ -364,10 +365,21 @@ async function docPages(doc, s) {
   return pages;
 }
 
-/** A PDF file made of the pages (each one a JPEG picture of a Letter page). */
+/**
+ * A PDF file made of the pages (each one a JPEG picture of a Letter page). The file also carries `protect(pin)`: the
+ * same PDF locked with a PIN (see pdfcrypt.js), made only if the person asks for it.
+ */
 async function pdfOf(pages, title) {
   const jpegs = await Promise.all(pages.map((c) => new Promise((resolve, reject) => c.toBlob(
     (b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a))) : reject(new Error('No se pudo crear el PDF.'))), 'image/jpeg', 0.9))));
+  const sizes = pages.map((c) => [c.width, c.height]);
+  const blob = await pdfFile(sizes, jpegs, title, null);
+  blob.protect = async (pin) => pdfFile(sizes, jpegs, title, await pdfLock(pin));
+  return blob;
+}
+
+/** Writes the PDF; with a lock, every stream and string goes encrypted and the trailer points to /Encrypt. */
+async function pdfFile(sizes, jpegs, title, lock) {
   const enc = new TextEncoder();
   const parts = [];
   const offsets = [];
@@ -383,32 +395,44 @@ async function pdfOf(pages, title) {
     write();
     push('\nendobj\n');
   };
-  const n = pages.length;
-  // 1 catalog, 2 pages, 3 info; each page: page, contents and picture.
+  const stream = (dict, bytes) => {
+    push(`<< ${dict} /Length ${bytes.length} >>\nstream\n`);
+    push(bytes);
+    push('\nendstream');
+  };
+  const n = sizes.length;
+  // 1 catalog, 2 pages, 3 info; each page: page, contents and picture; then the lock.
   const ids = (i) => [4 + i * 3, 5 + i * 3, 6 + i * 3];
-  const pdfText = (str) => `(${String(str).replace(/[^\x20-\x7e]/g, '').replace(/([()\\])/g, '\\$1')})`;
-  push('%PDF-1.4\n%âãÏÓ\n');
-  object(1, () => push('<< /Type /Catalog /Pages 2 0 R >>'));
-  object(2, () => push(`<< /Type /Pages /Kids [${pages.map((_, i) => `${ids(i)[0]} 0 R`).join(' ')}] /Count ${n} >>`));
-  object(3, () => push(`<< /Title ${pdfText(title)} /Producer (Hallway) >>`));
-  jpegs.forEach((jpg, i) => {
-    const [page, contents, image] = ids(i);
-    const wide = pages[i].width > pages[i].height;
-    const [pw, ph] = wide ? [792, 612] : [612, 792];
-    object(page, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${image} 0 R >> >> /Contents ${contents} 0 R >>`));
-    const draw = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
-    object(contents, () => push(`<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`));
-    object(image, () => {
-      push(`<< /Type /XObject /Subtype /Image /Width ${pages[i].width} /Height ${pages[i].height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
-      push(jpg);
-      push('\nendstream');
-    });
+  const ascii = (str) => String(str).replace(/[^\x20-\x7e]/g, '');
+  const pdfText = async (str) => (lock ? lock.string(ascii(str)) : `(${ascii(str).replace(/([()\\])/g, '\\$1')})`);
+  const box = (i) => (sizes[i][0] > sizes[i][1] ? [792, 612] : [612, 792]);
+  const draws = sizes.map((_, i) => enc.encode(`q ${box(i)[0]} 0 0 ${box(i)[1]} 0 0 cm /Im0 Do Q`));
+  const seal = (bytes) => (lock ? lock.stream(bytes) : bytes);
+  const [contents, images, info] = await Promise.all([
+    Promise.all(draws.map(seal)),
+    Promise.all(jpegs.map(seal)),
+    Promise.all([pdfText(title), pdfText('Hallway')]),
+  ]);
+  // AES-256 is PDF 2.0's lock: as a 1.7 file with Adobe's extension level 8, every reader takes it.
+  push(lock ? '%PDF-1.7\n%âãÏÓ\n' : '%PDF-1.4\n%âãÏÓ\n');
+  const extensions = lock ? ' /Extensions << /ADBE << /BaseVersion /1.7 /ExtensionLevel 8 >> >>' : '';
+  object(1, () => push(`<< /Type /Catalog /Pages 2 0 R${extensions} >>`));
+  object(2, () => push(`<< /Type /Pages /Kids [${sizes.map((_, i) => `${ids(i)[0]} 0 R`).join(' ')}] /Count ${n} >>`));
+  object(3, () => push(`<< /Title ${info[0]} /Producer ${info[1]} >>`));
+  sizes.forEach(([w, h], i) => {
+    const [page, content, image] = ids(i);
+    const [pw, ph] = box(i);
+    object(page, () => push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${image} 0 R >> >> /Contents ${content} 0 R >>`));
+    object(content, () => stream('', contents[i]));
+    object(image, () => stream(`/Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`, images[i]));
   });
-  const count = 3 + n * 3;
+  let count = 3 + n * 3;
+  if (lock) object(++count, () => push(lock.dictionary));
   const xref = length;
   push(`xref\n0 ${count + 1}\n0000000000 65535 f \n`);
   for (let id = 1; id <= count; id++) push(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
-  push(`trailer\n<< /Size ${count + 1} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const locked = lock ? ` /Encrypt ${count} 0 R /ID [<${lock.id}> <${lock.id}>]` : '';
+  push(`trailer\n<< /Size ${count + 1} /Root 1 0 R /Info 3 0 R${locked} >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(parts, { type: 'application/pdf' });
 }
 
@@ -459,17 +483,37 @@ export async function docPdf(doc, s) {
 /**
  * «Tu documento está listo»: buttons to share it (WhatsApp, email, Archivos, Imprimir…) or download it. The tap on the
  * button is what lets the phone open «Compartir»; doing it after waiting for the server doesn't always work.
+ *
+ * A PDF can go locked with a PIN: always optional (unchecked to begin with). The locked file is made while the PIN is
+ * typed, so the buttons still share or download it on the same tap. The PIN goes nowhere: not to Hallway, not stored.
  */
 export async function offerFile(blob, name) {
-  const url = URL.createObjectURL(blob);
-  const file = new window.File([blob], name, { type: blob.type });
+  let current = blob;
+  let file = new window.File([blob], name, { type: blob.type });
+  let url = URL.createObjectURL(blob);
+  const urls = [url];
   const canShare = !!navigator.canShare?.({ files: [file] });
+  const lockable = typeof blob.protect === 'function';
   const pending = dialog({
     title: t('Tu documento está listo'),
     message: canShare
       ? t('Compártelo (correo, WhatsApp, Archivos, Imprimir…) o descárgalo.')
       : t('Descárgalo para guardarlo, enviarlo o imprimirlo.'),
     body: html`<div class="stack">
+      ${lockable ? html`<div class="pin-lock">
+        <label class="toggle pin-lock-row">
+          <input type="checkbox" data-pin-on>
+          <span class="toggle-ui"></span>
+          <span class="notify-text"><span>${t('Protegerlo con un PIN')} <em class="optional">${t('opcional')}</em></span>
+            <small>${t('Para abrirlo pedirá el PIN, en cualquier lugar: correo, WhatsApp, la computadora o el teléfono.')}</small></span>
+        </label>
+        <div class="stack pin-lock-box" data-pin-box hidden>
+          <label class="field"><span>${t('PIN para abrirlo')}</span>
+            <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="12" placeholder="${t('De 4 a 12 números')}" data-pin></label>
+          <p class="hint" data-pin-state aria-live="polite">${t('Escribe de 4 a 12 números.')}</p>
+          <p class="hint">${t('Hallway no guarda el PIN. Si se olvida, nadie puede abrir ese archivo: descárgalo otra vez.')}</p>
+        </div>
+      </div>` : ''}
       ${canShare ? html`<button type="button" class="btn btn-primary btn-block" data-share>${t('Compartir o guardar')}</button>` : ''}
       <a class="btn ${canShare ? 'btn-secondary' : 'btn-primary'} btn-block" href="${url}" download="${name}" target="_blank" rel="noopener" data-download>${t('Descargar')}</a>
     </div>`,
@@ -477,11 +521,73 @@ export async function offerFile(blob, name) {
     cancelText: '',
   });
   const box = document.querySelector('dialog.dialog:last-of-type');
-  box?.querySelector('[data-share]')?.addEventListener('click', () => {
-    navigator.share({ files: [file], title: name }).catch(() => {});
+  const share = box?.querySelector('[data-share]');
+  const link = box?.querySelector('[data-download]');
+  let ready = true;
+  const setReady = (on) => {
+    ready = on;
+    share?.toggleAttribute('disabled', !on);
+    link?.setAttribute('aria-disabled', String(!on));
+    link?.classList.toggle('is-disabled', !on);
+  };
+  const use = (b) => {
+    current = b;
+    file = new window.File([b], name, { type: b.type });
+    url = URL.createObjectURL(b);
+    urls.push(url);
+    if (link) link.href = url;
+  };
+  share?.addEventListener('click', () => {
+    if (ready) navigator.share({ files: [file], title: name }).catch(() => {});
   });
+  link?.addEventListener('click', (e) => {
+    if (!ready) e.preventDefault();
+  });
+
+  if (lockable && box) {
+    const on = box.querySelector('[data-pin-on]');
+    const pinBox = box.querySelector('[data-pin-box]');
+    const input = box.querySelector('[data-pin]');
+    const status = box.querySelector('[data-pin-state]');
+    let turn = 0;
+    const update = async () => {
+      const mine = ++turn;
+      pinBox.hidden = !on.checked;
+      if (!on.checked) {
+        if (current !== blob) use(blob);
+        setReady(true);
+        return;
+      }
+      const pin = input.value.replace(/\D/g, '');
+      if (pin !== input.value) input.value = pin;
+      if (pin.length < 4) {
+        setReady(false);
+        status.textContent = t('Escribe de 4 a 12 números.');
+        status.classList.remove('is-ok');
+        return;
+      }
+      setReady(false);
+      status.textContent = t('Protegiendo…');
+      try {
+        const locked = await blob.protect(pin);
+        if (mine !== turn) return; // the PIN changed meanwhile
+        use(locked);
+        setReady(true);
+        status.textContent = `🔒 ${t('Listo: pedirá este PIN para abrirlo.')}`;
+        status.classList.add('is-ok');
+      } catch {
+        if (mine !== turn) return;
+        status.textContent = t('No se pudo proteger en este navegador. Puedes descargarlo sin PIN.');
+      }
+    };
+    on.addEventListener('change', () => {
+      update();
+      if (on.checked) input.focus();
+    });
+    input.addEventListener('input', update);
+  }
   await pending;
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  setTimeout(() => urls.forEach((u) => URL.revokeObjectURL(u)), 60_000);
 }
 
 /**
