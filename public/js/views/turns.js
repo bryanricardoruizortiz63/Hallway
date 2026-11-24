@@ -61,14 +61,29 @@ const supportTitle = (t) => t.reason || 'Pedido de ayuda';
 /** Where help is needed, as typed: "204" → "Salón 204"; "Biblioteca" stays. */
 export const placeText = (room) => (room ? (/^\d/.test(room) ? `Salón ${room}` : room) : null);
 /** How a closed turn ended, with who closed it: «Cancelado por Ana Torres», «Cerrado por el sistema». */
+/** «Otro» (or «Other»): what was written is the reason. */
+export const isOtherReason = (r) => ['otro', 'otra', 'otros', 'otras', 'other'].includes(String(r || '').trim().toLowerCase());
+
+/** The reason as the exports show it: «Otro: Dolor de oídos». */
+export const reasonText = (t) => (t.reason_detail ? `${t.reason}: ${t.reason_detail}` : t.reason || '');
+
+/** Who closed a cancelled turn: a person, or the system (end of the school day). */
+export const cancelledBy = (t) =>
+  t.outcome === 'expired' || t.closed_by_name === 'Sistema' ? 'el sistema' : t.closed_by_name || null;
+
 export const closedText = (t) =>
   t.status === 'cancelled'
     ? t.outcome === 'expired'
       ? 'Cerrado por el sistema: terminó el horario escolar'
-      : `Cancelado${t.closed_by_name && t.closed_by_name !== 'Sistema' ? ` por ${t.closed_by_name}` : ''}`
+      : `Cancelado${cancelledBy(t) ? ` por ${cancelledBy(t)}` : ''}`
     : t.status === 'done' && t.closed_by_name
       ? `${outcomeLabel(t)} · cerró ${t.closed_by_name}`
       : outcomeLabel(t);
+
+/** Why it was cancelled, for the exports: what was written, or what the system did. */
+export const cancelReasonText = (t) =>
+  t.status !== 'cancelled' ? null
+    : t.cancel_reason || (t.outcome === 'expired' ? 'Terminó el horario escolar y nadie lo cerró' : null);
 
 /** «Quién hizo cada cambio»: every change of the turn with who made it and when. */
 export function changesSection(events) {
@@ -800,7 +815,7 @@ export async function newTurnView(ctx) {
       <section class="card stack">
         <h2 class="card-title">${icon('chat')} <span data-reason-title>Motivo</span></h2>
         <div class="chips" role="radiogroup" aria-label="Motivo" data-reasons></div>
-        <label class="field"><span>Nota <em class="optional">opcional</em></span>
+        <label class="field"><span data-note-label>Nota <em class="optional">opcional</em></span>
           <textarea name="note" rows="2" maxlength="500" placeholder="Ej. Se golpeó en educación física"></textarea></label>
         <p class="hint" data-privacy></p>
       </section>
@@ -815,6 +830,14 @@ export async function newTurnView(ctx) {
   const form = $('[data-form]', el);
   // Everyone who attends it is absent: the form stays, but it can't be sent.
   const closed = () => !!service && !service.serves && !!availability(service).closed;
+  // «Otro»: the note is the reason, and it goes in the Excel and the PDF.
+  function showOther() {
+    const other = isOtherReason(form.querySelector('[name=reason]:checked')?.value);
+    const label = $('[data-note-label]', el);
+    label.innerHTML = String(other ? html`¿Cuál es el motivo?` : html`Nota <em class="optional">opcional</em>`);
+    form.note.required = other;
+    form.note.placeholder = other ? 'Ej. Dolor de oídos' : support() ? 'Ej. El proyector no prende' : 'Ej. Se golpeó en educación física';
+  }
   const showService = () => {
     const notice = $('[data-service-notice]', el);
     if (notice) notice.innerHTML = service && !service.serves ? String(absenceNotice(service)) : '';
@@ -823,6 +846,8 @@ export async function newTurnView(ctx) {
     const box = $('[data-reasons]', el);
     box.hidden = !reasons.length;
     box.innerHTML = String(html`${reasons.map((r) => html`<label class="chip"><input type="radio" name="reason" value="${r}"><span>${r}</span></label>`)}`);
+    for (const input of box.querySelectorAll('[name=reason]')) input.addEventListener('change', showOther);
+    showOther();
     $('[data-privacy]', el).textContent = service
       ? `El motivo y la nota solo los ven tú, ${service.name} y la dirección.`
       : 'El motivo y la nota solo los ven tú, el servicio y la dirección.';
@@ -862,6 +887,7 @@ export async function newTurnView(ctx) {
       if (!severity) throw new Error('Elige qué tan grave es.');
       const reason = form.querySelector('[name=reason]:checked')?.value || '';
       if (service.reasons.length && !reason) throw new Error(help ? 'Elige qué pasa.' : 'Elige el motivo.');
+      if (isOtherReason(reason) && !form.note.value.trim()) throw new Error('Escribe cuál es el motivo.');
       if (help && !form.room.value.trim()) throw new Error('Escribe dónde es (tu salón u oficina).');
       const student = help ? {} : await confirmStudent(typed.name, typed.group);
       if (!student) return;

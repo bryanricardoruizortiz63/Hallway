@@ -10,7 +10,7 @@ import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state } from '../store.js';
 import { empty } from './common.js';
-import { SEVERITY, closedText } from './turns.js';
+import { SEVERITY, closedText, reasonText } from './turns.js';
 
 const groupOptions = (selected = '') => {
   const { groups } = schoolCalendar(state.me.school);
@@ -190,7 +190,7 @@ export async function turnSearchView({ el }) {
           <span class="item-icon">${icon(r.service_mode === 'support' ? 'wrench' : 'pulse')}</span>
           <span class="item-main">
             <strong>${r.student_name ? `${r.student_name}${r.group_name ? ` (${r.group_name})` : ''}` : r.room || r.service_name}</strong>
-            <span class="item-sub">${[r.service_name, r.reason, SEVERITY[r.severity]?.label].filter(Boolean).join(' · ')}</span>
+            <span class="item-sub">${[r.service_name, reasonText(r), SEVERITY[r.severity]?.label].filter(Boolean).join(' · ')}</span>
             <span class="item-sub">${fmtDateTime(r.created_at)} · ${t('Pidió')}: ${r.created_by_name || '—'}${r.handled_by_name ? ` · ${t('Atendió')}: ${r.handled_by_name}` : ''}</span>
             <span class="item-tags"><span class="tag">${['done', 'cancelled'].includes(r.status) ? closedText(r) : OPEN[r.status] || r.status}</span></span>
           </span>

@@ -72,23 +72,26 @@ export function absenceBlock(a, own = false) {
   };
 }
 
-/** How a turn ended, with who closed it. */
+/** How a turn ended, with who closed it; a cancelled one, who (or the system) and why. */
 function turnEnd(r) {
   if (r.status === 'cancelled') {
-    return r.outcome === 'expired'
-      ? t('Cerrado por el sistema: terminó el horario escolar')
-      : `${t('Cancelado')}${r.closed_by_name && r.closed_by_name !== 'Sistema' ? ` · ${r.closed_by_name}` : ''}`;
+    if (r.outcome === 'expired') return t('Cerrado por el sistema: terminó el horario escolar');
+    const by = r.closed_by_name === 'Sistema' ? t('el sistema') : r.closed_by_name;
+    return `${t('Cancelado')}${by ? ` ${t('por')} ${by}` : ''}${r.cancel_reason ? ` · ${t('Por qué')}: «${r.cancel_reason}»` : ''}`;
   }
   if (r.status === 'done') return `${t(OUTCOME[r.outcome] || 'Terminado')}${r.closed_by_name ? ` · ${t('cerró')} ${r.closed_by_name}` : ''}`;
   return t('En curso');
 }
 
+/** The reason, with what was written when it's «Otro». */
+const turnReason = (r) => (r.reason_detail ? `${r.reason}: ${r.reason_detail}` : r.reason);
+
 /** One turn: { title, lines }. */
 export function turnBlock(r) {
   return {
-    title: r.student_name ? `${r.student_name}${r.group_name ? ` (${r.group_name})` : ''}` : r.reason || r.service_name,
+    title: r.student_name ? `${r.student_name}${r.group_name ? ` (${r.group_name})` : ''}` : turnReason(r) || r.service_name,
     lines: [
-      [r.service_name, r.student_name ? r.reason : null, SEVERITY[r.severity] ? t(SEVERITY[r.severity]) : null, r.room ? `${t('Salón')} ${r.room}` : null]
+      [r.service_name, r.student_name ? turnReason(r) : null, SEVERITY[r.severity] ? t(SEVERITY[r.severity]) : null, r.room ? `${t('Salón')} ${r.room}` : null]
         .filter(Boolean).join(' · '),
       `${fmtDateTime(r.created_at)} · ${t('Pidió')}: ${r.created_by_name || '—'}${r.handled_by_name ? ` · ${t('Atendió')}: ${r.handled_by_name}` : ''}`,
       turnEnd(r),
