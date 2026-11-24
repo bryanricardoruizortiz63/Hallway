@@ -1039,7 +1039,7 @@ export async function dataView({ el, isCurrent }) {
       <section class="card stack">
         <h2 class="card-title">${icon('chart')} Tu panel</h2>
         <div class="list flat">${servicePanelLinks(user.serves || [])}</div>
-        <p class="hint">Solo ves los datos de tu servicio. Ni el panel ni el Excel incluyen las notas de los maestros.</p>
+        <p class="hint">Solo ves los datos de tu servicio. Ni el panel ni el Excel incluyen las notas de los maestros, salvo lo que escriben como motivo cuando eligen «Otro».</p>
       </section>
     </div>`);
     return;

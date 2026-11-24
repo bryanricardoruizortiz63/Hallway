@@ -55,6 +55,7 @@ import { KINDS, URGENCY } from './maintenance.js';
 import { fact, keepFresh } from './students.js';
 import {
   OUTCOMES,
+  reasonText,
   SEVERITY,
   STAFF_STATUS,
   absentNow,
@@ -63,6 +64,7 @@ import {
   countdown,
   isLate,
   changesSection,
+  cancelReasonText,
   closedText,
   outcomeLabel,
   placeText,
@@ -287,8 +289,8 @@ export async function servicePanelView(ctx) {
     <div class="stack" data-body></div>
     <div data-people></div>
     <p class="hint">${people.all
-      ? `Ves todos los turnos de ${service.name}. Ni el panel ni el Excel incluyen las notas de los maestros.`
-      : `Ves los turnos que atendiste tú${people.colleagues.some((c) => c.mine?.status === 'approved') ? ' y los de quien te dio permiso' : ''}. Ni el panel ni el Excel incluyen las notas de los maestros.`}</p>
+      ? `Ves todos los turnos de ${service.name}. Ni el panel ni el Excel incluyen las notas de los maestros, salvo lo que escriben como motivo cuando eligen «Otro».`
+      : `Ves los turnos que atendiste tú${people.colleagues.some((c) => c.mine?.status === 'approved') ? ' y los de quien te dio permiso' : ''}. Ni el panel ni el Excel incluyen las notas de los maestros, salvo lo que escriben como motivo cuando eligen «Otro».`}</p>
   </div>`);
   const body = $('[data-body]', el);
   const range = rangePicker($('[data-range]', el), day ? { from: day, to: day } : 'month', () => load());
@@ -362,7 +364,7 @@ export async function servicePanelView(ctx) {
     for (const t of turns) {
       const x = byRoom.get(t.room || '—') || { count: 0, reasons: new Set() };
       x.count++;
-      if (t.reason) x.reasons.add(t.reason);
+      if (t.reason) x.reasons.add(reasonText(t));
       byRoom.set(t.room || '—', x);
     }
     const byPerson = new Map();
@@ -396,12 +398,13 @@ export async function servicePanelView(ctx) {
         columns: [
           { header: 'Fecha', width: 11 }, { header: 'Hora', width: 11 }, { header: 'Pidió', width: 24 },
           { header: 'Dónde', width: 14 }, { header: 'Motivo', width: 22 }, { header: 'Gravedad', width: 10 },
-          { header: 'Resultado', width: 20 }, { header: 'Qué se hizo', width: 40, wrap: true }, { header: 'Espera (min)', width: 12 },
+          { header: 'Resultado', width: 24 }, { header: 'Por qué se canceló', width: 30, wrap: true },
+          { header: 'Qué se hizo', width: 40, wrap: true }, { header: 'Espera (min)', width: 12 },
           { header: 'Atención (min)', width: 13 }, { header: 'Total (min)', width: 11 }, { header: 'Atendió', width: 22 },
         ],
         rows: rows.map((t) => [
-          xDate(localDay(t.created_at)), clock(t.created_at), t.created_by_name, t.room, t.reason, SEVERITY[t.severity]?.label,
-          resultOf(t), t.resolution, whole(waitOf(t)), whole(careOf(t)), whole(totalOf(t)), t.handled_by_name,
+          xDate(localDay(t.created_at)), clock(t.created_at), t.created_by_name, t.room, reasonText(t), SEVERITY[t.severity]?.label,
+          resultOf(t), cancelReasonText(t), t.resolution, whole(waitOf(t)), whole(careOf(t)), whole(totalOf(t)), t.handled_by_name,
         ]),
       },
       {
@@ -438,7 +441,7 @@ export async function servicePanelView(ctx) {
       s.visits++;
       s.group = t.group_name;
       if (!s.last || t.created_at > s.last) s.last = t.created_at;
-      if (t.reason) s.reasons.add(t.reason);
+      if (t.reason) s.reasons.add(reasonText(t));
       byStudent.set(t.student_key, s);
     }
     return downloadXlsx(`${slug(service.name)}_${r.from}_${r.to}.xlsx`, [
@@ -446,8 +449,9 @@ export async function servicePanelView(ctx) {
         name: 'Visitas',
         columns: [
           { header: 'Fecha', width: 11 }, { header: 'Hora', width: 11 }, { header: 'Estudiante', width: 26 },
-          { header: 'Grupo', width: 8 }, { header: 'Motivo', width: 22 }, { header: 'Gravedad', width: 10 },
-          { header: 'Resultado', width: 18 }, { header: 'Espera (min)', width: 12 }, { header: 'Atención (min)', width: 13 },
+          { header: 'Grupo', width: 8 }, { header: 'Motivo', width: 30, wrap: true }, { header: 'Gravedad', width: 10 },
+          { header: 'Resultado', width: 24 }, { header: 'Por qué se canceló', width: 30, wrap: true },
+          { header: 'Espera (min)', width: 12 }, { header: 'Atención (min)', width: 13 },
           { header: 'Llegó tarde', width: 11 }, { header: 'Sin turno', width: 10 }, { header: 'Pidió', width: 22 },
           { header: 'Atendió', width: 22 },
         ],
@@ -455,8 +459,8 @@ export async function servicePanelView(ctx) {
           const wait = waitOf(t);
           const care = careOf(t);
           return [
-            xDate(localDay(t.created_at)), clock(t.created_at), t.student_name, t.group_name, t.reason,
-            SEVERITY[t.severity]?.label, resultOf(t), wait === null ? null : Math.round(wait), care === null ? null : Math.round(care),
+            xDate(localDay(t.created_at)), clock(t.created_at), t.student_name, t.group_name, reasonText(t),
+            SEVERITY[t.severity]?.label, resultOf(t), cancelReasonText(t), wait === null ? null : Math.round(wait), care === null ? null : Math.round(care),
             t.late_at ? 'Sí' : 'No', walkIn(t) ? 'Sí' : 'No', t.created_by_name, t.handled_by_name,
           ];
         }),

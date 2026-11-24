@@ -284,7 +284,7 @@ export const VIEWS = {
   'Contraseña de Admin actualizada': 'Admin password updated',
   'Turnos, motivos, tiempos y Excel': 'Turns, reasons, times and Excel',
   'Tu panel': 'Your panel',
-  'Solo ves los datos de tu servicio. Ni el panel ni el Excel incluyen las notas de los maestros.':
+  'Solo ves los datos de tu servicio. Ni el panel ni el Excel incluyen las notas de los maestros, salvo lo que escriben como motivo cuando eligen «Otro».':
     'You only see your service’s data. Neither the panel nor the Excel include teachers’ notes.',
   '30 días': '30 days',
   'Este mes': 'This month',
@@ -1355,6 +1355,12 @@ export const VIEWS = {
   'No hubo turnos ese día.': 'There were no turns that day.',
   'Volver al resumen': 'Back to the summary',
   'No tienes permiso para ver este turno.': 'You don’t have permission to see this turn.',
+  '¿Cuál es el motivo?': 'What is the reason?',
+  'Ej. Dolor de oídos': 'E.g. Earache',
+  'Escribe cuál es el motivo.': 'Write what the reason is.',
+  'Terminó el horario escolar y nadie lo cerró': 'The school day ended and nobody closed it',
+  'el sistema': 'the system',
+  'Por qué': 'Why',
 };
 
 /** Messages that come from the server (database and functions), word for word. */
