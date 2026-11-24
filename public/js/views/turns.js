@@ -8,6 +8,8 @@ import {
   markAlertsRead,
   myOpenMaintenance,
   noteTurnResolution,
+  sendTurnMessage,
+  turnMessages,
   receiveSupportRequest,
   requestService,
   returningStudents,
@@ -283,7 +285,21 @@ async function doStep(t, step, value) {
     toast(SUPPORT_DONE.received, 'ok');
     return true;
   }
-  if ((step === 'call' || step === 'go') && t.position > 1) {
+  let note = '';
+  if (step === 'call' && !isSupport(t)) {
+    // An optional note for the teacher with the call («Que traiga su inhalador»); it stays in the turn's chat.
+    const v = await dialog({
+      title: `¿Llamar a ${t.student_name}?`,
+      message: t.position > 1 ? `Hay ${plural(t.position - 1, 'turno', 'turnos')} antes en la fila. Se anota que lo escogiste antes.` : '',
+      body: html`<label class="field"><span>Nota para el maestro <em class="optional">opcional</em></span>
+        <textarea name="note" rows="2" maxlength="500" placeholder="Ej. Que traiga su inhalador o su merienda"></textarea></label>`,
+      confirmText: 'Llamar',
+      cancelText: 'Volver',
+      collect: true,
+    });
+    if (!v) return false;
+    note = v.note.trim();
+  } else if ((step === 'call' || step === 'go') && t.position > 1) {
     const ok = await dialog({
       title: isSupport(t) ? `¿Atender «${supportTitle(t)}» primero?` : `¿${step === 'call' ? 'Llamar' : 'Atender'} a ${t.student_name}?`,
       message: `Hay ${plural(t.position - 1, 'turno', 'turnos')} antes en la fila. Se anota que lo escogiste antes.`,
@@ -298,8 +314,19 @@ async function doStep(t, step, value) {
   }
   if (step === 'cancel') {
     const what = isSupport(t) ? 'pedido' : 'turno';
-    const ok = await dialog({ title: `¿Cancelar este ${what}?`, message: who(t), confirmText: `Cancelar ${what}`, cancelText: 'Volver', danger: true });
-    if (!ok) return false;
+    const v = await dialog({
+      title: `¿Cancelar este ${what}?`,
+      message: who(t),
+      body: html`<label class="field"><span>¿Por qué? <em class="optional">opcional</em></span>
+        <textarea name="note" rows="2" maxlength="500" placeholder="${isSupport(t) ? 'Ej. Ya se resolvió solo' : 'Ej. Ya se siente mejor; si sigue igual, vuelva a pedirlo'}"></textarea></label>
+        <p class="hint">Lo verá ${t.created_by === state.me.user.id ? t.service_name : 'quien lo pidió'} y queda en el chat del ${what}.</p>`,
+      confirmText: `Cancelar ${what}`,
+      cancelText: 'Volver',
+      danger: true,
+      collect: true,
+    });
+    if (!v) return false;
+    note = v.note.trim();
   }
   if (step === 'missing') {
     const ok = await dialog({
@@ -326,6 +353,8 @@ async function doStep(t, step, value) {
     value = v.room.trim();
   }
   await advanceTurn(t.id, step, value);
+  // The note goes with the call or the cancellation: in the turn's chat and in the teacher's notice.
+  if (note) await sendTurnMessage(t.id, note, step === 'call' ? 'call' : 'cancel').catch(() => toast('El turno se guardó, pero la nota no se pudo enviar. Escríbela en el chat del turno.', 'error'));
   toast((isSupport(t) && SUPPORT_DONE[step]) || STEP_DONE[step], 'ok');
   return true;
 }
@@ -896,6 +925,63 @@ function serviceHint(t) {
   return '';
 }
 
+// ---- The turn's chat: private to the service and whoever asked; nothing in it can be changed or deleted ----------------
+
+/** What is being written, so the screen updating every few seconds doesn't wipe it. */
+const chatDrafts = new Map();
+
+const CHAT_KIND = { call: 'Nota al llamar', cancel: 'Por qué se canceló' };
+
+function chatSection(t, service, messages) {
+  if (messages === null) return '';
+  const me = state.me.user;
+  const canWrite = service.serves || t.created_by === me.id || t.teacher_id === me.id;
+  if (!messages.length && !canWrite) return '';
+  const other = service.serves ? (t.teacher_name || t.created_by_name) : t.service_name;
+  return html`<section class="card stack turn-chat" data-chat>
+    <h2 class="card-title">${icon('chat')} Mensajes del turno</h2>
+    ${messages.length
+      ? html`<ol class="chat-list">${messages.map((m) => html`<li class="chat-msg ${m.author_id === me.id ? 'is-mine' : ''} ${m.kind !== 'message' ? 'is-' + m.kind : ''}">
+          ${CHAT_KIND[m.kind] ? html`<span class="chat-kind">${CHAT_KIND[m.kind]}</span>` : ''}
+          <p>${m.body}</p>
+          <small>${m.author_id === me.id ? 'Tú' : m.author_name} · ${fmtDateTime(m.created_at)}</small>
+        </li>`)}</ol>`
+      : html`<p class="hint">Escríbele a ${other} sobre este turno. Solo lo ven quien atiende el servicio y quien lo pidió.</p>`}
+    ${canWrite
+      ? html`<form class="chat-form" data-chat-form>
+          <textarea name="body" rows="2" maxlength="1000" placeholder="Escribe un mensaje…" aria-label="Mensaje" data-chat-body></textarea>
+          <button class="btn btn-primary" type="submit" aria-label="Enviar">${icon('send', 18)}</button>
+        </form>
+        <p class="hint">Los mensajes quedan guardados en el turno: no se pueden cambiar ni borrar.</p>`
+      : ''}
+  </section>`;
+}
+
+function bindChat(el, t, reload) {
+  const form = $('[data-chat-form]', el);
+  if (!form) return;
+  const box = $('[data-chat-body]', form);
+  const focused = chatDrafts.has(`focus-${t.id}`);
+  box.value = chatDrafts.get(t.id) || '';
+  if (focused) {
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  }
+  box.addEventListener('input', () => chatDrafts.set(t.id, box.value));
+  box.addEventListener('focus', () => chatDrafts.set(`focus-${t.id}`, true));
+  box.addEventListener('blur', () => chatDrafts.delete(`focus-${t.id}`));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const body = box.value.trim();
+    if (!body) return;
+    busy(form.querySelector('[type=submit]'), async () => {
+      await sendTurnMessage(t.id, body);
+      chatDrafts.delete(t.id);
+      await reload();
+    });
+  });
+}
+
 export async function turnDetailView(ctx) {
   const { el, params, isCurrent } = ctx;
   const id = Number(params[0]);
@@ -903,7 +989,9 @@ export async function turnDetailView(ctx) {
   let history = null;
 
   async function load() {
-    const [t, services, events] = await Promise.all([getTurn(id), servicesOverview(), turnEvents(id).catch(() => [])]);
+    const [t, services, events, messages] = await Promise.all([
+      getTurn(id), servicesOverview(), turnEvents(id).catch(() => []), turnMessages(id).catch(() => null),
+    ]);
     if (!isCurrent()) return;
     const service = services.find((s) => s.id === t.service_id) || { serves: false };
     if (service.serves && !isSupport(t) && !history) history = await turnHistory(t).catch(() => []);
@@ -939,6 +1027,7 @@ export async function turnDetailView(ctx) {
           ${steps(t)}
         </section>
         ${actions.map((a) => actionButton(a))}
+        ${chatSection(t, service, messages)}
         ${changesSection(events)}
         ${service.serves && isSupport(t) && t.status === 'done'
           ? html`<button type="button" class="btn btn-secondary btn-block" data-resolution>${icon('edit', 18)} ${t.resolution ? 'Cambiar lo que se hizo' : 'Anotar qué se hizo'}</button>`
@@ -962,6 +1051,7 @@ export async function turnDetailView(ctx) {
         <a class="btn btn-ghost btn-block" href="#/turns">${icon('back', 18)} Todos los turnos</a>
       </div>`);
     bindSteps(el, [t], load);
+    bindChat(el, t, load);
     $('[data-resolution]', el)?.addEventListener('click', (e) =>
       busy(e.currentTarget, async () => {
         const v = await askResolution(t, t.resolution || '');

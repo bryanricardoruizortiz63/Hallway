@@ -6254,3 +6254,73 @@ button.live-hero:focus-visible {
 .perms-more[open] > summary svg {
   transform: rotate(-90deg);
 }
+
+/* ---- The turn's chat ---- */
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-msg {
+  align-self: flex-start;
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 16px 16px 16px 4px;
+  background: var(--surface-2);
+}
+
+.chat-msg.is-mine {
+  align-self: flex-end;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--primary-soft);
+}
+
+.chat-msg p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-msg small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.chat-kind {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--primary-text);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.chat-msg.is-cancel .chat-kind {
+  color: var(--danger);
+}
+
+.chat-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.chat-form textarea {
+  flex: 1;
+  min-height: 44px;
+  resize: vertical;
+}
+
+.chat-form .btn {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+}
