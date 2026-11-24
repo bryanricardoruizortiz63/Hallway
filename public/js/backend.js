@@ -1136,6 +1136,15 @@ export const cancelBooking = (id, note) => rpc('cancel_room_booking', { p_id: id
 export const dayBounds = (from, to) => [new Date(`${from}T00:00:00`).toISOString(), new Date(`${addDays(to, 1)}T00:00:00`).toISOString()];
 
 /** A service's turns in a period, with the reason and never the note (the service and the dirección). */
+/** For a service's panel: { all, serves, colleagues: [{ id, name, mine, theirs }] } (see migration 092). */
+export const serviceDataPeople = (serviceId) => rpc('service_data_people', { p_service: serviceId });
+/** Asks a colleague of the service to see the turns they attended. */
+export const requestServiceData = (serviceId, ownerId, reason) =>
+  rpc('request_service_data', { p_service: serviceId, p_owner: ownerId, p_reason: reason });
+/** Allow (true) or not (false) a colleague's request. */
+export const answerServiceData = (id, allow) => rpc('answer_service_data', { p_id: id, p_allow: allow });
+/** Ends a permission or a pending request. */
+export const endServiceData = (id) => rpc('end_service_data', { p_id: id });
 export function serviceTurns(serviceId, from, to) {
   const [start, end] = dayBounds(from, to);
   return fetchAll(() => sb.rpc('service_turns', { p_service_id: serviceId, p_from: start, p_to: end }).order('id'));
