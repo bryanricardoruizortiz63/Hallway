@@ -1156,6 +1156,9 @@ export const medicationLog = (serviceId, from, to) =>
   fetchAll(() => sb.rpc('medication_log', { p_service: serviceId, p_from: from, p_to: to }).order('id'));
 export const setServiceMedication = (id, on) => rpc('set_service_medication', { p_id: id, p_on: !!on });
 
+/** The groups this person covers right now (a substitute gets those groups' turns, as their teachers do). */
+export const myCoveredGroups = () => rpc('my_covered_groups').then((x) => x || [], () => []);
+
 /** For a service's panel: { all, serves, colleagues: [{ id, name, mine, theirs }] } (see migration 092). */
 export const serviceDataPeople = (serviceId) => rpc('service_data_people', { p_service: serviceId });
 /** Asks a colleague of the service to see the turns they attended. */
