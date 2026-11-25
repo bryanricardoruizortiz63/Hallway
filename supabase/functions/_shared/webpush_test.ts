@@ -1,5 +1,5 @@
 import { assert, assertEquals } from 'jsr:@std/assert@1';
-import { b64urlToBytes, bytesToB64url, encryptPayload, vapidAuthorization } from './webpush.ts';
+import { b64urlToBytes, bytesToB64url, encryptPayload, isDeadEndpoint, vapidAuthorization } from './webpush.ts';
 
 type Bytes = Uint8Array<ArrayBuffer>;
 const enc = new TextEncoder();
@@ -66,4 +66,15 @@ Deno.test('signs a valid VAPID token for the push service', async () => {
   assert(claims.exp > Date.now() / 1000);
   const valid = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, keys.publicKey, b64urlToBytes(s), enc.encode(`${h}.${c}`));
   assert(valid, 'signature verifies with the public key');
+});
+
+Deno.test('knows the subscriptions the browser removed for good', () => {
+  assert(isDeadEndpoint('https://permanently-removed.invalid/fcm/send/abc'));
+  assert(isDeadEndpoint('https://invalid/x'));
+  assert(isDeadEndpoint('not a url'));
+  assert(isDeadEndpoint('http://fcm.googleapis.com/fcm/send/abc'));
+  assert(!isDeadEndpoint('https://fcm.googleapis.com/fcm/send/abc'));
+  assert(!isDeadEndpoint('https://web.push.apple.com/QGx'));
+  assert(!isDeadEndpoint('https://updates.push.services.mozilla.com/wpush/v2/gAAA'));
+  assert(!isDeadEndpoint('https://wns2-bl2p.notify.windows.com/w/?token=x'));
 });

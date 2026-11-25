@@ -4,7 +4,7 @@
 import { json, serve, serviceClient } from '../_shared/http.ts';
 import { deleteAbsences } from '../_shared/cleanup.ts';
 import { buildCard, CATEGORIES, fmtRangeEs, postToTeams, scheduleText } from '../_shared/teams.ts';
-import { sendWebPush, type VapidKeys } from '../_shared/webpush.ts';
+import { isDeadEndpoint, sendWebPush, type VapidKeys } from '../_shared/webpush.ts';
 import { inLang, langOf } from '../_shared/translate.ts';
 
 const db = serviceClient();
@@ -44,6 +44,11 @@ async function handlePush(payload: { notification_id: number; repeat?: boolean }
   const options = { ttl: n.urgent ? 900 : 86400 };
   const results = await Promise.all(
     subs.map(async (s) => {
+      // An address the browser removed for good: nothing to send to, and it goes.
+      if (isDeadEndpoint(s.endpoint)) {
+        await db.from('push_subscriptions').delete().eq('id', s.id);
+        return 'removed';
+      }
       try {
         const res = await sendWebPush(s, message, vapid, options);
         if (res.status === 404 || res.status === 410) await db.from('push_subscriptions').delete().eq('id', s.id);
