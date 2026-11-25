@@ -89,6 +89,20 @@ export async function encryptPayload(payload: Bytes, p256dh: string, auth: strin
   return concat(salt, recordSize, new Uint8Array([asPublic.length]), asPublic, cipher);
 }
 
+/**
+ * A subscription that can never be reached again: the browser replaced its address by one under «.invalid» (e.g.
+ * «https://permanently-removed.invalid/fcm/send/…», a domain that by rule never exists, RFC 2606) or it isn't an
+ * https address at all. Sending to it fails before any answer, so the 404/410 that removes subscriptions never comes.
+ */
+export function isDeadEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    return url.protocol !== 'https:' || url.hostname === 'invalid' || url.hostname.endsWith('.invalid');
+  } catch {
+    return true;
+  }
+}
+
 export async function sendWebPush(
   sub: PushSubscription,
   payload: string,
