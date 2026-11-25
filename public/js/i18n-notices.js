@@ -223,6 +223,8 @@ export const NOTICE_PATTERNS = [
   [/^(.+): (.+) lo refirió$/, '$1: $2 referred them'],
   [/^(.+) atendió a (.+)$/, '$1 saw $2'],
   [/^Turno cancelado: (.+)$/, 'Turn cancelled: $1'],
+  [/^Turno repuesto: (.+)$/, 'Turn restored: $1'],
+  [/^lo repuso (.+?)(?:: «(.+)»)?$/, (who, why) => `restored by ${who}${why ? `: “${why}”` : ''}`],
   [/^(.+) borró un turno del día anterior$/, '$1 deleted a turn from an earlier day'],
   [/^Pedido cancelado: (.+)$/, 'Request cancelled: $1'],
   [/^(.+) está ahora en el salón (.+)$/, '$1 is now in room $2'],
